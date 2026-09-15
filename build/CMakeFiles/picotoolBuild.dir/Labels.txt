@@ -1,0 +1,14 @@
+# Target labels
+ picotoolBuild
+# Source files and their labels
+/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/picotoolBuild
+/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/picotoolBuild.rule
+/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/picotoolBuild-complete.rule
+/home/tme520/Downloads/LPS-Companion-PicoCalc/build/picotool/src/picotoolBuild-stamp/picotoolBuild-build.rule
+/home/tme520/Downloads/LPS-Companion-PicoCalc/build/picotool/src/picotoolBuild-stamp/picotoolBuild-configure.rule
+/home/tme520/Downloads/LPS-Companion-PicoCalc/build/picotool/src/picotoolBuild-stamp/picotoolBuild-download.rule
+/home/tme520/Downloads/LPS-Companion-PicoCalc/build/picotool/src/picotoolBuild-stamp/picotoolBuild-install.rule
+/home/tme520/Downloads/LPS-Companion-PicoCalc/build/picotool/src/picotoolBuild-stamp/picotoolBuild-mkdir.rule
+/home/tme520/Downloads/LPS-Companion-PicoCalc/build/picotool/src/picotoolBuild-stamp/picotoolBuild-patch.rule
+/home/tme520/Downloads/LPS-Companion-PicoCalc/build/picotool/src/picotoolBuild-stamp/picotoolBuild-test.rule
+/home/tme520/Downloads/LPS-Companion-PicoCalc/build/picotool/src/picotoolBuild-stamp/picotoolBuild-update.rule
