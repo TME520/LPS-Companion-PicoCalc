@@ -1,146 +1,209 @@
-# LPS Companion for PicoCalc (RP2040)
+# LPS-Companion v1.1
 
-A complete C++/Pico SDK project for the original PicoCalc with a Raspberry Pi
-Pico/Pico H (RP2040, 2 MiB flash). Builds a standalone UF2. It includes the real
-LCD, keyboard and SD adapter, not placeholder hardware functions.
+**A pocket-sized daily activity tracker for the PicoCalc.**
 
-## Compile on Fedora
+LPS-Companion helps you record daily activities, write a short note, and compare your expected and actual weight. Completing activities earns experience points (XP) and unlocks collectible keepsakes.
 
-Install tools once:
+It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries and progress are saved to the SD card.
+
+**Status:** v1.0 boot and persistent saves were confirmed on a PicoCalc by the user. v1.1 has been compiled and tested on the host; device testing remains pending.
+
+## Changes in v1.1
+
+- Repas renamed to **Régime**.
+- **Congé** and **Weekend** added.
+- The **Pour demain** screen and its navigation removed.
+- **Terminer le jour** is now menu item **4**.
+- Existing v1.0 saves load without conversion. The previous Repas checkbox becomes Régime; all other existing activity positions are retained.
+
+Back up the SD card’s `LPS` folder before updating. New activity flags are not supported by v1.0; restore your backup if reverting to that version.
+
+## Build
+
+### Requirements
+
+- Original PicoCalc with a Raspberry Pi Pico/Pico H (RP2040).
+- FAT16- or FAT32-formatted SD card.
+- Linux development computer; the instructions below use Fedora.
+- Internet access for the first build to download dependencies.
+
+### Install the Fedora build tools
 
 ```bash
 sudo dnf install git cmake ninja-build gcc-c++ python3 \
   arm-none-eabi-gcc-cs arm-none-eabi-gcc-cs-c++ arm-none-eabi-newlib
 ```
 
-Unzip the package, open a terminal in `LPS-Companion-PicoCalc`, then:
+### Compile the firmware
+
+Extract the source package, open a terminal in its directory, and run:
 
 ```bash
+cd LPS-Companion-PicoCalc
 bash build.sh
 ```
 
-Output: **`build/lps_companion.uf2`**.
-The first build downloads three pinned source dependencies from GitHub plus the
-Pico SDK's picotool build dependency; it requires internet access. Subsequent
-builds reuse them. No Arduino IDE or manual source editing is required.
-The host can be x86_64 or ARM64 provided its Fedora cross-compiler packages are
-available. If using Arm's downloadable toolchain instead, put its `bin` folder
-on PATH so `arm-none-eabi-gcc` and `arm-none-eabi-g++` are found.
+The script downloads the pinned dependencies, compiles the application, and checks the generated UF2 file.
 
-`LPS_JOBS=2 bash build.sh` limits parallel compiler jobs on a small development machine.
+**Output:** `build/lps_companion.uf2`
 
-## Install on the PicoCalc
+Subsequent builds reuse the downloaded dependencies. To reduce memory usage while compiling:
 
-This is **direct BOOTSEL firmware**, built at flash address `0x10000000`.
-It has not been adapted or tested for pelrun/uf2loader, other launchers, RP2350,
-Pico 2, or alternative PicoCalc modules. Do not assume launcher compatibility.
+```bash
+LPS_JOBS=2 bash build.sh
+```
 
-1. Put an existing FAT16/FAT32 SD card in the PicoCalc. The app never formats it.
-2. Connect the **Pico module's USB port** while holding its BOOTSEL button.
-3. When the `RPI-RP2` USB drive appears, copy `build/lps_companion.uf2` onto it.
-4. The Pico reboots into LPS Companion.
+The package also contains **`prebuilt/lps_companion.uf2`**, which can be installed without compiling.
 
-Direct flashing replaces the current Pico firmware, including an installed
-launcher/interpreter. Keep its original UF2 if you want to restore it later.
-The keyboard-controller firmware is not flashed by this project.
-A `prebuilt/lps_companion.uf2` is included if an actual ARM build was completed;
-see `BUILD-VALIDATION.md` for the precise checks and limits.
+## Install
 
-## Controls and features
+This project produces standalone firmware for **direct BOOTSEL flashing**. Compatibility with UF2 launchers and other Pico modules has not been established.
 
-- Up/Down selects a menu item; Enter opens it; Esc returns home.
-- Menu: Activities, Note du jour, Poids du jour, Pour demain, Terminer le jour.
-- Activities: **Marche, Repas, Bible, Messe, Travail, Projet, Sieste, Gurumed,
-  Maladie**, in that order. Left/Right changes the two activity pages. Keys 1–9
-  toggle the corresponding activity from either page.
-- The existing prototype's rule is retained: 10 XP per checked item and 10 extra
-  for at least three checked items. This is prototype scoring, not a judgement
-  about illness, meals or religious practice.
-- A daily note holds 96 printable ASCII characters. Enter saves, Esc cancels.
-  The display uses the upstream 8×12 font padded into 8×16 cells, 40×20 cells.
-- Expected and actual weight are optional daily entries in kg. Decimal comma or
-  point works, up to three decimals. Up/Down or Tab changes field; Enter saves.
-  Leave a field empty if not recorded. Backspace removes digits.
-- The comparison is actual minus expected; weights are stored as integer grams.
-  No target or weight-loss schedule is inferred or generated.
-- "Pour demain" retains the prototype collectible mechanic under its renamed
-  label: six keepsakes at 30, 70, 120, 180, 250 and 330 accumulated XP.
-- Finishing a day shows a confirmation screen; Enter banks XP and advances once.
-  Quiet days incur no penalty. Days are sequential numbers, not RTC dates.
+1. Insert a FAT16/FAT32 SD card into the PicoCalc.
+2. Hold the **BOOTSEL** button on the Pico module while connecting the module's USB port to your computer.
+3. When the **`RPI-RP2`** drive appears, release BOOTSEL.
+4. Copy `build/lps_companion.uf2` or `prebuilt/lps_companion.uf2` onto that drive.
+5. The Pico restarts into LPS-Companion.
 
-## Save behaviour
+Use the **Pico module's USB port** for BOOTSEL flashing, rather than assuming the case USB-C port provides it.
 
-The app creates `LPS/SAVE_A.BIN` and `LPS/SAVE_B.BIN` on the SD card. Each is a
-3,584-byte envelope containing a generation number, CRC-protected application
-state and an outer CRC. The current note, activities, weights and total XP are
-saved, plus the last 31 closed days in a ring buffer. There is no Journal menu.
-Older closed-day records are overwritten after the 31-day retention window.
+Flashing replaces the current Pico firmware, including any installed interpreter or launcher. Keep its UF2 if you want to restore it later. LPS-Companion creates its save directory automatically; no graphics or other asset files need copying to the SD card.
 
-Activity toggles save immediately; note/weight changes save on Enter. The inactive
-slot is replaced and synced, then read back before the app acknowledges it.
-Startup chooses the newest valid slot; an interrupted/corrupt slot can fall back
-to the other. This reduces incomplete-write risk but does not make FAT or the SD
-card immune to power loss. Back up the entire LPS directory periodically.
+## Usage
 
-If no card can be mounted, the UI opens but changes cannot be saved; insert a
-working card and restart. A corrupt save is not silently treated as a new profile.
-An I/O error blocks loading, rather than pretending the file is absent. After a
-late write error, further writes are blocked until restart because commit status
-may be uncertain. The preceding good slot is retained.
+### Quick start
 
-## Project contents
+1. Open **Activites** and check the activities you have completed.
+2. Open **Note du jour**, type a short note, and press Enter to save it.
+3. Open **Poids du jour** to enter your expected and actual weight.
+4. At the end of the day, choose **Terminer le jour** and press Enter to confirm.
+5. Your XP is banked, any new keepsakes are unlocked, and the next day begins.
 
-- `src/lps_companion.cpp`: portable application and embedded unit tests.
-- `src/main.cpp`: PicoCalc screen/keyboard adapter and A/B SD storage.
-- `src/hw_config.c`: SD SPI configuration.
-- `CMakeLists.txt`: executable, dependencies and RAM/stack layout.
-- `build.sh`: dependency bootstrap and UF2 build.
-- `verify_uf2.py`: structural, address and RP2040 family checks.
-- `test.sh`: host-side application tests.
+Days advance manually. Leaving the device switched off does not automatically start a new day.
 
-## Hardware and memory
+### Main menu
 
-LCD: SPI1, SCK 10, MOSI 11, MISO 12, CS 13, DC 14, RESET 15.
-Keyboard: I2C1, SDA 6, SCL 7, address 0x1F, 10 kHz.
-SD: SPI0, SCK 18, MOSI 19, MISO 16, CS 17, 12.5 MHz maximum.
-These are GPIO numbers, not physical header pin numbers.
+The device uses French labels. Régime and Congé include their accented character; note entry remains ASCII-only.
 
-No external PSRAM, Wi-Fi, audio or second CPU core is used. A cached text grid
-redraws only changed rows, using one 640-byte monochrome rendering buffer.
-A generated linker script reserves 64 KiB for the main stack, keeping ordinary
-RAM allocations in the first 192 KiB. This accommodates bounded save/restore
-buffers. Do not substitute a different SDK linker script without reviewing that
-reservation.
+| Key | Menu | Purpose |
+| --- | --- | --- |
+| `1` | Activites | Check or uncheck today's activities. |
+| `2` | Note du jour | Write a short daily note. |
+| `3` | Poids du jour | Enter expected and actual weight. |
+| `4` | Terminer le jour | Save and close today, then advance. |
 
-## Troubleshooting
+Use **Up/Down** to select an item, **Enter** to open it, and **Esc** to return to the main menu.
 
-- Missing `arm-none-eabi-g++` / `<array>`: install the C++ cross-compiler and newlib.
-- Missing host C++ compiler: install `gcc-c++`; picotool is built on the host.
-- SDK warnings about TinyUSB: expected; this application disables USB serial.
-- No USB drive via the case USB-C port: BOOTSEL flashing uses the Pico module USB.
-- Blank display or unresponsive keys: report the PicoCalc board/module and existing
-  keyboard firmware version. No physical-device test has been performed here.
-- Editing SDK/dependency revisions: use a fresh build directory; `build.sh` refuses
-  to overwrite a modified dependency when switching to its pinned revision.
+### Activities
 
-The earlier standalone `lps_companion.cpp` desktop `.sav` file is not imported:
-this firmware uses versioned A/B envelopes on SD.
+| Key | Activity |
+| --- | --- |
+| `1` | Marche |
+| `2` | Régime |
+| `3` | Bible |
+| `4` | Messe |
+| `5` | Travail |
+| `6` | Projet |
+| `7` | Sieste |
+| `8` | Gurumed |
+| `9` | Maladie |
+| Arrows + Enter | Congé (10) |
+| Arrows + Enter | Weekend (11) |
 
-## References
+Activities are displayed across three pages (5 + 5 + 1). **Left/Right** changes page; **Up/Down** selects an activity; **Enter** toggles its checkbox. Keys **1–9** toggle the corresponding activity from any page. Select **Congé** on page 2 or **Weekend** on page 3 with Up/Down, then press Enter.
 
-ClockworkPi driver source and wiring:
-https://github.com/clockworkpi/PicoCalc/tree/f91519806d4b2e0a62c4638a9f695cd5162c5479/Code
+Each checkbox can be counted once per day. Checking or unchecking an activity saves immediately.
 
-Raspberry Pi Pico SDK 2.2.0:
-https://github.com/raspberrypi/pico-sdk/tree/a1438dff1d38bd9c65dbd693f0e5db4b9ae91779
+### Daily note
 
-Carl Kugler's FatFs SPI library:
-https://github.com/carlk3/no-OS-FatFS-SD-SPI-RPi-Pico/tree/196016f525e5b9c161f2b965ddd3045a4ef87649
+Type up to **96 printable ASCII characters**. Use Backspace to delete characters.
 
-Fedora toolchain packages:
-https://packages.fedoraproject.org/pkgs/arm-none-eabi-gcc-cs/arm-none-eabi-gcc-cs-c++/
+- **Enter:** save the note.
+- **Esc:** cancel the edit and return home.
 
-Third-party source retains its upstream licensing and notices. Source dependencies
-are downloaded separately; see their repositories for licensing before redistributing
-derived firmware. In particular, the ClockworkPi font carries its own upstream
-attribution in `lcdspi/fonts/font1.h`.
+Accented characters are not supported by the current text-entry implementation.
+
+### Weight tracking
+
+The two optional fields are:
+
+- **Attendu:** expected weight for today.
+- **Effectif:** actual measured weight for today.
+
+Enter values in **kilograms**, using either a decimal point or comma, with up to three decimal places. For example, `110.5` and `110,500` represent the same weight.
+
+Use **Up/Down** or **Tab** to switch fields, **Backspace** to edit, **Enter** to save both fields, and **Esc** to cancel. Leave a field blank when it is not recorded.
+
+The displayed difference is **actual minus expected**. For example, expected `110.5 kg` and actual `111.2 kg` gives `+0.700 kg`.
+
+Expected weight is entered manually. The app does not calculate a diet target or schedule. Both weight fields start empty on the next day.
+
+### XP and keepsakes
+
+The current scoring rules are:
+
+- **10 XP** for each checked activity.
+- **10 bonus XP** for checking at least three different activities.
+- No penalty for an empty day.
+
+For example, three checked activities earn **40 XP**. Pending XP becomes permanent when you close the day.
+
+New keepsakes are announced after closing a day. There is no collection browsing screen.
+
+| Total XP | Keepsake |
+| --- | --- |
+| 30 | Carnet de poche |
+| 70 | Tasse de the |
+| 120 | Boussole |
+| 180 | Radio de poche |
+| 250 | Mini-ordinateur |
+| 330 | Lanterne |
+
+Keepsakes unlock automatically; XP is not spent when unlocking them.
+
+### Finishing the day
+
+Open **Terminer le jour** to review the day's activity count, bonus and total XP. Press **Enter** to confirm or **Esc** to return without closing the day.
+
+Confirmation saves the completed day, banks its XP, and clears the activity checkboxes, note and weight fields for the next day. The following screen announces any new keepsakes. Press Enter to continue.
+
+## Saved data
+
+LPS-Companion stores data in the SD card's `LPS` directory:
+
+- `SAVE_A.BIN`
+- `SAVE_B.BIN`
+
+It alternates between two checked save records to help recover from an incomplete write. Back up the **whole `LPS` directory** to preserve your data.
+
+The save contains the current day, total XP and the last **31 completed days**. Older completed days are replaced as new days are added. There is currently no Journal menu for viewing past entries.
+
+If saving fails, restart with a working SD card before continuing. A missing, unreadable or corrupt card does not silently become a new saved profile. Avoid removing the SD card while the app is running.
+
+## Current limits
+
+- Days are numbered sequentially; there is no calendar-date or RTC integration.
+- Activities are daily checkboxes, without duration or repetition counts.
+- Notes support ASCII text only.
+- Saved history is limited to 31 completed days and has no browsing screen.
+- The current build targets the original RP2040 model.
+
+## Development
+
+| File | Role |
+| --- | --- |
+| `src/lps_companion.cpp` | Application logic, screens and host tests. |
+| `src/main.cpp` | PicoCalc display, keyboard and persistent storage adapter. |
+| `src/hw_config.c` | SD-card SPI configuration. |
+| `CMakeLists.txt` | Firmware build and memory layout. |
+| `build.sh` | Dependency download and compilation. |
+| `test.sh` | Host-side application tests. |
+| `verify_uf2.py` | UF2 format, target and address checks. |
+
+Run the application tests on your development computer with:
+
+```bash
+bash test.sh
+```
+
+Built with the [Raspberry Pi Pico SDK](https://github.com/raspberrypi/pico-sdk), [ClockworkPi PicoCalc drivers](https://github.com/clockworkpi/PicoCalc), and [Carl Kugler's FatFs SPI library](https://github.com/carlk3/no-OS-FatFS-SD-SPI-RPi-Pico). Dependency revisions are pinned in the build configuration; third-party components retain their upstream licensing and notices.

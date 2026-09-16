@@ -63,7 +63,13 @@ public:
         for(int row=0;row<20;++row){
             if(!first&&frame[row]==previous[row]&&reverse[row]==oldReverse[row])continue;
             bitmap.fill(0);
-            for(int col=0;col<40;++col){unsigned c=static_cast<unsigned char>(frame[row][col]);if(c<32||c>126)c=32;
+            for(int col=0;col<40;++col){unsigned c=static_cast<unsigned char>(frame[row][col]);if(c==0xe9){
+                    // Accent plus the upstream lowercase e (extended font is not Latin-1).
+                    for(int y=0;y<12;++y)bitmap[(y+2)*40+col]=MainFont[4+('e'-32)*12+y];
+                    bitmap[3*40+col]=0x08;bitmap[4*40+col]=0x10;
+                    continue;
+                }
+                if(c<32||c>126)c=32;
                 for(int y=0;y<12;++y)bitmap[(y+2)*40+col]=MainFont[4+(c-32)*12+y];
             }
             const int fg=reverse[row]?0x18291c:0xe4eed5,bg=reverse[row]?0xbad99f:0x18291c;

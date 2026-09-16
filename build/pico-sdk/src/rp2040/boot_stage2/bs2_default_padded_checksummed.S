@@ -1,4 +1,4 @@
-// Padded and checksummed version of: /home/tme520/Downloads/LPS-Companion-PicoCalc/build/pico-sdk/src/rp2040/boot_stage2/bs2_default.bin
+// Padded and checksummed version of: /home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/pico-sdk/src/rp2040/boot_stage2/bs2_default.bin
 
 .cpu cortex-m0plus
 .thumb

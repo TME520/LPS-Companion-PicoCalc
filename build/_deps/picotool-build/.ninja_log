@@ -1,45 +1,45 @@
 # ninja log v7
-1	12	1789461867176649570	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-mkdir	3eff1e3e047adc56
-1	12	1789461867176649570	/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-mkdir	3eff1e3e047adc56
-12	22	1789461867187649625	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-download	ad34889e31842f6c
-12	22	1789461867187649625	/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-download	ad34889e31842f6c
-22	31	1789461867196649669	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-update	55676a2e16112f4b
-22	31	1789461867196649669	/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-update	55676a2e16112f4b
-31	41	1789461867206649719	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-patch	b8727c31af32cf77
-31	41	1789461867206649719	/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-patch	b8727c31af32cf77
-1	91	1789461867167472774	errors/CMakeFiles/errors.dir/errors.cpp.o	582d537683273da3
-91	132	1789461867257375512	errors/liberrors.a	85071c93a183b429
-41	430	1789461867595651649	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-configure	adc4cae02f29ec40
-41	430	1789461867595651649	/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-configure	adc4cae02f29ec40
-430	439	1789461867595651649	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-build	31ee7cab783eb0ce
-430	439	1789461867595651649	/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-build	31ee7cab783eb0ce
-439	444	1789461867604651693	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-install	a14adcfcbb0b1e27
-439	444	1789461867604651693	/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-install	a14adcfcbb0b1e27
-444	457	1789461867622651782	CMakeFiles/enc_bootloader-complete	e9f8bdb87324dde6
-444	457	1789461867622651782	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-done	e9f8bdb87324dde6
-444	457	1789461867622651782	/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool-build/CMakeFiles/enc_bootloader-complete	e9f8bdb87324dde6
-444	457	1789461867622651782	/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-done	e9f8bdb87324dde6
-457	504	1789461867669860392	enc_bootloader_elf.h	edc6ca3b99bc0caa
-457	504	1789461867669860392	/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader_elf.h	edc6ca3b99bc0caa
-1	575	1789461867167739817	elf2uf2/CMakeFiles/elf2uf2.dir/elf2uf2.cpp.o	358e47c81cd90a1e
-1	590	1789461867167659109	elf/CMakeFiles/elf.dir/elf_file.cpp.o	bbd40d331f02b61a
-590	624	1789461867755652442	elf/libelf.a	f9cfa269c8d3343f
-506	636	1789461867671652026	CMakeFiles/picotool.dir/lib/whereami/whereami.c.o	8e2ff71a7b828224
-504	656	1789461867669929434	CMakeFiles/picotool.dir/data_locs.cpp.o	130a68761b9976f6
-624	656	1789461867789652611	elf2uf2/libelf2uf2.a	73958b9381c8e38a
-509	734	1789461867674652040	CMakeFiles/picotool.dir/lib/whereami/whereami++.cpp.o	d65b6f083ce88398
-504	952	1789461867670902855	CMakeFiles/picotool.dir/get_enc_bootloader.cpp.o	5b7edbf338e92304
-505	997	1789461867671084314	CMakeFiles/picotool.dir/no_otp.cpp.o	9904864d17887dd0
-1	1643	1789461867167854526	bintool/CMakeFiles/bintool.dir/bintool.cpp.o	9e77c1174bb4404e
-1643	1694	1789461868808657666	bintool/libbintool.a	33446240e58d70ce
-505	11229	1789461867671486650	CMakeFiles/picotool.dir/main.cpp.o	68c26cb5f3d0785a
-11229	11279	1789461878394705221	picotool	f7fe87768cba2d63
-1	8	1789461878455705523	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-build	31ee7cab783eb0ce
-1	8	1789461878455705523	/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-build	31ee7cab783eb0ce
-8	16	1789461878462705558	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-install	a14adcfcbb0b1e27
-8	16	1789461878462705558	/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-install	a14adcfcbb0b1e27
-16	30	1789461878484705667	CMakeFiles/enc_bootloader-complete	e9f8bdb87324dde6
-16	30	1789461878484705667	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-done	e9f8bdb87324dde6
-16	30	1789461878484705667	/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool-build/CMakeFiles/enc_bootloader-complete	e9f8bdb87324dde6
-16	30	1789461878484705667	/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-done	e9f8bdb87324dde6
-30	46	1789461878484705667	CMakeFiles/install.util	4c1a771b4e4f8cb1
+1	12	1789532789811172690	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-mkdir	95e11c4762adfafa
+1	12	1789532789811172690	/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-mkdir	95e11c4762adfafa
+12	21	1789532789821172725	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-download	88112a4499f4c278
+12	21	1789532789821172725	/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-download	88112a4499f4c278
+21	41	1789532789840172792	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-update	55b793f39cc2e97c
+21	41	1789532789840172792	/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-update	55b793f39cc2e97c
+41	69	1789532789868172891	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-patch	c3eb17df72f8e5c4
+41	69	1789532789868172891	/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-patch	c3eb17df72f8e5c4
+2	103	1789532789802172658	errors/CMakeFiles/errors.dir/errors.cpp.o	fe3ef145cd74829d
+103	125	1789532789904301394	errors/liberrors.a	85071c93a183b429
+69	505	1789532790304174430	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-configure	a7edd846420ef49f
+69	505	1789532790304174430	/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-configure	a7edd846420ef49f
+505	511	1789532790305174434	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-build	a9eb6fed3b630237
+505	511	1789532790305174434	/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-build	a9eb6fed3b630237
+511	516	1789532790311174455	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-install	719937a602f42eb6
+511	516	1789532790311174455	/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-install	719937a602f42eb6
+516	537	1789532790336174543	CMakeFiles/enc_bootloader-complete	9305d885b318020f
+516	537	1789532790336174543	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-done	9305d885b318020f
+516	537	1789532790336174543	/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool-build/CMakeFiles/enc_bootloader-complete	9305d885b318020f
+516	537	1789532790336174543	/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-done	9305d885b318020f
+2	551	1789532789803166245	elf2uf2/CMakeFiles/elf2uf2.dir/elf2uf2.cpp.o	b48e438bfe3116da
+2	577	1789532789803081161	elf/CMakeFiles/elf.dir/elf_file.cpp.o	e74ccd48c3e37d67
+537	583	1789532790383402710	enc_bootloader_elf.h	d8062d1658de1ec1
+537	583	1789532790383402710	/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader_elf.h	d8062d1658de1ec1
+577	609	1789532790377174688	elf/libelf.a	f9cfa269c8d3343f
+609	649	1789532790409174801	elf2uf2/libelf2uf2.a	73958b9381c8e38a
+583	679	1789532790384427130	CMakeFiles/picotool.dir/lib/whereami/whereami.c.o	ee01eb205def701b
+583	709	1789532790383461168	CMakeFiles/picotool.dir/data_locs.cpp.o	42ca4b40eaf5f280
+583	784	1789532790384529589	CMakeFiles/picotool.dir/lib/whereami/whereami++.cpp.o	16bc015d34cde847
+583	943	1789532790384134212	CMakeFiles/picotool.dir/get_enc_bootloader.cpp.o	9013af42dd6e4b65
+583	1074	1789532790384244546	CMakeFiles/picotool.dir/no_otp.cpp.o	12b79de8dfee5cb6
+2	1619	1789532789803293120	bintool/CMakeFiles/bintool.dir/bintool.cpp.o	2edba719924cffac
+1619	1643	1789532791419178366	bintool/libbintool.a	33446240e58d70ce
+583	10770	1789532790384328963	CMakeFiles/picotool.dir/main.cpp.o	b489279351b265b2
+10771	10818	1789532800571210669	picotool	f7fe87768cba2d63
+2	8	1789532800635210895	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-build	a9eb6fed3b630237
+2	8	1789532800635210895	/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-build	a9eb6fed3b630237
+8	17	1789532800641210916	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-install	719937a602f42eb6
+8	17	1789532800641210916	/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-install	719937a602f42eb6
+17	33	1789532800665211001	CMakeFiles/enc_bootloader-complete	9305d885b318020f
+17	33	1789532800665211001	enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-done	9305d885b318020f
+17	33	1789532800665211001	/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool-build/CMakeFiles/enc_bootloader-complete	9305d885b318020f
+17	33	1789532800665211001	/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool-build/enc_bootloader/src/enc_bootloader-stamp/enc_bootloader-done	9305d885b318020f
+33	45	1789532800666211004	CMakeFiles/install.util	292ff2221b3b6028

@@ -3,9 +3,9 @@
 # No other meaning or use of this file is supported.
 
 method=git
-command=/usr/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool-subbuild/picotool-populate-prefix/tmp/picotool-populate-gitclone.cmake
-source_dir=/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool-src
-work_dir=/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps
+command=/usr/bin/cmake;-DCMAKE_MESSAGE_LOG_LEVEL=VERBOSE;-P;/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool-subbuild/picotool-populate-prefix/tmp/picotool-populate-gitclone.cmake
+source_dir=/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool-src
+work_dir=/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps
 repository=https://github.com/raspberrypi/picotool.git
 remote=origin
 init_submodules=TRUE
