@@ -4,6 +4,6 @@
 
 method=source_dir
 command=
-source_dir=/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/deps/pico-sdk/tools/pioasm
+source_dir=/home/tme520/Downloads/LPS-Companion-PicoCalc/deps/pico-sdk/tools/pioasm
 work_dir=
 

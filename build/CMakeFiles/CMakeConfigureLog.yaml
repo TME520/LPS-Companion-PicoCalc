@@ -379,7 +379,7 @@ events:
       - "CMakeCCompilerId.c.in"
     candidate_directories:
       - "/usr/share/cmake/Modules/"
-      - "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/deps/pico-sdk/cmake/"
+      - "/home/tme520/Downloads/LPS-Companion-PicoCalc/deps/pico-sdk/cmake/"
     found: "/usr/share/cmake/Modules/CMakeCCompilerId.c.in"
     search_context:
       ENV{PATH}:
@@ -454,7 +454,7 @@ events:
       - "CMakeCCompilerId.c.in"
     candidate_directories:
       - "/usr/share/cmake/Modules/"
-      - "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/deps/pico-sdk/cmake/"
+      - "/home/tme520/Downloads/LPS-Companion-PicoCalc/deps/pico-sdk/cmake/"
     found: "/usr/share/cmake/Modules/CMakeCCompilerId.c.in"
     search_context:
       ENV{PATH}:
@@ -483,7 +483,7 @@ events:
       Compilation of the C compiler identification source "CMakeCCompilerId.c" produced "CMakeCCompilerId.o"
       
       The C compiler identification is GNU, found in:
-        /home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/4.3.0/CompilerIdC/CMakeCCompilerId.o
+        /home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/4.3.0/CompilerIdC/CMakeCCompilerId.o
       
   -
     kind: "find-v1"
@@ -920,7 +920,7 @@ events:
       - "CMakeCXXCompilerId.cpp.in"
     candidate_directories:
       - "/usr/share/cmake/Modules/"
-      - "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/deps/pico-sdk/cmake/"
+      - "/home/tme520/Downloads/LPS-Companion-PicoCalc/deps/pico-sdk/cmake/"
     found: "/usr/share/cmake/Modules/CMakeCXXCompilerId.cpp.in"
     search_context:
       ENV{PATH}:
@@ -995,7 +995,7 @@ events:
       - "CMakeCXXCompilerId.cpp.in"
     candidate_directories:
       - "/usr/share/cmake/Modules/"
-      - "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/deps/pico-sdk/cmake/"
+      - "/home/tme520/Downloads/LPS-Companion-PicoCalc/deps/pico-sdk/cmake/"
     found: "/usr/share/cmake/Modules/CMakeCXXCompilerId.cpp.in"
     search_context:
       ENV{PATH}:
@@ -1024,7 +1024,7 @@ events:
       Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CMakeCXXCompilerId.o"
       
       The CXX compiler identification is GNU, found in:
-        /home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/4.3.0/CompilerIdCXX/CMakeCXXCompilerId.o
+        /home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/4.3.0/CompilerIdCXX/CMakeCXXCompilerId.o
       
   -
     kind: "find-v1"
@@ -1232,23 +1232,23 @@ events:
     checks:
       - "Detecting C compiler ABI info"
     directories:
-      source: "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/CMakeScratch/TryCompile-0Tj0lo"
-      binary: "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/CMakeScratch/TryCompile-0Tj0lo"
+      source: "/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/CMakeScratch/TryCompile-IBsbBN"
+      binary: "/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/CMakeScratch/TryCompile-IBsbBN"
     cmakeVariables:
       CMAKE_CXX_STDLIB_MODULES_JSON: ""
       CMAKE_C_FLAGS: "-mcpu=cortex-m0plus -mthumb"
       CMAKE_C_FLAGS_DEBUG: "-Og -g"
       CMAKE_EXE_LINKER_FLAGS: ""
-      CMAKE_MODULE_PATH: "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/deps/pico-sdk/cmake"
-      PICO_SDK_PATH: "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/deps/pico-sdk"
+      CMAKE_MODULE_PATH: "/home/tme520/Downloads/LPS-Companion-PicoCalc/deps/pico-sdk/cmake"
+      PICO_SDK_PATH: "/home/tme520/Downloads/LPS-Companion-PicoCalc/deps/pico-sdk"
     buildResult:
       variable: "CMAKE_C_ABI_COMPILED"
       cached: true
       stdout: |
-        Change Dir: '/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/CMakeScratch/TryCompile-0Tj0lo'
+        Change Dir: '/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/CMakeScratch/TryCompile-IBsbBN'
         
-        Run Build Command(s): /usr/bin/ninja-build -v cmTC_49976
-        [1/2] /usr/bin/arm-none-eabi-gcc   -mcpu=cortex-m0plus -mthumb    -v -o CMakeFiles/cmTC_49976.dir/CMakeCCompilerABI.c.o -c /usr/share/cmake/Modules/CMakeCCompilerABI.c
+        Run Build Command(s): /usr/bin/ninja-build -v cmTC_a40ce
+        [1/2] /usr/bin/arm-none-eabi-gcc   -mcpu=cortex-m0plus -mthumb    -v -o CMakeFiles/cmTC_a40ce.dir/CMakeCCompilerABI.c.o -c /usr/share/cmake/Modules/CMakeCCompilerABI.c
         Using built-in specs.
         COLLECT_GCC=/usr/bin/arm-none-eabi-gcc
         Target: arm-none-eabi
@@ -1256,8 +1256,8 @@ events:
         Thread model: single
         Supported LTO compression algorithms: zlib
         gcc version 15.2.0 (Fedora 15.2.0-4.fc44) 
-        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_49976.dir/CMakeCCompilerABI.c.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_49976.dir/'
-         /usr/libexec/gcc/arm-none-eabi/15.2.0/cc1 -quiet -v -imultilib thumb/v6-m/nofp -D__USES_INITFINI__ /usr/share/cmake/Modules/CMakeCCompilerABI.c -quiet -dumpdir CMakeFiles/cmTC_49976.dir/ -dumpbase CMakeCCompilerABI.c.c -dumpbase-ext .c -mcpu=cortex-m0plus -mthumb -mfloat-abi=soft -mlibarch=armv6s-m -march=armv6s-m -version -o /tmp/ccYu7AZB.s
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_a40ce.dir/CMakeCCompilerABI.c.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_a40ce.dir/'
+         /usr/libexec/gcc/arm-none-eabi/15.2.0/cc1 -quiet -v -imultilib thumb/v6-m/nofp -D__USES_INITFINI__ /usr/share/cmake/Modules/CMakeCCompilerABI.c -quiet -dumpdir CMakeFiles/cmTC_a40ce.dir/ -dumpbase CMakeCCompilerABI.c.c -dumpbase-ext .c -mcpu=cortex-m0plus -mthumb -mfloat-abi=soft -mlibarch=armv6s-m -march=armv6s-m -version -o /tmp/ccQq7uEU.s
         GNU C23 (Fedora 15.2.0-4.fc44) version 15.2.0 (arm-none-eabi)
         	compiled by GNU C version 16.0.1 20260115 (Red Hat 16.0.1-0), GMP version 6.3.0, MPFR version 4.2.2, MPC version 1.3.1, isl version none
         warning: MPC header version 1.3.1 differs from library version 1.4.1.
@@ -1271,13 +1271,13 @@ events:
          /usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/include
         End of search list.
         Compiler executable checksum: ff16630626f22244c643b4831ccbfd12
-        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_49976.dir/CMakeCCompilerABI.c.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_49976.dir/'
-         /usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/as -v -march=armv6s-m -mfloat-abi=soft -meabi=5 -o CMakeFiles/cmTC_49976.dir/CMakeCCompilerABI.c.o /tmp/ccYu7AZB.s
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_a40ce.dir/CMakeCCompilerABI.c.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_a40ce.dir/'
+         /usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/as -v -march=armv6s-m -mfloat-abi=soft -meabi=5 -o CMakeFiles/cmTC_a40ce.dir/CMakeCCompilerABI.c.o /tmp/ccQq7uEU.s
         GNU assembler version 2.45 (arm-none-eabi) using BFD version (Fedora 2.45-3.fc44) 2.45
         COMPILER_PATH=/usr/libexec/gcc/arm-none-eabi/15.2.0/:/usr/libexec/gcc/arm-none-eabi/15.2.0/:/usr/libexec/gcc/arm-none-eabi/:/usr/lib/gcc/arm-none-eabi/15.2.0/:/usr/lib/gcc/arm-none-eabi/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/
         LIBRARY_PATH=/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp/:/usr/arm-none-eabi/lib/thumb/v6-m/nofp/:/usr/lib/gcc/arm-none-eabi/15.2.0/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/:/usr/arm-none-eabi/lib/
-        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_49976.dir/CMakeCCompilerABI.c.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_49976.dir/CMakeCCompilerABI.c.'
-        [2/2] : && /usr/bin/arm-none-eabi-gcc -mcpu=cortex-m0plus -mthumb -Wl,--build-id=none -nostdlib  -v CMakeFiles/cmTC_49976.dir/CMakeCCompilerABI.c.o -o cmTC_49976.elf   && :
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_a40ce.dir/CMakeCCompilerABI.c.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_a40ce.dir/CMakeCCompilerABI.c.'
+        [2/2] : && /usr/bin/arm-none-eabi-gcc -mcpu=cortex-m0plus -mthumb -Wl,--build-id=none -nostdlib  -v CMakeFiles/cmTC_a40ce.dir/CMakeCCompilerABI.c.o -o cmTC_a40ce.elf   && :
         Using built-in specs.
         COLLECT_GCC=/usr/bin/arm-none-eabi-gcc
         COLLECT_LTO_WRAPPER=/usr/libexec/gcc/arm-none-eabi/15.2.0/lto-wrapper
@@ -1288,10 +1288,10 @@ events:
         gcc version 15.2.0 (Fedora 15.2.0-4.fc44) 
         COMPILER_PATH=/usr/libexec/gcc/arm-none-eabi/15.2.0/:/usr/libexec/gcc/arm-none-eabi/15.2.0/:/usr/libexec/gcc/arm-none-eabi/:/usr/lib/gcc/arm-none-eabi/15.2.0/:/usr/lib/gcc/arm-none-eabi/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/
         LIBRARY_PATH=/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp/:/usr/arm-none-eabi/lib/thumb/v6-m/nofp/:/usr/lib/gcc/arm-none-eabi/15.2.0/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/:/usr/arm-none-eabi/lib/
-        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-nostdlib' '-v' '-o' 'cmTC_49976.elf' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'cmTC_49976.elf.'
-         /usr/libexec/gcc/arm-none-eabi/15.2.0/collect2 -plugin /usr/libexec/gcc/arm-none-eabi/15.2.0/liblto_plugin.so -plugin-opt=/usr/libexec/gcc/arm-none-eabi/15.2.0/lto-wrapper -plugin-opt=-fresolution=/tmp/ccjA00TS.res --sysroot=/usr/arm-none-eabi -X -o cmTC_49976.elf -L/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp -L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp -L/usr/arm-none-eabi/lib/thumb/v6-m/nofp -L/usr/lib/gcc/arm-none-eabi/15.2.0 -L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib -L/usr/arm-none-eabi/lib --build-id=none CMakeFiles/cmTC_49976.dir/CMakeCCompilerABI.c.o
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-nostdlib' '-v' '-o' 'cmTC_a40ce.elf' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'cmTC_a40ce.elf.'
+         /usr/libexec/gcc/arm-none-eabi/15.2.0/collect2 -plugin /usr/libexec/gcc/arm-none-eabi/15.2.0/liblto_plugin.so -plugin-opt=/usr/libexec/gcc/arm-none-eabi/15.2.0/lto-wrapper -plugin-opt=-fresolution=/tmp/ccSew5EB.res --sysroot=/usr/arm-none-eabi -X -o cmTC_a40ce.elf -L/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp -L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp -L/usr/arm-none-eabi/lib/thumb/v6-m/nofp -L/usr/lib/gcc/arm-none-eabi/15.2.0 -L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib -L/usr/arm-none-eabi/lib --build-id=none CMakeFiles/cmTC_a40ce.dir/CMakeCCompilerABI.c.o
         /usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/ld: warning: cannot find entry symbol _start; defaulting to 00008000
-        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-nostdlib' '-v' '-o' 'cmTC_49976.elf' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'cmTC_49976.elf.'
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-nostdlib' '-v' '-o' 'cmTC_a40ce.elf' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'cmTC_a40ce.elf.'
         
       exitCode: 0
   -
@@ -1324,10 +1324,10 @@ events:
       Parsed C implicit link information:
         link line regex: [^( *|.*[/\\])(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
         linker tool regex: [^[ 	]*(->|"|[0-9]+>[ 	-]*Build:[ 	0-9]+ ms[ 	]*)?[ 	]*(([^"]*[/\\])?(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)))("|,| |$)]
-        ignore line: [Change Dir: '/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/CMakeScratch/TryCompile-0Tj0lo']
+        ignore line: [Change Dir: '/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/CMakeScratch/TryCompile-IBsbBN']
         ignore line: []
-        ignore line: [Run Build Command(s): /usr/bin/ninja-build -v cmTC_49976]
-        ignore line: [[1/2] /usr/bin/arm-none-eabi-gcc   -mcpu=cortex-m0plus -mthumb    -v -o CMakeFiles/cmTC_49976.dir/CMakeCCompilerABI.c.o -c /usr/share/cmake/Modules/CMakeCCompilerABI.c]
+        ignore line: [Run Build Command(s): /usr/bin/ninja-build -v cmTC_a40ce]
+        ignore line: [[1/2] /usr/bin/arm-none-eabi-gcc   -mcpu=cortex-m0plus -mthumb    -v -o CMakeFiles/cmTC_a40ce.dir/CMakeCCompilerABI.c.o -c /usr/share/cmake/Modules/CMakeCCompilerABI.c]
         ignore line: [Using built-in specs.]
         ignore line: [COLLECT_GCC=/usr/bin/arm-none-eabi-gcc]
         ignore line: [Target: arm-none-eabi]
@@ -1335,8 +1335,8 @@ events:
         ignore line: [Thread model: single]
         ignore line: [Supported LTO compression algorithms: zlib]
         ignore line: [gcc version 15.2.0 (Fedora 15.2.0-4.fc44) ]
-        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_49976.dir/CMakeCCompilerABI.c.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_49976.dir/']
-        ignore line: [ /usr/libexec/gcc/arm-none-eabi/15.2.0/cc1 -quiet -v -imultilib thumb/v6-m/nofp -D__USES_INITFINI__ /usr/share/cmake/Modules/CMakeCCompilerABI.c -quiet -dumpdir CMakeFiles/cmTC_49976.dir/ -dumpbase CMakeCCompilerABI.c.c -dumpbase-ext .c -mcpu=cortex-m0plus -mthumb -mfloat-abi=soft -mlibarch=armv6s-m -march=armv6s-m -version -o /tmp/ccYu7AZB.s]
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_a40ce.dir/CMakeCCompilerABI.c.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_a40ce.dir/']
+        ignore line: [ /usr/libexec/gcc/arm-none-eabi/15.2.0/cc1 -quiet -v -imultilib thumb/v6-m/nofp -D__USES_INITFINI__ /usr/share/cmake/Modules/CMakeCCompilerABI.c -quiet -dumpdir CMakeFiles/cmTC_a40ce.dir/ -dumpbase CMakeCCompilerABI.c.c -dumpbase-ext .c -mcpu=cortex-m0plus -mthumb -mfloat-abi=soft -mlibarch=armv6s-m -march=armv6s-m -version -o /tmp/ccQq7uEU.s]
         ignore line: [GNU C23 (Fedora 15.2.0-4.fc44) version 15.2.0 (arm-none-eabi)]
         ignore line: [	compiled by GNU C version 16.0.1 20260115 (Red Hat 16.0.1-0)  GMP version 6.3.0  MPFR version 4.2.2  MPC version 1.3.1  isl version none]
         ignore line: [warning: MPC header version 1.3.1 differs from library version 1.4.1.]
@@ -1350,13 +1350,13 @@ events:
         ignore line: [ /usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/include]
         ignore line: [End of search list.]
         ignore line: [Compiler executable checksum: ff16630626f22244c643b4831ccbfd12]
-        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_49976.dir/CMakeCCompilerABI.c.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_49976.dir/']
-        ignore line: [ /usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/as -v -march=armv6s-m -mfloat-abi=soft -meabi=5 -o CMakeFiles/cmTC_49976.dir/CMakeCCompilerABI.c.o /tmp/ccYu7AZB.s]
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_a40ce.dir/CMakeCCompilerABI.c.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_a40ce.dir/']
+        ignore line: [ /usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/as -v -march=armv6s-m -mfloat-abi=soft -meabi=5 -o CMakeFiles/cmTC_a40ce.dir/CMakeCCompilerABI.c.o /tmp/ccQq7uEU.s]
         ignore line: [GNU assembler version 2.45 (arm-none-eabi) using BFD version (Fedora 2.45-3.fc44) 2.45]
         ignore line: [COMPILER_PATH=/usr/libexec/gcc/arm-none-eabi/15.2.0/:/usr/libexec/gcc/arm-none-eabi/15.2.0/:/usr/libexec/gcc/arm-none-eabi/:/usr/lib/gcc/arm-none-eabi/15.2.0/:/usr/lib/gcc/arm-none-eabi/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/]
         ignore line: [LIBRARY_PATH=/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp/:/usr/arm-none-eabi/lib/thumb/v6-m/nofp/:/usr/lib/gcc/arm-none-eabi/15.2.0/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/:/usr/arm-none-eabi/lib/]
-        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_49976.dir/CMakeCCompilerABI.c.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_49976.dir/CMakeCCompilerABI.c.']
-        ignore line: [[2/2] : && /usr/bin/arm-none-eabi-gcc -mcpu=cortex-m0plus -mthumb -Wl --build-id=none -nostdlib  -v CMakeFiles/cmTC_49976.dir/CMakeCCompilerABI.c.o -o cmTC_49976.elf   && :]
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_a40ce.dir/CMakeCCompilerABI.c.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_a40ce.dir/CMakeCCompilerABI.c.']
+        ignore line: [[2/2] : && /usr/bin/arm-none-eabi-gcc -mcpu=cortex-m0plus -mthumb -Wl --build-id=none -nostdlib  -v CMakeFiles/cmTC_a40ce.dir/CMakeCCompilerABI.c.o -o cmTC_a40ce.elf   && :]
         ignore line: [Using built-in specs.]
         ignore line: [COLLECT_GCC=/usr/bin/arm-none-eabi-gcc]
         ignore line: [COLLECT_LTO_WRAPPER=/usr/libexec/gcc/arm-none-eabi/15.2.0/lto-wrapper]
@@ -1367,17 +1367,17 @@ events:
         ignore line: [gcc version 15.2.0 (Fedora 15.2.0-4.fc44) ]
         ignore line: [COMPILER_PATH=/usr/libexec/gcc/arm-none-eabi/15.2.0/:/usr/libexec/gcc/arm-none-eabi/15.2.0/:/usr/libexec/gcc/arm-none-eabi/:/usr/lib/gcc/arm-none-eabi/15.2.0/:/usr/lib/gcc/arm-none-eabi/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/]
         ignore line: [LIBRARY_PATH=/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp/:/usr/arm-none-eabi/lib/thumb/v6-m/nofp/:/usr/lib/gcc/arm-none-eabi/15.2.0/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/:/usr/arm-none-eabi/lib/]
-        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-nostdlib' '-v' '-o' 'cmTC_49976.elf' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'cmTC_49976.elf.']
-        link line: [ /usr/libexec/gcc/arm-none-eabi/15.2.0/collect2 -plugin /usr/libexec/gcc/arm-none-eabi/15.2.0/liblto_plugin.so -plugin-opt=/usr/libexec/gcc/arm-none-eabi/15.2.0/lto-wrapper -plugin-opt=-fresolution=/tmp/ccjA00TS.res --sysroot=/usr/arm-none-eabi -X -o cmTC_49976.elf -L/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp -L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp -L/usr/arm-none-eabi/lib/thumb/v6-m/nofp -L/usr/lib/gcc/arm-none-eabi/15.2.0 -L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib -L/usr/arm-none-eabi/lib --build-id=none CMakeFiles/cmTC_49976.dir/CMakeCCompilerABI.c.o]
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-nostdlib' '-v' '-o' 'cmTC_a40ce.elf' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'cmTC_a40ce.elf.']
+        link line: [ /usr/libexec/gcc/arm-none-eabi/15.2.0/collect2 -plugin /usr/libexec/gcc/arm-none-eabi/15.2.0/liblto_plugin.so -plugin-opt=/usr/libexec/gcc/arm-none-eabi/15.2.0/lto-wrapper -plugin-opt=-fresolution=/tmp/ccSew5EB.res --sysroot=/usr/arm-none-eabi -X -o cmTC_a40ce.elf -L/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp -L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp -L/usr/arm-none-eabi/lib/thumb/v6-m/nofp -L/usr/lib/gcc/arm-none-eabi/15.2.0 -L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib -L/usr/arm-none-eabi/lib --build-id=none CMakeFiles/cmTC_a40ce.dir/CMakeCCompilerABI.c.o]
           arg [/usr/libexec/gcc/arm-none-eabi/15.2.0/collect2] ==> ignore
           arg [-plugin] ==> ignore
           arg [/usr/libexec/gcc/arm-none-eabi/15.2.0/liblto_plugin.so] ==> ignore
           arg [-plugin-opt=/usr/libexec/gcc/arm-none-eabi/15.2.0/lto-wrapper] ==> ignore
-          arg [-plugin-opt=-fresolution=/tmp/ccjA00TS.res] ==> ignore
+          arg [-plugin-opt=-fresolution=/tmp/ccSew5EB.res] ==> ignore
           arg [--sysroot=/usr/arm-none-eabi] ==> ignore
           arg [-X] ==> ignore
           arg [-o] ==> ignore
-          arg [cmTC_49976.elf] ==> ignore
+          arg [cmTC_a40ce.elf] ==> ignore
           arg [-L/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp] ==> dir [/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp]
           arg [-L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp] ==> dir [/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp]
           arg [-L/usr/arm-none-eabi/lib/thumb/v6-m/nofp] ==> dir [/usr/arm-none-eabi/lib/thumb/v6-m/nofp]
@@ -1385,10 +1385,10 @@ events:
           arg [-L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib] ==> dir [/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib]
           arg [-L/usr/arm-none-eabi/lib] ==> dir [/usr/arm-none-eabi/lib]
           arg [--build-id=none] ==> ignore
-          arg [CMakeFiles/cmTC_49976.dir/CMakeCCompilerABI.c.o] ==> ignore
+          arg [CMakeFiles/cmTC_a40ce.dir/CMakeCCompilerABI.c.o] ==> ignore
         ignore line: [/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/ld: warning: cannot find entry symbol _start]
         ignore line: [ defaulting to 00008000]
-        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-nostdlib' '-v' '-o' 'cmTC_49976.elf' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'cmTC_49976.elf.']
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-nostdlib' '-v' '-o' 'cmTC_a40ce.elf' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'cmTC_a40ce.elf.']
         ignore line: []
         ignore line: []
         collapse library dir [/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp] ==> [/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp]
@@ -1412,24 +1412,24 @@ events:
     checks:
       - "Detecting CXX compiler ABI info"
     directories:
-      source: "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/CMakeScratch/TryCompile-Gu2wpE"
-      binary: "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/CMakeScratch/TryCompile-Gu2wpE"
+      source: "/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/CMakeScratch/TryCompile-EtitJP"
+      binary: "/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/CMakeScratch/TryCompile-EtitJP"
     cmakeVariables:
       CMAKE_CXX_FLAGS: "-mcpu=cortex-m0plus -mthumb"
       CMAKE_CXX_FLAGS_DEBUG: "-Og -g"
       CMAKE_CXX_SCAN_FOR_MODULES: "OFF"
       CMAKE_CXX_STDLIB_MODULES_JSON: ""
       CMAKE_EXE_LINKER_FLAGS: ""
-      CMAKE_MODULE_PATH: "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/deps/pico-sdk/cmake"
-      PICO_SDK_PATH: "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/deps/pico-sdk"
+      CMAKE_MODULE_PATH: "/home/tme520/Downloads/LPS-Companion-PicoCalc/deps/pico-sdk/cmake"
+      PICO_SDK_PATH: "/home/tme520/Downloads/LPS-Companion-PicoCalc/deps/pico-sdk"
     buildResult:
       variable: "CMAKE_CXX_ABI_COMPILED"
       cached: true
       stdout: |
-        Change Dir: '/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/CMakeScratch/TryCompile-Gu2wpE'
+        Change Dir: '/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/CMakeScratch/TryCompile-EtitJP'
         
-        Run Build Command(s): /usr/bin/ninja-build -v cmTC_54620
-        [1/2] /usr/bin/arm-none-eabi-g++   -mcpu=cortex-m0plus -mthumb    -v -o CMakeFiles/cmTC_54620.dir/CMakeCXXCompilerABI.cpp.o -c /usr/share/cmake/Modules/CMakeCXXCompilerABI.cpp
+        Run Build Command(s): /usr/bin/ninja-build -v cmTC_49171
+        [1/2] /usr/bin/arm-none-eabi-g++   -mcpu=cortex-m0plus -mthumb    -v -o CMakeFiles/cmTC_49171.dir/CMakeCXXCompilerABI.cpp.o -c /usr/share/cmake/Modules/CMakeCXXCompilerABI.cpp
         Using built-in specs.
         COLLECT_GCC=/usr/bin/arm-none-eabi-g++
         Target: arm-none-eabi
@@ -1437,8 +1437,8 @@ events:
         Thread model: single
         Supported LTO compression algorithms: zlib
         gcc version 15.2.0 (Fedora 15.2.0-4.fc44) 
-        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_54620.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_54620.dir/'
-         /usr/libexec/gcc/arm-none-eabi/15.2.0/cc1plus -quiet -v -imultilib thumb/v6-m/nofp -D__USES_INITFINI__ /usr/share/cmake/Modules/CMakeCXXCompilerABI.cpp -quiet -dumpdir CMakeFiles/cmTC_54620.dir/ -dumpbase CMakeCXXCompilerABI.cpp.cpp -dumpbase-ext .cpp -mcpu=cortex-m0plus -mthumb -mfloat-abi=soft -mlibarch=armv6s-m -march=armv6s-m -version -o /tmp/ccYDpyMK.s
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_49171.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_49171.dir/'
+         /usr/libexec/gcc/arm-none-eabi/15.2.0/cc1plus -quiet -v -imultilib thumb/v6-m/nofp -D__USES_INITFINI__ /usr/share/cmake/Modules/CMakeCXXCompilerABI.cpp -quiet -dumpdir CMakeFiles/cmTC_49171.dir/ -dumpbase CMakeCXXCompilerABI.cpp.cpp -dumpbase-ext .cpp -mcpu=cortex-m0plus -mthumb -mfloat-abi=soft -mlibarch=armv6s-m -march=armv6s-m -version -o /tmp/cc1AF7rd.s
         GNU C++17 (Fedora 15.2.0-4.fc44) version 15.2.0 (arm-none-eabi)
         	compiled by GNU C version 16.0.1 20260115 (Red Hat 16.0.1-0), GMP version 6.3.0, MPFR version 4.2.2, MPC version 1.3.1, isl version none
         warning: MPC header version 1.3.1 differs from library version 1.4.1.
@@ -1455,13 +1455,13 @@ events:
          /usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/include
         End of search list.
         Compiler executable checksum: b8af42de1b3a490233e7db783dabe677
-        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_54620.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_54620.dir/'
-         /usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/as -v -march=armv6s-m -mfloat-abi=soft -meabi=5 -o CMakeFiles/cmTC_54620.dir/CMakeCXXCompilerABI.cpp.o /tmp/ccYDpyMK.s
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_49171.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_49171.dir/'
+         /usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/as -v -march=armv6s-m -mfloat-abi=soft -meabi=5 -o CMakeFiles/cmTC_49171.dir/CMakeCXXCompilerABI.cpp.o /tmp/cc1AF7rd.s
         GNU assembler version 2.45 (arm-none-eabi) using BFD version (Fedora 2.45-3.fc44) 2.45
         COMPILER_PATH=/usr/libexec/gcc/arm-none-eabi/15.2.0/:/usr/libexec/gcc/arm-none-eabi/15.2.0/:/usr/libexec/gcc/arm-none-eabi/:/usr/lib/gcc/arm-none-eabi/15.2.0/:/usr/lib/gcc/arm-none-eabi/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/
         LIBRARY_PATH=/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp/:/usr/arm-none-eabi/lib/thumb/v6-m/nofp/:/usr/lib/gcc/arm-none-eabi/15.2.0/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/:/usr/arm-none-eabi/lib/
-        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_54620.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_54620.dir/CMakeCXXCompilerABI.cpp.'
-        [2/2] : && /usr/bin/arm-none-eabi-g++ -mcpu=cortex-m0plus -mthumb -Wl,--build-id=none -nostdlib  -v CMakeFiles/cmTC_54620.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_54620.elf   && :
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_49171.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_49171.dir/CMakeCXXCompilerABI.cpp.'
+        [2/2] : && /usr/bin/arm-none-eabi-g++ -mcpu=cortex-m0plus -mthumb -Wl,--build-id=none -nostdlib  -v CMakeFiles/cmTC_49171.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_49171.elf   && :
         Using built-in specs.
         COLLECT_GCC=/usr/bin/arm-none-eabi-g++
         COLLECT_LTO_WRAPPER=/usr/libexec/gcc/arm-none-eabi/15.2.0/lto-wrapper
@@ -1472,10 +1472,10 @@ events:
         gcc version 15.2.0 (Fedora 15.2.0-4.fc44) 
         COMPILER_PATH=/usr/libexec/gcc/arm-none-eabi/15.2.0/:/usr/libexec/gcc/arm-none-eabi/15.2.0/:/usr/libexec/gcc/arm-none-eabi/:/usr/lib/gcc/arm-none-eabi/15.2.0/:/usr/lib/gcc/arm-none-eabi/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/
         LIBRARY_PATH=/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp/:/usr/arm-none-eabi/lib/thumb/v6-m/nofp/:/usr/lib/gcc/arm-none-eabi/15.2.0/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/:/usr/arm-none-eabi/lib/
-        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-nostdlib' '-v' '-o' 'cmTC_54620.elf' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'cmTC_54620.elf.'
-         /usr/libexec/gcc/arm-none-eabi/15.2.0/collect2 -plugin /usr/libexec/gcc/arm-none-eabi/15.2.0/liblto_plugin.so -plugin-opt=/usr/libexec/gcc/arm-none-eabi/15.2.0/lto-wrapper -plugin-opt=-fresolution=/tmp/ccHTJxQl.res --sysroot=/usr/arm-none-eabi -X -o cmTC_54620.elf -L/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp -L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp -L/usr/arm-none-eabi/lib/thumb/v6-m/nofp -L/usr/lib/gcc/arm-none-eabi/15.2.0 -L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib -L/usr/arm-none-eabi/lib --build-id=none CMakeFiles/cmTC_54620.dir/CMakeCXXCompilerABI.cpp.o
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-nostdlib' '-v' '-o' 'cmTC_49171.elf' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'cmTC_49171.elf.'
+         /usr/libexec/gcc/arm-none-eabi/15.2.0/collect2 -plugin /usr/libexec/gcc/arm-none-eabi/15.2.0/liblto_plugin.so -plugin-opt=/usr/libexec/gcc/arm-none-eabi/15.2.0/lto-wrapper -plugin-opt=-fresolution=/tmp/ccpXnaQb.res --sysroot=/usr/arm-none-eabi -X -o cmTC_49171.elf -L/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp -L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp -L/usr/arm-none-eabi/lib/thumb/v6-m/nofp -L/usr/lib/gcc/arm-none-eabi/15.2.0 -L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib -L/usr/arm-none-eabi/lib --build-id=none CMakeFiles/cmTC_49171.dir/CMakeCXXCompilerABI.cpp.o
         /usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/ld: warning: cannot find entry symbol _start; defaulting to 00008000
-        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-nostdlib' '-v' '-o' 'cmTC_54620.elf' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'cmTC_54620.elf.'
+        COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-nostdlib' '-v' '-o' 'cmTC_49171.elf' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'cmTC_49171.elf.'
         
       exitCode: 0
   -
@@ -1514,10 +1514,10 @@ events:
       Parsed CXX implicit link information:
         link line regex: [^( *|.*[/\\])(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
         linker tool regex: [^[ 	]*(->|"|[0-9]+>[ 	-]*Build:[ 	0-9]+ ms[ 	]*)?[ 	]*(([^"]*[/\\])?(ld[0-9]*(|\\.[a-rt-z][a-z]*|\\.s[a-np-z][a-z]*|\\.so[a-z]+)))("|,| |$)]
-        ignore line: [Change Dir: '/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/CMakeScratch/TryCompile-Gu2wpE']
+        ignore line: [Change Dir: '/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/CMakeScratch/TryCompile-EtitJP']
         ignore line: []
-        ignore line: [Run Build Command(s): /usr/bin/ninja-build -v cmTC_54620]
-        ignore line: [[1/2] /usr/bin/arm-none-eabi-g++   -mcpu=cortex-m0plus -mthumb    -v -o CMakeFiles/cmTC_54620.dir/CMakeCXXCompilerABI.cpp.o -c /usr/share/cmake/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [Run Build Command(s): /usr/bin/ninja-build -v cmTC_49171]
+        ignore line: [[1/2] /usr/bin/arm-none-eabi-g++   -mcpu=cortex-m0plus -mthumb    -v -o CMakeFiles/cmTC_49171.dir/CMakeCXXCompilerABI.cpp.o -c /usr/share/cmake/Modules/CMakeCXXCompilerABI.cpp]
         ignore line: [Using built-in specs.]
         ignore line: [COLLECT_GCC=/usr/bin/arm-none-eabi-g++]
         ignore line: [Target: arm-none-eabi]
@@ -1525,8 +1525,8 @@ events:
         ignore line: [Thread model: single]
         ignore line: [Supported LTO compression algorithms: zlib]
         ignore line: [gcc version 15.2.0 (Fedora 15.2.0-4.fc44) ]
-        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_54620.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_54620.dir/']
-        ignore line: [ /usr/libexec/gcc/arm-none-eabi/15.2.0/cc1plus -quiet -v -imultilib thumb/v6-m/nofp -D__USES_INITFINI__ /usr/share/cmake/Modules/CMakeCXXCompilerABI.cpp -quiet -dumpdir CMakeFiles/cmTC_54620.dir/ -dumpbase CMakeCXXCompilerABI.cpp.cpp -dumpbase-ext .cpp -mcpu=cortex-m0plus -mthumb -mfloat-abi=soft -mlibarch=armv6s-m -march=armv6s-m -version -o /tmp/ccYDpyMK.s]
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_49171.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_49171.dir/']
+        ignore line: [ /usr/libexec/gcc/arm-none-eabi/15.2.0/cc1plus -quiet -v -imultilib thumb/v6-m/nofp -D__USES_INITFINI__ /usr/share/cmake/Modules/CMakeCXXCompilerABI.cpp -quiet -dumpdir CMakeFiles/cmTC_49171.dir/ -dumpbase CMakeCXXCompilerABI.cpp.cpp -dumpbase-ext .cpp -mcpu=cortex-m0plus -mthumb -mfloat-abi=soft -mlibarch=armv6s-m -march=armv6s-m -version -o /tmp/cc1AF7rd.s]
         ignore line: [GNU C++17 (Fedora 15.2.0-4.fc44) version 15.2.0 (arm-none-eabi)]
         ignore line: [	compiled by GNU C version 16.0.1 20260115 (Red Hat 16.0.1-0)  GMP version 6.3.0  MPFR version 4.2.2  MPC version 1.3.1  isl version none]
         ignore line: [warning: MPC header version 1.3.1 differs from library version 1.4.1.]
@@ -1543,13 +1543,13 @@ events:
         ignore line: [ /usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/include]
         ignore line: [End of search list.]
         ignore line: [Compiler executable checksum: b8af42de1b3a490233e7db783dabe677]
-        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_54620.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_54620.dir/']
-        ignore line: [ /usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/as -v -march=armv6s-m -mfloat-abi=soft -meabi=5 -o CMakeFiles/cmTC_54620.dir/CMakeCXXCompilerABI.cpp.o /tmp/ccYDpyMK.s]
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_49171.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_49171.dir/']
+        ignore line: [ /usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/as -v -march=armv6s-m -mfloat-abi=soft -meabi=5 -o CMakeFiles/cmTC_49171.dir/CMakeCXXCompilerABI.cpp.o /tmp/cc1AF7rd.s]
         ignore line: [GNU assembler version 2.45 (arm-none-eabi) using BFD version (Fedora 2.45-3.fc44) 2.45]
         ignore line: [COMPILER_PATH=/usr/libexec/gcc/arm-none-eabi/15.2.0/:/usr/libexec/gcc/arm-none-eabi/15.2.0/:/usr/libexec/gcc/arm-none-eabi/:/usr/lib/gcc/arm-none-eabi/15.2.0/:/usr/lib/gcc/arm-none-eabi/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/]
         ignore line: [LIBRARY_PATH=/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp/:/usr/arm-none-eabi/lib/thumb/v6-m/nofp/:/usr/lib/gcc/arm-none-eabi/15.2.0/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/:/usr/arm-none-eabi/lib/]
-        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_54620.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_54620.dir/CMakeCXXCompilerABI.cpp.']
-        ignore line: [[2/2] : && /usr/bin/arm-none-eabi-g++ -mcpu=cortex-m0plus -mthumb -Wl --build-id=none -nostdlib  -v CMakeFiles/cmTC_54620.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_54620.elf   && :]
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-v' '-o' 'CMakeFiles/cmTC_49171.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'CMakeFiles/cmTC_49171.dir/CMakeCXXCompilerABI.cpp.']
+        ignore line: [[2/2] : && /usr/bin/arm-none-eabi-g++ -mcpu=cortex-m0plus -mthumb -Wl --build-id=none -nostdlib  -v CMakeFiles/cmTC_49171.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_49171.elf   && :]
         ignore line: [Using built-in specs.]
         ignore line: [COLLECT_GCC=/usr/bin/arm-none-eabi-g++]
         ignore line: [COLLECT_LTO_WRAPPER=/usr/libexec/gcc/arm-none-eabi/15.2.0/lto-wrapper]
@@ -1560,17 +1560,17 @@ events:
         ignore line: [gcc version 15.2.0 (Fedora 15.2.0-4.fc44) ]
         ignore line: [COMPILER_PATH=/usr/libexec/gcc/arm-none-eabi/15.2.0/:/usr/libexec/gcc/arm-none-eabi/15.2.0/:/usr/libexec/gcc/arm-none-eabi/:/usr/lib/gcc/arm-none-eabi/15.2.0/:/usr/lib/gcc/arm-none-eabi/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/]
         ignore line: [LIBRARY_PATH=/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp/:/usr/arm-none-eabi/lib/thumb/v6-m/nofp/:/usr/lib/gcc/arm-none-eabi/15.2.0/:/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/:/usr/arm-none-eabi/lib/]
-        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-nostdlib' '-v' '-o' 'cmTC_54620.elf' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'cmTC_54620.elf.']
-        link line: [ /usr/libexec/gcc/arm-none-eabi/15.2.0/collect2 -plugin /usr/libexec/gcc/arm-none-eabi/15.2.0/liblto_plugin.so -plugin-opt=/usr/libexec/gcc/arm-none-eabi/15.2.0/lto-wrapper -plugin-opt=-fresolution=/tmp/ccHTJxQl.res --sysroot=/usr/arm-none-eabi -X -o cmTC_54620.elf -L/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp -L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp -L/usr/arm-none-eabi/lib/thumb/v6-m/nofp -L/usr/lib/gcc/arm-none-eabi/15.2.0 -L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib -L/usr/arm-none-eabi/lib --build-id=none CMakeFiles/cmTC_54620.dir/CMakeCXXCompilerABI.cpp.o]
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-nostdlib' '-v' '-o' 'cmTC_49171.elf' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'cmTC_49171.elf.']
+        link line: [ /usr/libexec/gcc/arm-none-eabi/15.2.0/collect2 -plugin /usr/libexec/gcc/arm-none-eabi/15.2.0/liblto_plugin.so -plugin-opt=/usr/libexec/gcc/arm-none-eabi/15.2.0/lto-wrapper -plugin-opt=-fresolution=/tmp/ccpXnaQb.res --sysroot=/usr/arm-none-eabi -X -o cmTC_49171.elf -L/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp -L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp -L/usr/arm-none-eabi/lib/thumb/v6-m/nofp -L/usr/lib/gcc/arm-none-eabi/15.2.0 -L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib -L/usr/arm-none-eabi/lib --build-id=none CMakeFiles/cmTC_49171.dir/CMakeCXXCompilerABI.cpp.o]
           arg [/usr/libexec/gcc/arm-none-eabi/15.2.0/collect2] ==> ignore
           arg [-plugin] ==> ignore
           arg [/usr/libexec/gcc/arm-none-eabi/15.2.0/liblto_plugin.so] ==> ignore
           arg [-plugin-opt=/usr/libexec/gcc/arm-none-eabi/15.2.0/lto-wrapper] ==> ignore
-          arg [-plugin-opt=-fresolution=/tmp/ccHTJxQl.res] ==> ignore
+          arg [-plugin-opt=-fresolution=/tmp/ccpXnaQb.res] ==> ignore
           arg [--sysroot=/usr/arm-none-eabi] ==> ignore
           arg [-X] ==> ignore
           arg [-o] ==> ignore
-          arg [cmTC_54620.elf] ==> ignore
+          arg [cmTC_49171.elf] ==> ignore
           arg [-L/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp] ==> dir [/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp]
           arg [-L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp] ==> dir [/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib/thumb/v6-m/nofp]
           arg [-L/usr/arm-none-eabi/lib/thumb/v6-m/nofp] ==> dir [/usr/arm-none-eabi/lib/thumb/v6-m/nofp]
@@ -1578,10 +1578,10 @@ events:
           arg [-L/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib] ==> dir [/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/lib]
           arg [-L/usr/arm-none-eabi/lib] ==> dir [/usr/arm-none-eabi/lib]
           arg [--build-id=none] ==> ignore
-          arg [CMakeFiles/cmTC_54620.dir/CMakeCXXCompilerABI.cpp.o] ==> ignore
+          arg [CMakeFiles/cmTC_49171.dir/CMakeCXXCompilerABI.cpp.o] ==> ignore
         ignore line: [/usr/lib/gcc/arm-none-eabi/15.2.0/../../../../arm-none-eabi/bin/ld: warning: cannot find entry symbol _start]
         ignore line: [ defaulting to 00008000]
-        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-nostdlib' '-v' '-o' 'cmTC_54620.elf' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'cmTC_54620.elf.']
+        ignore line: [COLLECT_GCC_OPTIONS='-mcpu=cortex-m0plus' '-mthumb' '-nostdlib' '-v' '-o' 'cmTC_49171.elf' '-mfloat-abi=soft' '-mlibarch=armv6s-m' '-march=armv6s-m' '-dumpdir' 'cmTC_49171.elf.']
         ignore line: []
         ignore line: []
         collapse library dir [/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp] ==> [/usr/lib/gcc/arm-none-eabi/15.2.0/thumb/v6-m/nofp]
@@ -3479,23 +3479,23 @@ events:
         CMAKE_FIND_ROOT_PATH_MODE: "NEVER"
     candidates:
       -
-        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/pioasmConfig.cmake"
+        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/pioasmConfig.cmake"
         mode: "config"
         reason: "no_exist"
       -
-        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/pioasm-config.cmake"
+        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/pioasm-config.cmake"
         mode: "config"
         reason: "no_exist"
       -
-        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/lib32/cps/pioasm.cps"
+        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/lib32/cps/pioasm.cps"
         mode: "cps"
         reason: "no_exist"
       -
-        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/lib/cps/pioasm.cps"
+        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/lib/cps/pioasm.cps"
         mode: "cps"
         reason: "no_exist"
       -
-        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/share/cps/pioasm.cps"
+        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/share/cps/pioasm.cps"
         mode: "cps"
         reason: "no_exist"
       -
@@ -3866,23 +3866,23 @@ events:
         CMAKE_FIND_ROOT_PATH_MODE: "NEVER"
     candidates:
       -
-        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/picotoolConfig.cmake"
+        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/picotoolConfig.cmake"
         mode: "config"
         reason: "no_exist"
       -
-        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/picotool-config.cmake"
+        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/picotool-config.cmake"
         mode: "config"
         reason: "no_exist"
       -
-        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/lib32/cps/picotool.cps"
+        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/lib32/cps/picotool.cps"
         mode: "cps"
         reason: "no_exist"
       -
-        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/lib/cps/picotool.cps"
+        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/lib/cps/picotool.cps"
         mode: "cps"
         reason: "no_exist"
       -
-        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/share/cps/picotool.cps"
+        path: "/home/tme520/Downloads/LPS-Companion-PicoCalc/build/CMakeFiles/pkgRedirects/share/cps/picotool.cps"
         mode: "cps"
         reason: "no_exist"
       -

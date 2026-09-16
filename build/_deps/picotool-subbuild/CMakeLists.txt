@@ -28,8 +28,8 @@ set_property(GLOBAL PROPERTY _CMAKE_FindGit_GIT_EXECUTABLE_VERSION
 include(ExternalProject)
 ExternalProject_Add(picotool-populate
                      "GIT_REPOSITORY" "https://github.com/raspberrypi/picotool.git" "GIT_TAG" "a7eb3988f0645239185fadb4e25d8279478c2dbb"
-                    SOURCE_DIR          "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool-src"
-                    BINARY_DIR          "/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool-build"
+                    SOURCE_DIR          "/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool-src"
+                    BINARY_DIR          "/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool-build"
                     CONFIGURE_COMMAND   ""
                     BUILD_COMMAND       ""
                     INSTALL_COMMAND     ""

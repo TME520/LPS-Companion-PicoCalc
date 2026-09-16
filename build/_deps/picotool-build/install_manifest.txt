@@ -1,6 +1,6 @@
-/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool/picotool
-/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool/picotoolTargets.cmake
-/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool/picotoolTargets-release.cmake
-/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool/picotoolConfig.cmake
-/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool/picotoolConfigVersion.cmake
-/home/tme520/Downloads/LPS-Companion-PicoCalc (1)/LPS-Companion-PicoCalc/build/_deps/picotool/enc_bootloader.elf
+/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool/picotool
+/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool/picotoolTargets.cmake
+/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool/picotoolTargets-release.cmake
+/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool/picotoolConfig.cmake
+/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool/picotoolConfigVersion.cmake
+/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool/enc_bootloader.elf

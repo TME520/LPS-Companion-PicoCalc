@@ -1,5 +1,5 @@
 /*
- LPS Companion - v1.1, 2026-09-16.
+ LPS Companion - v1.2, 2026-09-16.
  Screen: 320x320, 8x16 bitmap font, 40 columns x 20 rows.
 
  Desktop build (Fedora/Linux):
@@ -13,7 +13,7 @@
  In this package src/main.cpp supplies the LCD, keyboard and SD implementation.
  Run bash build.sh from the project root to create build/lps_companion.uf2.
  Target: original RP2040 PicoCalc, standalone BOOTSEL firmware.
- v1.0 boot and persistent saves confirmed by the user; v1.1 needs device testing.
+ v1.0 boot and persistent saves confirmed by the user; v1.2 needs device testing.
  The portable application remains independent of the Pico SDK; desktop and
  built-in tests below remain available for checking the UI/state machine.
 
@@ -26,7 +26,7 @@
  - Days are sequential, NOT calendar dates. RTC/calendar integration is pending.
  - Current day autosaves on checkbox changes and explicit form validation.
  - Closing a day banks XP once, unlocks souvenirs and advances the day.
- - The last 31 closed days are retained in a ring buffer (no history UI).
+ - The last 31 closed days are retained in a ring buffer, browsable read-only from Home.
  - Persistent format: versioned little-endian bytes + CRC32, no raw struct dumps.
  - Missing storage starts a new profile. Corruption/I/O errors block writes;
    they never silently overwrite a damaged existing save.
@@ -141,7 +141,7 @@ class App {
     Platform& hw;
     State state{};
     Screen screen=Screen::Home;
-    unsigned selection=0,page=0,field=0;
+    unsigned selection=0,page=0,field=0,daysBack=0;
     bool blocked=false;
     std::array<char,NoteLength+1> draft{};
     std::array<std::array<char,8>,2> weights{};
@@ -154,14 +154,15 @@ class App {
         for(unsigned i=0;*text&&i<limit;++i){char b[41]{};std::size_t n=std::strlen(text);if(n>40)n=40;std::memcpy(b,text,n);line(row+int(i),b);text+=n;}
     }
     bool commit(const State& candidate){
+        if(daysBack){say("Jour archive : lecture seule");return false;}
         if(blocked){say("Sauvegarde illisible : ecriture bloquee");return false;}
         Blob b=encode(candidate);
         if(!hw.save(b.bytes.data(),b.size)){say("Echec sauvegarde : redemarrer");return false;}
         state=candidate;return true;
     }
     void go(Screen s){screen=s;selection=0;message.fill(0);
-        if(s==Screen::Note)draft=state.today.note;
-        if(s==Screen::Weight){field=0;for(unsigned i=0;i<2;++i){int32_t v=i?state.today.actual:state.today.expected;weights[i].fill(0);if(v>=0)weightText(v,weights[i].data(),weights[i].size());}}
+        if(s==Screen::Note)draft=viewedDay().note;
+        if(s==Screen::Weight){field=0;for(unsigned i=0;i<2;++i){int32_t v=i?viewedDay().actual:viewedDay().expected;weights[i].fill(0);if(v>=0)weightText(v,weights[i].data(),weights[i].size());}}
     }
     template<std::size_t N> void edit(std::array<char,N>& value,int key){
         std::size_t len=std::strlen(value.data());
@@ -172,6 +173,11 @@ public:
     explicit App(Platform& platform):hw(platform){}
     const State& data()const{return state;}
     Screen currentScreen()const{return screen;}
+    const Day& viewedDay()const{
+        // next is the slot AFTER the most recently closed day. Never index by
+        // day number: physical slots wrap every 31 closures.
+        return daysBack?state.history[(state.next+HistoryLength-daysBack)%HistoryLength]:state.today;
+    }
     void start(){Blob b;auto r=hw.load(b.bytes.data(),b.bytes.size(),b.size);
         if(r==LoadResult::Error||(r==LoadResult::Ok&&!decode(b.bytes.data(),b.size,state))){blocked=true;say("Erreur lecture : sauvegarde protegee");}
         render();
@@ -180,9 +186,16 @@ public:
         if(k==Escape){go(Screen::Home);render();return;}
         message.fill(0);
         if(screen==Screen::Home){
-            if(k==Up)selection=(selection+3)%4;
-            if(k==Down)selection=(selection+1)%4;
-            if(k>='1'&&k<='4'){selection=unsigned(k-'1');k=Enter;}
+            if(k==Left){
+                if(daysBack<state.count){++daysBack;selection=0;page=0;}
+                else say(state.count?"Plus ancien jour conserve":"Aucun jour archive");
+            }
+            if(k==Right){daysBack=0;selection=0;page=0;}
+            const unsigned menuCount=daysBack?3:4;
+            if(k==Up)selection=(selection+menuCount-1)%menuCount;
+            if(k==Down)selection=(selection+1)%menuCount;
+            if(k>='1'&&k<'1'+int(menuCount)){selection=unsigned(k-'1');k=Enter;}
+            if(k=='4'&&daysBack)say("Jour archive : lecture seule");
             if(k==Enter){constexpr Screen screens[]={Screen::Activities,Screen::Note,Screen::Weight,Screen::Finish};go(screens[selection]);}
         }else if(screen==Screen::Activities){
             unsigned remaining=ActivityCount-page*PageSize;
@@ -190,15 +203,18 @@ public:
             if(k==Left||k==Right){page=(page+(k==Right?1:PageCount-1))%PageCount;selection=0;}
             else if(k==Up)selection=(selection+rows-1)%rows;
             else if(k==Down)selection=(selection+1)%rows;
+            else if(daysBack&&(k==Enter||(k>='1'&&k<='9')))say("Jour archive : lecture seule");
             else if(k==Enter||(k>='1'&&k<='9')){
                 unsigned id=k==Enter?page*5+selection:unsigned(k-'1');State next=state;next.today.flags^=uint16_t(1u<<id);
                 if(commit(next)){page=id/5;selection=id%5;}
             }
         }else if(screen==Screen::Note){
-            if(k==Enter){State next=state;next.today.note=draft;if(commit(next))go(Screen::Home);}
+            if(daysBack){if(k==Enter)go(Screen::Home);else say("Jour archive : lecture seule");}
+            else if(k==Enter){State next=state;next.today.note=draft;if(commit(next))go(Screen::Home);}
             else edit(draft,k);
         }else if(screen==Screen::Weight){
-            if(k==Up||k==Down||k==9)field=1-field;
+            if(daysBack){if(k==Enter)go(Screen::Home);else say("Jour archive : lecture seule");}
+            else if(k==Up||k==Down||k==9)field=1-field;
             else if(k==Enter){State next=state;
                 if(!parseWeight(weights[0].data(),next.today.expected)||!parseWeight(weights[1].data(),next.today.actual))say("Poids invalide (exemple : 110,500)");
                 else if(commit(next))go(Screen::Home);
@@ -216,24 +232,27 @@ public:
         render();
     }
     void render(){
-        hw.clear();char b[80];
-        std::snprintf(b,sizeof b,"LPS COMPANION v1.1            J%lu",static_cast<unsigned long>(state.today.number));line(0,b,true);
+        hw.clear();char b[80];const Day& day=viewedDay();
+        std::snprintf(b,sizeof b,"LPS COMPANION v1.2            J%lu",static_cast<unsigned long>(day.number));line(0,b,true);
         std::snprintf(b,sizeof b,"%lu XP acquis",static_cast<unsigned long>(state.xp));line(1,b);
+        if(daysBack)line(2,"JOUR ARCHIVE - LECTURE SEULE");
         if(screen==Screen::Home){
-            line(3,"AUJOURD'HUI");std::snprintf(b,sizeof b,"%u/11 activites - %lu XP a valider",count(state.today.flags),static_cast<unsigned long>(points(state.today)));line(4,b);
+            line(3,daysBack?"JOUR TERMINE":"AUJOURD'HUI");
+            std::snprintf(b,sizeof b,"%u/11 activites - %lu XP %s",count(day.flags),static_cast<unsigned long>(points(day)),daysBack?"valides":"a valider");line(4,b);
             constexpr const char* menu[]={"1  Activites","2  Note du jour","3  Poids du jour","4  Terminer le jour"};
-            for(unsigned i=0;i<4;++i)line(6+int(i)*2,menu[i],i==selection);
+            for(unsigned i=0;i<(daysBack?3u:4u);++i)line(6+int(i)*2,menu[i],i==selection);
+            line(15,"<- Jour precedent   -> Jour actuel");
         }else if(screen==Screen::Activities){
             std::snprintf(b,sizeof b,"ACTIVITES                       %u/3",page+1);line(3,b);
-            unsigned end=(page+1)*PageSize;if(end>ActivityCount)end=ActivityCount;for(unsigned i=page*5;i<end;++i){std::snprintf(b,sizeof b,"%u  %-24s [%c]",i+1,Activities[i],state.today.flags&(1u<<i)?'x':' ');line(5+int(i-page*5)*2,b,i-page*5==selection);}
-            line(16,"Entree: cocher  1-9: racc.  <- -> pages");
+            unsigned end=(page+1)*PageSize;if(end>ActivityCount)end=ActivityCount;for(unsigned i=page*5;i<end;++i){std::snprintf(b,sizeof b,"%u  %-24s [%c]",i+1,Activities[i],day.flags&(1u<<i)?'x':' ');line(5+int(i-page*5)*2,b,i-page*5==selection);}
+            line(16,daysBack?"<- -> pages   Echap: menu du jour":"Entree: cocher  1-9: racc.  <- -> pages");
         }else if(screen==Screen::Note){
-            line(3,"NOTE DU JOUR");wrap(5,draft.data(),3);std::snprintf(b,sizeof b,"%zu/96 caracteres",std::strlen(draft.data()));line(10,b);line(14,"Entree : valider / Echap : annuler");
+            line(3,"NOTE DU JOUR");wrap(5,draft.data(),3);std::snprintf(b,sizeof b,"%zu/96 caracteres",std::strlen(draft.data()));line(10,b);line(14,daysBack?"Entree / Echap : menu du jour":"Entree : valider / Echap : annuler");
         }else if(screen==Screen::Weight){
             line(3,"POIDS DU JOUR (kg)");std::snprintf(b,sizeof b,"Attendu  : %s",weights[0].data());line(6,b,field==0);std::snprintf(b,sizeof b,"Effectif : %s",weights[1].data());line(9,b,field==1);
             int32_t a=0,c=0;bool valid=parseWeight(weights[0].data(),a)&&parseWeight(weights[1].data(),c)&&a>=0&&c>=0;
             if(valid){int32_t d=c-a,abs=d<0?-d:d;std::snprintf(b,sizeof b,"Ecart : %c%ld.%03ld kg",d<0?'-':'+',long(abs/1000),long(abs%1000));}else std::snprintf(b,sizeof b,"Ecart : --");line(12,b);
-            line(14,"Vide = non renseigne");line(15,"Haut/Bas : champ - Entree : valider");
+            line(14,"Vide = non renseigne");line(15,daysBack?"Entree / Echap : menu du jour":"Haut/Bas : champ - Entree : valider");
         }else if(screen==Screen::Finish){
             line(3,"TERMINER LE JOUR ?");std::snprintf(b,sizeof b,"Activites : %u",count(state.today.flags));line(6,b);std::snprintf(b,sizeof b,"Bonus variete : %u XP",count(state.today.flags)>=3?10:0);line(8,b);std::snprintf(b,sizeof b,"Total : +%lu XP",static_cast<unsigned long>(points(state.today)));line(10,b);line(13,"Entree : enregistrer et avancer");line(15,"Une journee vide ne coute rien.");
         }else{
@@ -299,8 +318,9 @@ int main(){Terminal terminal;lps::App app(terminal);app.start();std::string s;
 class Memory final:public lps::Platform {
 public:
     lps::Blob stored{};bool exists=false,fail=false;
+    std::array<std::array<char,41>,20> rows{};
     void clear()override{}
-    void text(int x,int y,const char*,bool)override{assert(x>=0&&x<320&&y>=0&&y+16<=320);}
+    void text(int x,int y,const char* text,bool)override{assert(x>=0&&x<320&&y>=0&&y+16<=320);std::snprintf(rows[y/16].data(),41,"%s",text);}
     void present()override{}
     lps::LoadResult load(uint8_t* b,std::size_t cap,std::size_t& n)override{if(!exists)return lps::LoadResult::Missing;if(stored.size>cap)return lps::LoadResult::Error;n=stored.size;std::memcpy(b,stored.bytes.data(),n);return lps::LoadResult::Ok;}
     bool save(const uint8_t* b,std::size_t n)override{if(fail)return false;stored.size=n;std::memcpy(stored.bytes.data(),b,n);exists=true;return true;}
@@ -309,6 +329,23 @@ int main(){
     using namespace lps;int32_t g=0;
     assert(parseWeight("110,500",g)&&g==110500);assert(parseWeight("0.001",g)&&g==1);
     assert(parseWeight("",g)&&g==-1);assert(!parseWeight("0",g));assert(!parseWeight("-1",g));assert(!parseWeight("1.2345",g));assert(!parseWeight("1.",g));assert(!parseWeight("nan",g));
+    Memory history;State historyState;historyState.today.number=2;
+    historyState.today.flags=1;historyState.today.expected=120000;
+    historyState.history[0].flags=1024;historyState.history[0].expected=110500;
+    historyState.history[0].actual=111200;
+    std::strcpy(historyState.history[0].note.data(),"Yesterday only");
+    historyState.next=1;historyState.count=1;history.stored=encode(historyState);history.exists=true;
+    App browsing(history);browsing.start();browsing.key(Left);
+    assert(browsing.viewedDay().number==1);
+    browsing.key('2');assert(std::strcmp(history.rows[5].data(),"Yesterday only")==0);
+    browsing.key(Escape);browsing.key('3');
+    assert(std::strstr(history.rows[6].data(),"110.500"));
+    assert(std::strstr(history.rows[9].data(),"111.200"));
+    assert(std::strstr(history.rows[12].data(),"+0.700"));
+    browsing.key(Escape);browsing.key('1');browsing.key(Right);browsing.key(Right);
+    assert(std::strstr(history.rows[5].data(),"Weekend")&&std::strstr(history.rows[5].data(),"[x]"));
+    browsing.key(Escape);browsing.key(Right);browsing.key('3');
+    assert(std::strstr(history.rows[6].data(),"120.000"));
     Memory pages;App nav(pages);nav.start();nav.key('1');
     nav.key(Right);for(int i=0;i<4;++i)nav.key(Down);nav.key(Enter);
     assert(nav.data().today.flags==(1u<<9));

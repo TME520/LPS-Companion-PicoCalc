@@ -1,4 +1,4 @@
-# LPS-Companion v1.1
+# LPS-Companion v1.2
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
@@ -6,7 +6,15 @@ LPS-Companion helps you record daily activities, write a short note, and compare
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries and progress are saved to the SD card.
 
-**Status:** v1.0 boot and persistent saves were confirmed on a PicoCalc by the user. v1.1 has been compiled and tested on the host; device testing remains pending.
+**Status:** v1.0 boot and persistent saves were confirmed on a PicoCalc by the user. v1.2 has been compiled and tested on the host; device testing remains pending.
+
+## Changes in v1.2
+
+- On the home screen, **Left** steps back one saved day. Press again to go further back, up to the 31 retained completed days.
+- On the home screen, **Right** returns directly to the current day.
+- Past days are marked **JOUR ARCHIVE - LECTURE SEULE**. Open Activities, Note or Weight to inspect that day's entries. Historical entries cannot be edited or closed again.
+- **Esc** returns to the selected day's menu. In Activities, Left/Right still switches activity pages; return to the menu before navigating days.
+- The existing save format is unchanged: v1.0/v1.1 history loads automatically. Browsing never writes either save file or awards XP.
 
 ## Changes in v1.1
 
@@ -174,9 +182,11 @@ LPS-Companion stores data in the SD card's `LPS` directory:
 - `SAVE_A.BIN`
 - `SAVE_B.BIN`
 
-It alternates between two checked save records to help recover from an incomplete write. Back up the **whole `LPS` directory** to preserve your data.
+Each file is a complete snapshot of the current day, total XP and retained history; the two files are not assigned to different days. The app alternates writes between them. At startup it checks both records and loads the highest-generation valid snapshot. If the newest is missing or fails validation, it uses the older intact snapshot, which may lack the latest change. If loading fails due to an I/O error or neither existing record is valid, writes are blocked.
 
-The save contains the current day, total XP and the last **31 completed days**. Older completed days are replaced as new days are added. There is currently no Journal menu for viewing past entries.
+Day navigation uses the history from that loaded snapshot in RAM. It indexes backwards from the history ring's next-write position, so the correct day is selected even after the 31 slots wrap. It does not reload the card at every arrow press, switch between A and B to change days, or write while browsing. Back up the **whole `LPS` directory** to preserve your data.
+
+The save contains the current day, total XP and the last **31 completed days**. Older completed days are replaced as new days are added. Browse the retained entries with Left on the home screen. The total XP shown remains your current cumulative total; the activity summary shows XP for the selected day.
 
 If saving fails, restart with a working SD card before continuing. A missing, unreadable or corrupt card does not silently become a new saved profile. Avoid removing the SD card while the app is running.
 
@@ -185,7 +195,7 @@ If saving fails, restart with a working SD card before continuing. A missing, un
 - Days are numbered sequentially; there is no calendar-date or RTC integration.
 - Activities are daily checkboxes, without duration or repetition counts.
 - Notes support ASCII text only.
-- Saved history is limited to 31 completed days and has no browsing screen.
+- Saved history is limited to 31 completed days; earlier days cannot be recovered by browsing. Past days are read-only.
 - The current build targets the original RP2040 model.
 
 ## Development
@@ -197,7 +207,8 @@ If saving fails, restart with a working SD card before continuing. A missing, un
 | `src/hw_config.c` | SD-card SPI configuration. |
 | `CMakeLists.txt` | Firmware build and memory layout. |
 | `build.sh` | Dependency download and compilation. |
-| `test.sh` | Host-side application tests. |
+| `test.sh` | Application tests and A/B storage integration tests with host files. |
+| `tests/` | Hardware/FatFs stand-ins used only for host tests of the actual firmware adapter. |
 | `verify_uf2.py` | UF2 format, target and address checks. |
 
 Run the application tests on your development computer with:
