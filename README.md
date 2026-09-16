@@ -1,4 +1,4 @@
-# LPS-Companion v1.2
+# LPS-Companion v1.3
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
@@ -6,7 +6,19 @@ LPS-Companion helps you record daily activities, write a short note, and compare
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries and progress are saved to the SD card.
 
-**Status:** v1.0 boot and persistent saves were confirmed on a PicoCalc by the user. v1.2 has been compiled and tested on the host; device testing remains pending.
+**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.3 adds English/French support; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
+
+## Changes in v1.3
+
+- **English** is the default for new profiles and imported v1.0–v1.2 saves.
+- **5 Config → 1 Language** offers **English** and **Français**.
+- Choose a language with Up/Down and Enter (or 1/2), then use **2 Save / 2 Enregistrer** in Configuration. The language takes effect only after a successful save.
+- Esc from Language returns to Configuration without selecting the highlighted choice. Esc from Configuration discards unsaved changes.
+- Device labels, activity names, help text, errors and keepsake names are translated. Proper names such as Gurumed and user-authored notes remain unchanged.
+- The language survives restart and is stored in the protected A/B snapshots alongside your daily data.
+- Old saves load automatically without losing activities, notes, weights, XP or history. The first successful save writes format 2, adding one language byte. Mixed old/new snapshots are supported during upgrade.
+
+**Back up the entire SD `LPS` folder before updating.** v1.0–v1.2 cannot read the new format; restore your pre-upgrade backup if downgrading. Fallback to an older v1.2 snapshot also returns the language to English.
 
 ## Changes in v1.2
 
@@ -81,42 +93,45 @@ Flashing replaces the current Pico firmware, including any installed interpreter
 
 ### Quick start
 
-1. Open **Activites** and check the activities you have completed.
-2. Open **Note du jour**, type a short note, and press Enter to save it.
-3. Open **Poids du jour** to enter your expected and actual weight.
-4. At the end of the day, choose **Terminer le jour** and press Enter to confirm.
+1. Open **Activities / Activités** and check the activities you have completed.
+2. Open **Notepad / Bloc notes**, type a short note, and press Enter to save it.
+3. Open **Weight tracker / Suivi du poids** to enter your expected and actual weight.
+4. At the end of the day, choose **Close the day / Terminer le jour** and press Enter to confirm.
 5. Your XP is banked, any new keepsakes are unlocked, and the next day begins.
 
 Days advance manually. Leaving the device switched off does not automatically start a new day.
 
 ### Main menu
 
-The device uses French labels. Régime and Congé include their accented character; note entry remains ASCII-only.
+Select the language from Config on today's home screen. Accented French labels are supported; note entry remains ASCII-only.
 
-| Key | Menu | Purpose |
-| --- | --- | --- |
-| `1` | Activites | Check or uncheck today's activities. |
-| `2` | Note du jour | Write a short daily note. |
-| `3` | Poids du jour | Enter expected and actual weight. |
-| `4` | Terminer le jour | Save and close today, then advance. |
+| Key | English | Français | Purpose |
+| --- | --- | --- | --- |
+| `1` | Activities | Activités | Check or uncheck today's activities. |
+| `2` | Notepad | Bloc notes | Write a short daily note. |
+| `3` | Weight tracker | Suivi du poids | Enter expected and actual weight. |
+| `4` | Close the day | Terminer le jour | Save and close today, then advance. |
+| `5` | Config | Config | Choose and save the language. |
 
 Use **Up/Down** to select an item, **Enter** to open it, and **Esc** to return to the main menu.
 
+In read-only history, only items 1–3 are available. Press Right on the home screen to return to today before opening Config.
+
 ### Activities
 
-| Key | Activity |
-| --- | --- |
-| `1` | Marche |
-| `2` | Régime |
-| `3` | Bible |
-| `4` | Messe |
-| `5` | Travail |
-| `6` | Projet |
-| `7` | Sieste |
-| `8` | Gurumed |
-| `9` | Maladie |
-| Arrows + Enter | Congé (10) |
-| Arrows + Enter | Weekend (11) |
+| Key | English | Français |
+| --- | --- | --- |
+| `1` | Walk | Marche |
+| `2` | Diet | Régime |
+| `3` | Bible | Bible |
+| `4` | Mass | Messe |
+| `5` | Work | Travail |
+| `6` | Project | Projet |
+| `7` | Nap | Sieste |
+| `8` | Gurumed | Gurumed |
+| `9` | Illness | Maladie |
+| Arrows + Enter | Day off (10) | Congé (10) |
+| Arrows + Enter | Weekend (11) | Weekend (11) |
 
 Activities are displayed across three pages (5 + 5 + 1). **Left/Right** changes page; **Up/Down** selects an activity; **Enter** toggles its checkbox. Keys **1–9** toggle the corresponding activity from any page. Select **Congé** on page 2 or **Weekend** on page 3 with Up/Down, then press Enter.
 
@@ -135,8 +150,8 @@ Accented characters are not supported by the current text-entry implementation.
 
 The two optional fields are:
 
-- **Attendu:** expected weight for today.
-- **Effectif:** actual measured weight for today.
+- **Expected / Attendu:** expected weight for today.
+- **Actual / Effectif:** actual measured weight for today.
 
 Enter values in **kilograms**, using either a decimal point or comma, with up to three decimal places. For example, `110.5` and `110,500` represent the same weight.
 
@@ -158,20 +173,20 @@ For example, three checked activities earn **40 XP**. Pending XP becomes permane
 
 New keepsakes are announced after closing a day. There is no collection browsing screen.
 
-| Total XP | Keepsake |
-| --- | --- |
-| 30 | Carnet de poche |
-| 70 | Tasse de the |
-| 120 | Boussole |
-| 180 | Radio de poche |
-| 250 | Mini-ordinateur |
-| 330 | Lanterne |
+| Total XP | English | Français |
+| --- | --- | --- |
+| 30 | Pocket notebook | Carnet de poche |
+| 70 | Cup of tea | Tasse de thé |
+| 120 | Compass | Boussole |
+| 180 | Pocket radio | Radio de poche |
+| 250 | Mini computer | Mini-ordinateur |
+| 330 | Lantern | Lanterne |
 
 Keepsakes unlock automatically; XP is not spent when unlocking them.
 
 ### Finishing the day
 
-Open **Terminer le jour** to review the day's activity count, bonus and total XP. Press **Enter** to confirm or **Esc** to return without closing the day.
+Open **Close the day / Terminer le jour** to review the day's activity count, bonus and total XP. Press **Enter** to confirm or **Esc** to return without closing the day.
 
 Confirmation saves the completed day, banks its XP, and clears the activity checkboxes, note and weight fields for the next day. The following screen announces any new keepsakes. Press Enter to continue.
 
@@ -186,7 +201,7 @@ Each file is a complete snapshot of the current day, total XP and retained histo
 
 Day navigation uses the history from that loaded snapshot in RAM. It indexes backwards from the history ring's next-write position, so the correct day is selected even after the 31 slots wrap. It does not reload the card at every arrow press, switch between A and B to change days, or write while browsing. Back up the **whole `LPS` directory** to preserve your data.
 
-The save contains the current day, total XP and the last **31 completed days**. Older completed days are replaced as new days are added. Browse the retained entries with Left on the home screen. The total XP shown remains your current cumulative total; the activity summary shows XP for the selected day.
+The save contains the language preference, current day, total XP and the last **31 completed days**. Older completed days are replaced as new days are added. Browse the retained entries with Left on the home screen. The total XP shown remains your current cumulative total; the activity summary shows XP for the selected day.
 
 If saving fails, restart with a working SD card before continuing. A missing, unreadable or corrupt card does not silently become a new saved profile. Avoid removing the SD card while the app is running.
 

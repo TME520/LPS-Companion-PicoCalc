@@ -15,27 +15,29 @@ void draw_bitmap_spi(int,int,int,int,int,int,int,unsigned char*);
 namespace {
 constexpr const char* paths[]={"0:/LPS/SAVE_A.BIN","0:/LPS/SAVE_B.BIN"};
 constexpr size_t RecordSize=lps::WireSize+16;
-static_assert(RecordSize==3584,"Seven SD sectors per record");
+constexpr size_t LegacyRecordSize=lps::LegacyWireSize+16;
 void put32(uint8_t* p,uint32_t x){for(int i=0;i<4;++i){p[i]=uint8_t(x);x>>=8;}}
 uint32_t get32(const uint8_t* p){return uint32_t(p[0])|(uint32_t(p[1])<<8)|(uint32_t(p[2])<<16)|(uint32_t(p[3])<<24);}
 struct Record {
     std::array<uint8_t,RecordSize> bytes{};
     uint32_t generation=0;
+    size_t payloadSize=0;
     enum Status { Missing, Valid, Damaged, IOError } status=Missing;
 };
 Record readRecord(unsigned slot){
     Record r;FIL f;FRESULT result=f_open(&f,paths[slot],FA_READ);
     if(result==FR_NO_FILE||result==FR_NO_PATH)return r;
     if(result!=FR_OK){r.status=Record::IOError;return r;}
-    bool rightSize=f_size(&f)==RecordSize;UINT n=0;
-    result=rightSize?f_read(&f,r.bytes.data(),RecordSize,&n):FR_OK;
+    const size_t recordSize=f_size(&f);
+    bool rightSize=recordSize==RecordSize||recordSize==LegacyRecordSize;UINT n=0;
+    result=rightSize?f_read(&f,r.bytes.data(),recordSize,&n):FR_OK;
     FRESULT closed=f_close(&f);
     if(result!=FR_OK||closed!=FR_OK){r.status=Record::IOError;return r;}
     lps::State candidate;
-    if(!rightSize||n!=RecordSize||get32(r.bytes.data())!=0x3152504c||get32(r.bytes.data()+8)!=lps::WireSize||get32(r.bytes.data()+RecordSize-4)!=lps::crc32(r.bytes.data(),RecordSize-4)||!lps::decode(r.bytes.data()+12,lps::WireSize,candidate)){
+    if(!rightSize||n!=recordSize||get32(r.bytes.data())!=0x3152504c||get32(r.bytes.data()+8)!=recordSize-16||get32(r.bytes.data()+recordSize-4)!=lps::crc32(r.bytes.data(),recordSize-4)||!lps::decode(r.bytes.data()+12,recordSize-16,candidate)){
         r.status=Record::Damaged;return r;
     }
-    r.generation=get32(r.bytes.data()+4);r.status=Record::Valid;return r;
+    r.generation=get32(r.bytes.data()+4);r.payloadSize=recordSize-16;r.status=Record::Valid;return r;
 }
 class PicoCalc final:public lps::Platform {
     std::array<std::array<char,40>,20> frame{},previous{};
@@ -63,14 +65,25 @@ public:
         for(int row=0;row<20;++row){
             if(!first&&frame[row]==previous[row]&&reverse[row]==oldReverse[row])continue;
             bitmap.fill(0);
-            for(int col=0;col<40;++col){unsigned c=static_cast<unsigned char>(frame[row][col]);if(c==0xe9){
-                    // Accent plus the upstream lowercase e (extended font is not Latin-1).
-                    for(int y=0;y<12;++y)bitmap[(y+2)*40+col]=MainFont[4+('e'-32)*12+y];
-                    bitmap[3*40+col]=0x08;bitmap[4*40+col]=0x10;
-                    continue;
+            for(int col=0;col<40;++col){unsigned c=static_cast<unsigned char>(frame[row][col]);
+                // The upstream extended font is NOT Latin-1. Compose French
+                // accents over its ASCII bases in the padded 8x16 cell.
+                unsigned accent=0;bool upper=false;
+                switch(c){
+                case 0xe9:c='e';accent=1;break;case 0xe8:c='e';accent=2;break;
+                case 0xea:c='e';accent=3;break;case 0xe0:c='a';accent=2;break;
+                case 0xe2:c='a';accent=3;break;case 0xee:c='i';accent=3;break;
+                case 0xf4:c='o';accent=3;break;case 0xf9:c='u';accent=2;break;
+                case 0xfb:c='u';accent=3;break;case 0xe7:c='c';accent=4;break;
+                case 0xc9:c='E';accent=1;upper=true;break;
                 }
                 if(c<32||c>126)c=32;
                 for(int y=0;y<12;++y)bitmap[(y+2)*40+col]=MainFont[4+(c-32)*12+y];
+                const unsigned top=upper?0:3;
+                if(accent==1){bitmap[top*40+col]=0x08;bitmap[(top+1)*40+col]=0x10;}
+                if(accent==2){bitmap[top*40+col]=0x10;bitmap[(top+1)*40+col]=0x08;}
+                if(accent==3){bitmap[top*40+col]=0x10;bitmap[(top+1)*40+col]=0x28;}
+                if(accent==4){bitmap[12*40+col]=0x10;bitmap[13*40+col]=0x20;}
             }
             const int fg=reverse[row]?0x18291c:0xe4eed5,bg=reverse[row]?0xbad99f:0x18291c;
             draw_bitmap_spi(0,row*16,320,16,1,fg,bg,bitmap.data());
@@ -86,7 +99,7 @@ public:
         }
         active=b.status==Record::Valid&&(a.status!=Record::Valid||b.generation>a.generation)?1:0;
         const auto& best=active?b:a;generation=best.generation;
-        size=lps::WireSize;std::memcpy(bytes,best.bytes.data()+12,size);return lps::LoadResult::Ok;
+        size=best.payloadSize;std::memcpy(bytes,best.bytes.data()+12,size);return lps::LoadResult::Ok;
     }
     bool save(const uint8_t* bytes,size_t size)override{
         if(!mounted||writeFault||size!=lps::WireSize||generation==UINT32_MAX)return false;
