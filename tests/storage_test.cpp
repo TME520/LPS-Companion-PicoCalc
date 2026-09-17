@@ -3,6 +3,7 @@
 #include "../src/main.cpp"
 #undef main
 #include <cassert>
+#include <string>
 unsigned char fontStub[4+224*12]{};
 extern "C" {
 unsigned char* MainFont=fontStub;
@@ -72,5 +73,31 @@ int main(){
     {PicoCalc reboot;reboot.init();App app(reboot);app.start();app.key('1');app.key('1');assert(mockWrites==writes);}
     mockReadError=false;
     std::remove("SAVE_A.BIN");std::remove("SAVE_B.BIN");
-    std::puts("PASS: real A/B adapter with host files: 40 saves, restart, 31-day wrap, read-only browsing, current-day edits, damaged/missing newest slot and protected I/O failure.");
+    // Date + ICS: this uses PicoCalc::exportIcs itself and the host FatFs stubs.
+    std::remove("2028-02-29_LPS-Companion.ics");
+    PicoCalc datedDisk;datedDisk.init();App dated(datedDisk);dated.start();
+    // Replace default date using the exact Date screen, including fixed-width edit.
+    dated.key('0');for(int i=0;i<10;++i)dated.key(Backspace);for(char c:std::string("2028-02-29"))dated.key(c);dated.key(Enter);
+    dated.key('1');dated.key('1');dated.key('2');dated.key(Escape);
+    dated.key('4');dated.key(Enter);assert(dated.data().today.date.year==2028&&dated.data().today.date.month==3&&dated.data().today.date.day==1);
+    FILE* ics=std::fopen("2028-02-29_LPS-Companion.ics","rb");assert(ics);char content[1024]{};const auto used=std::fread(content,1,sizeof(content)-1,ics);assert(std::fclose(ics)==0&&used>0);
+    assert(std::strstr(content,"BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"));
+    assert(std::strstr(content,"DTSTART;VALUE=DATE:20280229"));assert(std::strstr(content,"DTEND;VALUE=DATE:20280301"));
+    assert(std::strstr(content,"Activities: Walk, Diet"));assert(std::strstr(content,"XP: +20 (total 20)"));
+    const auto generationAfterLeap=readRecord(0).generation>readRecord(1).generation?readRecord(0).generation:readRecord(1).generation;
+    // Invalid dates and export failure never advance the day or A/B generation.
+    dated.key('0');for(int i=0;i<10;++i)dated.key(Backspace);for(char c:std::string("2027-02-29"))dated.key(c);dated.key(Enter);assert(dated.data().today.date.year==2028);
+    dated.key(Escape);dated.key('4');std::remove("2028-03-01_LPS-Companion.ics");
+    mockWriteError=true;dated.key(Enter);assert(dated.data().today.date.day==1);FILE* missing=std::fopen("2028-03-01_LPS-Companion.ics","rb");assert(!missing);
+    mockWriteError=false;dated.key(Enter);assert(dated.data().today.date.day==2);
+    const auto generationAfterRetry=readRecord(0).generation>readRecord(1).generation?readRecord(0).generation:readRecord(1).generation;
+    assert(generationAfterRetry==generationAfterLeap+1);
+    // ICS escaping plus French activity labels use the same PicoCalc adapter.
+    Day french;french.date={2028,3,2};french.flags=(1u<<1)|(1u<<9);french.expected=110000;french.actual=109500;
+    std::strcpy(french.note.data(),"comma, semi; slash\\");
+    assert(datedDisk.exportIcs(french,60,40,Language::French));
+    ics=std::fopen("2028-03-02_LPS-Companion.ics","rb");assert(ics);std::memset(content,0,sizeof content);std::fread(content,1,sizeof(content)-1,ics);assert(std::fclose(ics)==0);
+    assert(std::strstr(content,"Activités: Régime, Congé"));assert(std::strstr(content,"Note: comma\\, semi\\; slash\\\\"));
+    std::remove("2028-02-29_LPS-Companion.ics");std::remove("2028-03-01_LPS-Companion.ics");std::remove("2028-03-02_LPS-Companion.ics");std::remove("SAVE_A.BIN");std::remove("SAVE_B.BIN");
+    std::puts("PASS: real A/B adapter with host files: history plus date, leap-day rollover, date validation, ICS content, export failure and retry.");
 }

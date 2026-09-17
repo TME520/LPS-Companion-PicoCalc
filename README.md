@@ -1,4 +1,4 @@
-# LPS-Companion v1.3
+# LPS-Companion v1.4
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
@@ -6,7 +6,19 @@ LPS-Companion helps you record daily activities, write a short note, and compare
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries and progress are saved to the SD card.
 
-**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.3 adds English/French support; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
+**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.4 adds manual dates and ICS export; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
+
+## Changes in v1.4
+
+- **0 Date** is a new current-day menu entry in both languages.
+- The field is pre-filled as `YYYY-MM-DD`. New profiles begin with the build's suggested date, **2026-09-17**; imported v1.0–v1.3 entries are explicitly undated until you confirm Date.
+- The built-in Gregorian calendar covers **2000-01-01 through 2099-12-31**, including leap years. No separate calendar file is needed on the SD card: the rules are compiled into the firmware, so there is no extra file to corrupt or maintain.
+- Closing a dated day automatically gives the new day the next valid calendar date.
+- Every successfully closed dated day writes `LPS/EXPORT/YYYY-MM-DD_LPS-Companion.ics` to the SD card. It is a standard all-day calendar event containing activities, day XP/total XP, recorded weights, and note.
+
+Closing is blocked until Date is valid. ICS export happens before the A/B snapshot is committed: a failed export leaves the day open and removes its incomplete ICS file. If the snapshot write fails after a successful export, retrying replaces that same date-named export; it never creates a duplicate event.
+
+**Back up the entire SD `LPS` folder before updating.** v1.0–v1.3 cannot read the new format. Old history remains viewable but is marked undated; past entries are never exported retrospectively.
 
 ## Changes in v1.3
 
@@ -93,10 +105,11 @@ Flashing replaces the current Pico firmware, including any installed interpreter
 
 ### Quick start
 
-1. Open **Activities / Activités** and check the activities you have completed.
-2. Open **Notepad / Bloc notes**, type a short note, and press Enter to save it.
-3. Open **Weight tracker / Suivi du poids** to enter your expected and actual weight.
-4. At the end of the day, choose **Close the day / Terminer le jour** and press Enter to confirm.
+1. Open **0 Date**, check or enter the current date, then press Enter.
+2. Open **Activities / Activités** and check the activities you have completed.
+3. Open **Notepad / Bloc notes**, type a short note, and press Enter to save it.
+4. Open **Weight tracker / Suivi du poids** to enter your expected and actual weight.
+5. At the end of the day, choose **Close the day / Terminer le jour** and press Enter to confirm. The ICS export is written automatically.
 5. Your XP is banked, any new keepsakes are unlocked, and the next day begins.
 
 Days advance manually. Leaving the device switched off does not automatically start a new day.
@@ -107,6 +120,7 @@ Select the language from Config on today's home screen. Accented French labels a
 
 | Key | English | Français | Purpose |
 | --- | --- | --- | --- |
+| `0` | Date | Date | Set or correct today's `YYYY-MM-DD` date. |
 | `1` | Activities | Activités | Check or uncheck today's activities. |
 | `2` | Notepad | Bloc notes | Write a short daily note. |
 | `3` | Weight tracker | Suivi du poids | Enter expected and actual weight. |
@@ -115,7 +129,13 @@ Select the language from Config on today's home screen. Accented French labels a
 
 Use **Up/Down** to select an item, **Enter** to open it, and **Esc** to return to the main menu.
 
-In read-only history, only items 1–3 are available. Press Right on the home screen to return to today before opening Config.
+In read-only history, only items 1–3 are available. Press Right on the home screen to return to today before opening Date or Config.
+
+### Date and calendar
+
+Date accepts exactly `YYYY-MM-DD`, from **2000-01-01** to **2099-12-31**. Press Backspace to edit and Enter to save. It is manual because the base PicoCalc has no dependable real-time clock.
+
+After closing a day, the next date is set automatically, including month/year boundaries and 29 February in leap years. You may correct it through Date before closing the next day. The final supported date, 2099-12-31, cannot be closed because no supported next day exists.
 
 ### Activities
 
@@ -190,6 +210,18 @@ Open **Close the day / Terminer le jour** to review the day's activity count, bo
 
 Confirmation saves the completed day, banks its XP, and clears the activity checkboxes, note and weight fields for the next day. The following screen announces any new keepsakes. Press Enter to continue.
 
+### ICS exports
+
+On closing a dated day, LPS Companion creates:
+
+```text
+LPS/EXPORT/YYYY-MM-DD_LPS-Companion.ics
+```
+
+For example: `LPS/EXPORT/2026-09-17_LPS-Companion.ics`.
+
+Each file is an iCalendar 2.0 file with one all-day event. It can be copied from the SD card and imported into desktop calendar software. The event description records activities, XP, any weights, and your note. LPS Companion overwrites the same date's export on a retry, so it remains one event per closed day.
+
 ## Saved data
 
 LPS-Companion stores data in the SD card's `LPS` directory:
@@ -201,13 +233,13 @@ Each file is a complete snapshot of the current day, total XP and retained histo
 
 Day navigation uses the history from that loaded snapshot in RAM. It indexes backwards from the history ring's next-write position, so the correct day is selected even after the 31 slots wrap. It does not reload the card at every arrow press, switch between A and B to change days, or write while browsing. Back up the **whole `LPS` directory** to preserve your data.
 
-The save contains the language preference, current day, total XP and the last **31 completed days**. Older completed days are replaced as new days are added. Browse the retained entries with Left on the home screen. The total XP shown remains your current cumulative total; the activity summary shows XP for the selected day.
+The save contains the language preference, current date, total XP and the last **31 completed days**. Older completed days are replaced as new days are added. Browse the retained entries with Left on the home screen. The total XP shown remains your current cumulative total; the activity summary shows XP for the selected day.
 
 If saving fails, restart with a working SD card before continuing. A missing, unreadable or corrupt card does not silently become a new saved profile. Avoid removing the SD card while the app is running.
 
 ## Current limits
 
-- Days are numbered sequentially; there is no calendar-date or RTC integration.
+- Date is manually entered; there is no RTC/autonomous clock integration.
 - Activities are daily checkboxes, without duration or repetition counts.
 - Notes support ASCII text only.
 - Saved history is limited to 31 completed days; earlier days cannot be recovered by browsing. Past days are read-only.

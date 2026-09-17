@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/home/tme520/Downloads/LPS-Companion-PicoCalc/build/_deps/picotool-subbuild/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

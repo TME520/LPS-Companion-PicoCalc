@@ -5,13 +5,13 @@ using namespace lps;
 class Display final:public Platform {
 public:
     std::array<std::array<char,41>,20> rows{};
-    Blob stored{};bool exists=false,fail=false;unsigned writes=0;
+    Blob stored{};bool exists=false,fail=false,failExport=false;unsigned writes=0,exports=0;
     void clear()override{for(auto& row:rows)row.fill(0);}
     void text(int x,int y,const char* text,bool)override{
         assert(x==0&&y>=0&&y%16==0&&y+16<=320);
         assert(std::strlen(text)<=40); // Fail on untranslated byte widths or clipped hints.
         for(const unsigned char* p=reinterpret_cast<const unsigned char*>(text);*p;++p)
-            assert((*p>=32&&*p<=126)||*p==0xe9||*p==0xe8||*p==0xe0||*p==0xfb||*p==0xe7||*p==0xc9);
+            assert((*p>=32&&*p<=126)||*p==0xe9||*p==0xe8||*p==0xe0||*p==0xf4||*p==0xfb||*p==0xe7||*p==0xc9);
         std::snprintf(rows[y/16].data(),41,"%s",text);
     }
     bool has(int row,const char* utf8)const{
@@ -27,14 +27,18 @@ public:
         if(fail)return false;
         ++writes;exists=true;stored.size=n;std::memcpy(stored.bytes.data(),b,n);return true;
     }
+    bool exportIcs(const Day&,uint32_t,uint32_t,Language)override{if(failExport)return false;++exports;return true;}
 };
 void choose(App& app,Language language){app.key('5');app.key('1');app.key(language==Language::French?'2':'1');}
 void checkMenus(Display& d,App& a,bool fr){
-    assert(d.has(6,fr?"1  Activités":"1  Activities"));
-    assert(d.has(8,fr?"2  Bloc notes":"2  Notepad"));
-    assert(d.has(10,fr?"3  Suivi du poids":"3  Weight tracker"));
-    assert(d.has(12,fr?"4  Terminer le jour":"4  Close the day"));
-    assert(d.has(14,"5  Config"));
+    assert(d.has(6,"0  Date"));
+    assert(d.has(8,fr?"1  Activités":"1  Activities"));
+    assert(d.has(10,fr?"2  Bloc notes":"2  Notepad"));
+    assert(d.has(12,fr?"3  Suivi du poids":"3  Weight tracker"));
+    assert(d.has(14,fr?"4  Terminer le jour":"4  Close the day"));
+    assert(d.has(16,"5  Config"));
+    a.key('0');assert(d.has(3,"DATE"));assert(d.has(6,"2026-09-17"));
+    assert(d.has(9,fr?"Calendrier":"Calendar"));a.key(Escape);
     a.key('1');assert(d.has(3,fr?"ACTIVITÉS":"ACTIVITIES"));assert(d.has(7,fr?"Régime":"Diet"));
     a.key(Right);assert(d.has(13,fr?"Congé":"Day off"));a.key(Right);a.key(Right);a.key(Escape);
     a.key('2');assert(d.has(3,fr?"BLOC NOTES":"NOTEPAD"));a.key(Escape);

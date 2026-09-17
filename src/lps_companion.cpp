@@ -1,5 +1,5 @@
 /*
- LPS Companion - v1.3, 2026-09-16.
+ LPS Companion - v1.4, 2026-09-17.
  Screen: 320x320, 8x16 bitmap font, 40 columns x 20 rows.
 
  Desktop build (Fedora/Linux):
@@ -13,19 +13,20 @@
  In this package src/main.cpp supplies the LCD, keyboard and SD implementation.
  Run bash build.sh from the project root to create build/lps_companion.uf2.
  Target: original RP2040 PicoCalc, standalone BOOTSEL firmware.
- v1.2 confirmed on the user's PicoCalc; v1.3 needs device testing.
+ v1.2 confirmed on the user's PicoCalc; v1.4 needs device testing.
  The portable application remains independent of the Pico SDK; desktop and
  built-in tests below remain available for checking the UI/state machine.
 
  Behaviour:
  - English default; French selectable in Config, applied on explicit Save.
- - Format 2 saves the language; format 1 imports retain all data, default to English.
+ - Format 3 saves the language and each day's calendar date; formats 1/2 import safely.
  - Eleven daily checkboxes; 10 XP each, +10 for >=3 selections (prototype rules).
  - No Journal or collectible browser; new souvenirs still appear after closing a day.
  - Expected/actual weights are OPTIONAL daily inputs, stored as integer grams.
    Comma or dot accepted, up to three decimals. No generated weight-loss target.
  - Note: 96 printable ASCII characters; accents need a font/input extension.
- - Days are sequential, NOT calendar dates. RTC/calendar integration is pending.
+ - Dates are manually set, then progress through the built-in 2000-2099 Gregorian calendar.
+ - Closing a dated day produces a portable ICS export on the SD card.
  - Current day autosaves on checkbox changes and explicit form validation.
  - Closing a day banks XP once, unlocks souvenirs and advances the day.
  - The last 31 closed days are retained in a ring buffer, browsable read-only from Home.
@@ -66,6 +67,7 @@ constexpr int Width=320, Height=320, Columns=40, Rows=20;
 constexpr std::size_t NoteLength=96, HistoryLength=31, BlobCapacity=4096;
 enum Key { Enter=13, Backspace=8, Escape=27, Up=1000, Down, Left, Right };
 enum class LoadResult { Missing, Ok, Error };
+struct Day;
 struct Platform {
     virtual ~Platform() = default;
     virtual void clear()=0;
@@ -79,6 +81,9 @@ struct Platform {
     // recoverable after restart. FatFs: use validated A/B slots with generations,
     // f_sync and startup recovery, or an equivalent transactional scheme.
     virtual bool save(const uint8_t* bytes,std::size_t size)=0;
+    // Export first, then save the A/B state. Retrying replaces the same named
+    // export if the snapshot write later fails; no duplicate calendar event.
+    virtual bool exportIcs(const Day& day,uint32_t totalXp,uint32_t dayXp,Language language)=0;
 };
 constexpr const char* Activities[]={"Marche","Régime","Bible","Messe","Travail","Projet","Sieste","Gurumed","Maladie","Congé","Weekend"};
 constexpr const char* EnglishActivities[]={"Walk","Diet","Bible","Mass","Work","Project","Nap","Gurumed","Illness","Day off","Weekend"};
@@ -88,7 +93,28 @@ constexpr uint16_t ActivityMask=(1u<<ActivityCount)-1;
 struct Gift { const char* name; uint32_t xp; };
 constexpr Gift Gifts[]={{"Carnet de poche",30},{"Tasse de thé",70},{"Boussole",120},{"Radio de poche",180},{"Mini-ordinateur",250},{"Lanterne",330}};
 constexpr const char* EnglishGifts[]={"Pocket notebook","Cup of tea","Compass","Pocket radio","Mini computer","Lantern"};
+struct Date { uint16_t year=0;uint8_t month=0,day=0; };
+constexpr Date FirstCalendarDate{2000,1,1}, LastCalendarDate{2099,12,31}, DefaultDate{2026,9,17};
+bool leap(uint16_t year){return year%4==0&&(year%100!=0||year%400==0);}
+unsigned daysInMonth(uint16_t year,uint8_t month){
+    constexpr uint8_t normal[]={31,28,31,30,31,30,31,31,30,31,30,31};
+    return month>=1&&month<=12?(month==2&&leap(year)?29:normal[month-1]):0;
+}
+bool validDate(Date d){return d.year>=FirstCalendarDate.year&&d.year<=LastCalendarDate.year&&d.month>=1&&d.month<=12&&d.day>=1&&d.day<=daysInMonth(d.year,d.month);}
+bool nextDate(Date& d){
+    if(!validDate(d)||(d.year==LastCalendarDate.year&&d.month==12&&d.day==31))return false;
+    if(++d.day<=daysInMonth(d.year,d.month))return true;
+    d.day=1;if(++d.month<=12)return true;d.month=1;++d.year;return true;
+}
+void dateText(Date d,char* out,std::size_t n){std::snprintf(out,n,"%04u-%02u-%02u",d.year,d.month,d.day);}
+bool parseDate(const char* text,Date& d){
+    if(std::strlen(text)!=10||text[4]!='-'||text[7]!='-')return false;
+    for(unsigned i=0;i<10;++i)if(i!=4&&i!=7&&(text[i]<'0'||text[i]>'9'))return false;
+    d.year=uint16_t((text[0]-'0')*1000+(text[1]-'0')*100+(text[2]-'0')*10+text[3]-'0');
+    d.month=uint8_t((text[5]-'0')*10+text[6]-'0');d.day=uint8_t((text[8]-'0')*10+text[9]-'0');return validDate(d);
+}
 struct Day {
+    Date date=DefaultDate; // Old-format decoder explicitly clears this.
     uint32_t number=1;
     uint16_t flags=0;
     int32_t expected=-1, actual=-1; // grams; -1 is missing
@@ -126,39 +152,39 @@ uint32_t crc32(const uint8_t* p,std::size_t n) {
     return ~c;
 }
 struct Blob { std::array<uint8_t,BlobCapacity> bytes{};std::size_t size=0; };
-// Format 1: 4 magic + 2 version + 4 xp + 2 ring indices + 32*111 day bytes + 4 CRC.
-// Format 2: one language byte after the ring indices; all day records unchanged.
-constexpr std::size_t LegacyWireSize=3568, WireSize=LegacyWireSize+1;
+// Format 1: v1 base. Format 2: adds language. Format 3: adds four date bytes/day.
+constexpr std::size_t WireV1=3568, WireV2=WireV1+1, WireSize=WireV2+32*4;
 Blob encode(const State& s) {
     Blob b;
     auto put=[&](uint32_t v,unsigned n){while(n--){b.bytes[b.size++]=uint8_t(v);v>>=8;}};
-    put(0x3153504c,4);put(2,2);put(s.xp,4);put(s.next,1);put(s.count,1);put(uint8_t(s.language),1);
-    auto day=[&](const Day& d){put(d.number,4);put(d.flags,2);put(d.expected<0?0xffffffffu:uint32_t(d.expected),4);put(d.actual<0?0xffffffffu:uint32_t(d.actual),4);for(char c:d.note)put(uint8_t(c),1);};
+    put(0x3153504c,4);put(3,2);put(s.xp,4);put(s.next,1);put(s.count,1);put(uint8_t(s.language),1);
+    auto day=[&](const Day& d){put(d.date.year,2);put(d.date.month,1);put(d.date.day,1);put(d.number,4);put(d.flags,2);put(d.expected<0?0xffffffffu:uint32_t(d.expected),4);put(d.actual<0?0xffffffffu:uint32_t(d.actual),4);for(char c:d.note)put(uint8_t(c),1);};
     day(s.today);for(const Day& d:s.history)day(d);
     const auto crc=crc32(b.bytes.data(),b.size);put(crc,4);return b;
 }
 bool decode(const uint8_t* bytes,std::size_t size,State& out) {
-    if(size!=WireSize&&size!=LegacyWireSize)return false;
+    if(size!=WireSize&&size!=WireV2&&size!=WireV1)return false;
     std::size_t pos=size-4;
     auto get=[&](unsigned n){uint32_t v=0;for(unsigned i=0;i<n;++i)v|=uint32_t(bytes[pos++])<<(i*8);return v;};
     if(get(4)!=crc32(bytes,size-4))return false;
     pos=0;if(get(4)!=0x3153504c)return false;
     const auto version=get(2);
-    if(!((version==1&&size==LegacyWireSize)||(version==2&&size==WireSize)))return false;
+    if(!((version==1&&size==WireV1)||(version==2&&size==WireV2)||(version==3&&size==WireSize)))return false;
     State s;s.xp=get(4);s.next=uint8_t(get(1));s.count=uint8_t(get(1));
-    if(version==2){const auto language=get(1);if(language>1)return false;s.language=Language(language);}
+    if(version>=2){const auto language=get(1);if(language>1)return false;s.language=Language(language);}
     bool valid=s.next<HistoryLength&&s.count<=HistoryLength;
-    auto day=[&](Day& d){d.number=get(4);d.flags=uint16_t(get(2));
+    auto day=[&](Day& d){d.date={};if(version==3){d.date.year=uint16_t(get(2));d.date.month=uint8_t(get(1));d.date.day=uint8_t(get(1));}
+        d.number=get(4);d.flags=uint16_t(get(2));
         auto w=[&](){uint32_t v=get(4);if(v==0xffffffffu)return int32_t(-1);if(v==0||v>999999){valid=false;return int32_t(-1);}return int32_t(v);};
         d.expected=w();d.actual=w();for(char& c:d.note)c=char(get(1));
-        valid=valid&&d.number>0&&(d.flags&~ActivityMask)==0&&d.note.back()==0;
+        valid=valid&&d.number>0&&(d.flags&~ActivityMask)==0&&d.note.back()==0&&(d.date.year==0||validDate(d.date));
         bool ended=false;for(char c:d.note){if(!c)ended=true;else if(!ended&&(c<32||c>126))valid=false;}
     };
     day(s.today);for(Day& d:s.history)day(d);
     if(!valid)return false;
     out=s;return true;
 }
-enum class Screen { Home, Activities, Note, Weight, Finish, Reward, Config, Language };
+enum class Screen { Home, Date, Activities, Note, Weight, Finish, Reward, Config, Language };
 class App {
     Platform& hw;
     State state{};
@@ -166,6 +192,7 @@ class App {
     unsigned selection=0,page=0,field=0,daysBack=0;
     bool blocked=false;
     Language pendingLanguage=Language::English;
+    std::array<char,11> dateDraft{};
     std::array<char,NoteLength+1> draft{};
     std::array<std::array<char,8>,2> weights{};
     std::array<char,100> message{};
@@ -189,6 +216,7 @@ class App {
         if(s==Screen::Language)selection=unsigned(pendingLanguage);
         if(s==Screen::Note)draft=viewedDay().note;
         if(s==Screen::Weight){field=0;for(unsigned i=0;i<2;++i){int32_t v=i?viewedDay().actual:viewedDay().expected;weights[i].fill(0);if(v>=0)weightText(v,weights[i].data(),weights[i].size());}}
+        if(s==Screen::Date){dateDraft.fill(0);Date d=validDate(state.today.date)?state.today.date:DefaultDate;dateText(d,dateDraft.data(),dateDraft.size());}
     }
     template<std::size_t N> void edit(std::array<char,N>& value,int key){
         std::size_t len=std::strlen(value.data());
@@ -217,14 +245,24 @@ public:
                 else say(state.count?tr("Oldest saved day","Plus ancien jour conservé"):tr("No archived days","Aucun jour archivé"));
             }
             if(k==Right){daysBack=0;selection=0;page=0;}
-            const unsigned menuCount=daysBack?3:5;
+            const unsigned menuCount=daysBack?3:6;
             if(k==Up)selection=(selection+menuCount-1)%menuCount;
             if(k==Down)selection=(selection+1)%menuCount;
-            if(k>='1'&&k<'1'+int(menuCount)){selection=unsigned(k-'1');k=Enter;}
-            if((k=='4'||k=='5')&&daysBack)readOnly();
-            if(k==Enter){constexpr Screen screens[]={Screen::Activities,Screen::Note,Screen::Weight,Screen::Finish,Screen::Config};
-                if(screens[selection]==Screen::Config)pendingLanguage=state.language;
-                go(screens[selection]);}
+            if(!daysBack&&k=='0'){selection=0;k=Enter;}
+            else if(daysBack&&k>='1'&&k<='3'){selection=unsigned(k-'1');k=Enter;}
+            else if(!daysBack&&k>='1'&&k<='5'){selection=unsigned(k-'0');k=Enter;}
+            if((k=='0'||k=='4'||k=='5')&&daysBack)readOnly();
+            if(k==Enter){
+                constexpr Screen currentScreens[]={Screen::Date,Screen::Activities,Screen::Note,Screen::Weight,Screen::Finish,Screen::Config};
+                constexpr Screen archiveScreens[]={Screen::Activities,Screen::Note,Screen::Weight};
+                const Screen target=daysBack?archiveScreens[selection]:currentScreens[selection];
+                if(target==Screen::Config)pendingLanguage=state.language;
+                go(target);}
+        }else if(screen==Screen::Date){
+            if(k==Enter){State next=state;Date d{};
+                if(!parseDate(dateDraft.data(),d))say(tr("Invalid date: YYYY-MM-DD, 2000-2099","Date invalide : AAAA-MM-JJ, 2000-2099"));
+                else {next.today.date=d;if(commit(next))go(Screen::Home);}
+            }else if((k>='0'&&k<='9')||k=='-'||k==Backspace||k==127)edit(dateDraft,k);
         }else if(screen==Screen::Activities){
             unsigned remaining=ActivityCount-page*PageSize;
             unsigned rows=remaining<PageSize?remaining:PageSize;
@@ -262,8 +300,13 @@ public:
         }else if(screen==Screen::Finish){
             if(k==Enter){uint32_t gain=points(state.today);
                 if(state.today.number==std::numeric_limits<uint32_t>::max()||state.xp>std::numeric_limits<uint32_t>::max()-gain)say(tr("Counter limit reached","Limite du compteur atteinte"));
+                else if(!validDate(state.today.date))say(tr("Set Date before closing the day","Renseignez Date avant de terminer le jour"));
                 else {State next=state;next.history[next.next]=next.today;next.next=uint8_t((next.next+1)%HistoryLength);if(next.count<HistoryLength)++next.count;
-                    next.xp+=gain;next.today=Day{};next.today.number=state.today.number+1;
+                    Date tomorrow=state.today.date;if(!nextDate(tomorrow)) {say(tr("Calendar ends on 2099-12-31","Le calendrier s'arrête au 2099-12-31"));render();return;}
+                    // The export is deliberately written before the A/B commit.
+                    // A retry overwrites the same dated file if the snapshot fails.
+                    if(!hw.exportIcs(state.today,state.xp+gain,gain,state.language)){say(tr("ICS export failed; day remains open","Export ICS échoué ; journée reste ouverte"));render();return;}
+                    next.xp+=gain;next.today=Day{};next.today.number=state.today.number+1;next.today.date=tomorrow;
                     uint8_t won=0;for(unsigned i=0;i<6;++i)if(state.xp<Gifts[i].xp&&next.xp>=Gifts[i].xp)won|=uint8_t(1u<<i);
                     if(commit(next)){earned=gain;unlocked=won;go(Screen::Reward);}
                 }
@@ -272,16 +315,23 @@ public:
         render();
     }
     void render(){
-        hw.clear();char b[128];const Day& day=viewedDay();
-        std::snprintf(b,sizeof b,"LPS COMPANION v1.3            %s%lu",tr("D","J"),static_cast<unsigned long>(day.number));line(0,b,true);
+        hw.clear();char b[128];const Day& day=viewedDay();char date[11]{};
+        if(validDate(day.date))dateText(day.date,date,sizeof date);else std::snprintf(date,sizeof date,"%s%lu",tr("D","J"),static_cast<unsigned long>(day.number));
+        std::snprintf(b,sizeof b,"LPS COMPANION v1.4            %s",date);line(0,b,true);
         std::snprintf(b,sizeof b,tr("%lu XP earned","%lu XP acquis"),static_cast<unsigned long>(state.xp));line(1,b);
         if(daysBack)line(2,tr("ARCHIVED DAY - READ ONLY","JOUR ARCHIVÉ - LECTURE SEULE"));
         if(screen==Screen::Home){
             line(3,daysBack?tr("CLOSED DAY","JOUR TERMINÉ"):tr("TODAY","AUJOURD'HUI"));
             std::snprintf(b,sizeof b,tr("%u/11 activities - %lu XP %s","%u/11 activités - %lu XP %s"),count(day.flags),static_cast<unsigned long>(points(day)),daysBack?tr("banked","validés"):tr("pending","à valider"));line(4,b);
-            const char* menu[]={tr("1  Activities","1  Activités"),tr("2  Notepad","2  Bloc notes"),tr("3  Weight tracker","3  Suivi du poids"),tr("4  Close the day","4  Terminer le jour"),"5  Config"};
-            for(unsigned i=0;i<(daysBack?3u:5u);++i)line(6+int(i)*2,menu[i],i==selection);
-            line(16,tr("<- Previous day   -> Current day","<- Jour précédent   -> Jour actuel"));
+            const char* menu[]={"0  Date",tr("1  Activities","1  Activités"),tr("2  Notepad","2  Bloc notes"),tr("3  Weight tracker","3  Suivi du poids"),tr("4  Close the day","4  Terminer le jour"),"5  Config"};
+            const unsigned first=daysBack?1:0, total=daysBack?3:6;
+            for(unsigned i=0;i<total;++i)line(6+int(i)*2,menu[first+i],i==selection);
+            line(18,tr("<- Previous day   -> Current day","<- Jour précédent   -> Jour actuel"));
+        }else if(screen==Screen::Date){
+            line(3,"DATE");line(6,dateDraft.data(),true);
+            line(9,tr("Calendar: 2000-01-01 to 2099-12-31","Calendrier : 2000-01-01 au 2099-12-31"));
+            line(12,tr("Enter: save / Esc: cancel","Entrée : valider / Échap : annuler"));
+            line(14,tr("Next day is suggested after closing.","Jour suivant proposé après clôture."));
         }else if(screen==Screen::Activities){
             std::snprintf(b,sizeof b,tr("ACTIVITIES                      %u/3","ACTIVITÉS                       %u/3"),page+1);line(3,b);
             unsigned end=(page+1)*PageSize;if(end>ActivityCount)end=ActivityCount;
@@ -359,6 +409,15 @@ public:
         if(!ok){std::remove("lps_companion.sav.tmp");return false;}
         return std::rename("lps_companion.sav.tmp","lps_companion.sav")==0;
     }
+    bool exportIcs(const lps::Day& day,uint32_t totalXp,uint32_t dayXp,lps::Language)override{
+        char name[48],ymd[9],tomorrow[9];lps::dateText(day.date,name,sizeof name);
+        std::snprintf(ymd,sizeof ymd,"%04u%02u%02u",day.date.year,day.date.month,day.date.day);
+        auto next=day.date;if(!lps::nextDate(next))return false;std::snprintf(tomorrow,sizeof tomorrow,"%04u%02u%02u",next.year,next.month,next.day);
+        std::snprintf(name,sizeof name,"%04u-%02u-%02u_LPS-Companion.ics",day.date.year,day.date.month,day.date.day);
+        FILE* f=std::fopen(name,"wb");if(!f)return false;
+        int result=std::fprintf(f,"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//LPS Companion//EN\r\nBEGIN:VEVENT\r\nUID:lps-companion-%s@desktop\r\nDTSTART;VALUE=DATE:%s\r\nDTEND;VALUE=DATE:%s\r\nSUMMARY:LPS Companion\r\nDESCRIPTION:XP: +%lu (total %lu)\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",ymd,ymd,tomorrow,static_cast<unsigned long>(dayXp),static_cast<unsigned long>(totalXp));
+        return result>0&&std::fclose(f)==0;
+    }
 };
 int main(){Terminal terminal;lps::App app(terminal);app.start();std::string s;
     while(std::getline(std::cin,s)){
@@ -375,18 +434,23 @@ int main(){Terminal terminal;lps::App app(terminal);app.start();std::string s;
 #include <cassert>
 class Memory final:public lps::Platform {
 public:
-    lps::Blob stored{};bool exists=false,fail=false;
+    lps::Blob stored{};bool exists=false,fail=false,failExport=false;unsigned exports=0;
     std::array<std::array<char,41>,20> rows{};
     void clear()override{}
     void text(int x,int y,const char* text,bool)override{assert(x>=0&&x<320&&y>=0&&y+16<=320);std::snprintf(rows[y/16].data(),41,"%s",text);}
     void present()override{}
     lps::LoadResult load(uint8_t* b,std::size_t cap,std::size_t& n)override{if(!exists)return lps::LoadResult::Missing;if(stored.size>cap)return lps::LoadResult::Error;n=stored.size;std::memcpy(b,stored.bytes.data(),n);return lps::LoadResult::Ok;}
     bool save(const uint8_t* b,std::size_t n)override{if(fail)return false;stored.size=n;std::memcpy(stored.bytes.data(),b,n);exists=true;return true;}
+    bool exportIcs(const lps::Day&,uint32_t,uint32_t,lps::Language)override{if(failExport)return false;++exports;return true;}
 };
 int main(){
     using namespace lps;int32_t g=0;
     assert(parseWeight("110,500",g)&&g==110500);assert(parseWeight("0.001",g)&&g==1);
     assert(parseWeight("",g)&&g==-1);assert(!parseWeight("0",g));assert(!parseWeight("-1",g));assert(!parseWeight("1.2345",g));assert(!parseWeight("1.",g));assert(!parseWeight("nan",g));
+    Date calendar{};assert(parseDate("2028-02-29",calendar)&&nextDate(calendar)&&calendar.month==3&&calendar.day==1);
+    assert(parseDate("2027-12-31",calendar)&&nextDate(calendar)&&calendar.year==2028&&calendar.month==1&&calendar.day==1);
+    assert(!parseDate("2027-02-29",calendar)&&!parseDate("1999-12-31",calendar)&&!parseDate("2100-01-01",calendar));
+    calendar=LastCalendarDate;assert(!nextDate(calendar));
     Memory history;State historyState;historyState.today.number=2;
     historyState.today.flags=1;historyState.today.expected=120000;
     historyState.history[0].flags=1024;historyState.history[0].expected=110500;
