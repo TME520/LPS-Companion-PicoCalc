@@ -2,6 +2,8 @@
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
+![main](./main.png "Main screen")
+
 LPS-Companion helps you record daily activities, write a short note, and compare your expected and actual weight. Completing activities earns experience points (XP) and unlocks collectible keepsakes.
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries and progress are saved to the SD card.
