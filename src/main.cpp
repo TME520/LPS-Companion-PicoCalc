@@ -15,7 +15,7 @@ void draw_bitmap_spi(int,int,int,int,int,int,int,unsigned char*);
 namespace {
 constexpr const char* paths[]={"0:/LPS/SAVE_A.BIN","0:/LPS/SAVE_B.BIN"};
 constexpr size_t RecordSize=lps::WireSize+16;
-constexpr size_t RecordSizeV2=lps::WireV2+16,RecordSizeV1=lps::WireV1+16;
+constexpr size_t RecordSizeV3=lps::WireV3+16,RecordSizeV2=lps::WireV2+16,RecordSizeV1=lps::WireV1+16;
 void put32(uint8_t* p,uint32_t x){for(int i=0;i<4;++i){p[i]=uint8_t(x);x>>=8;}}
 uint32_t get32(const uint8_t* p){return uint32_t(p[0])|(uint32_t(p[1])<<8)|(uint32_t(p[2])<<16)|(uint32_t(p[3])<<24);}
 struct Record {
@@ -29,7 +29,7 @@ Record readRecord(unsigned slot){
     if(result==FR_NO_FILE||result==FR_NO_PATH)return r;
     if(result!=FR_OK){r.status=Record::IOError;return r;}
     const size_t recordSize=f_size(&f);
-    bool rightSize=recordSize==RecordSize||recordSize==RecordSizeV2||recordSize==RecordSizeV1;UINT n=0;
+    bool rightSize=recordSize==RecordSize||recordSize==RecordSizeV3||recordSize==RecordSizeV2||recordSize==RecordSizeV1;UINT n=0;
     result=rightSize?f_read(&f,r.bytes.data(),recordSize,&n):FR_OK;
     FRESULT closed=f_close(&f);
     if(result!=FR_OK||closed!=FR_OK){r.status=Record::IOError;return r;}
@@ -45,6 +45,7 @@ class PicoCalc final:public lps::Platform {
     bool first=true,mounted=false,writeFault=false;
     int active=-1;
     uint32_t generation=0;
+    int foreground=0xe4eed5,background=0x18291c,selected=0xbad99f;
     static bool put(FIL& f,const char* text){UINT written=0;const auto n=std::strlen(text);return f_write(&f,text,n,&written)==FR_OK&&written==n;}
     static bool escaped(FIL& f,const char* text){
         char b[3]{};
@@ -64,6 +65,16 @@ public:
         if(sd_init_driver())mounted=f_mount(&sd_get_by_num(0)->fatfs,"0:",1)==FR_OK;
     }
     void clear()override{for(auto& row:frame)row.fill(' ');reverse.fill(false);}
+    void setPalette(lps::Palette palette)override{
+        const int oldForeground=foreground,oldBackground=background,oldSelected=selected;
+        switch(palette){
+        case lps::Palette::Red: foreground=0xf4ddd2;background=0x2a1515;selected=0xd78778;break;
+        case lps::Palette::Green: foreground=0xe4eed5;background=0x18291c;selected=0xbad99f;break;
+        case lps::Palette::Blue: foreground=0xdce9f5;background=0x152332;selected=0x8ebde3;break;
+        }
+        // A changed palette must repaint every line, even where its text did not change.
+        if(foreground!=oldForeground||background!=oldBackground||selected!=oldSelected)first=true;
+    }
     void text(int x,int y,const char* s,bool rev)override{
         int row=y/16,col=x/8;if(row<0||row>=20||col<0||col>=40)return;
         reverse[row]=rev;while(*s&&col<40)frame[row][col++]=*s++;
@@ -95,7 +106,7 @@ public:
                 if(accent==3){bitmap[top*40+col]=0x10;bitmap[(top+1)*40+col]=0x28;}
                 if(accent==4){bitmap[12*40+col]=0x10;bitmap[13*40+col]=0x20;}
             }
-            const int fg=reverse[row]?0x18291c:0xe4eed5,bg=reverse[row]?0xbad99f:0x18291c;
+            const int fg=reverse[row]?background:foreground,bg=reverse[row]?selected:background;
             draw_bitmap_spi(0,row*16,320,16,1,fg,bg,bitmap.data());
         }
         previous=frame;oldReverse=reverse;first=false;

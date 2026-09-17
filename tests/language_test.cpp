@@ -4,6 +4,7 @@
 using namespace lps;
 class Display final:public Platform {
 public:
+    void setPalette(Palette)override{}
     std::array<std::array<char,41>,20> rows{};
     Blob stored{};bool exists=false,fail=false,failExport=false;unsigned writes=0,exports=0;
     void clear()override{for(auto& row:rows)row.fill(0);}
@@ -46,7 +47,8 @@ void checkMenus(Display& d,App& a,bool fr){
     assert(d.has(6,fr?"Attendu":"Expected"));assert(d.has(9,fr?"Effectif":"Actual"));
     a.key('0');a.key(Enter);assert(d.has(17,fr?"Poids invalide":"Invalid weight"));a.key(Escape);
     a.key('4');assert(d.has(3,fr?"TERMINER LE JOUR":"CLOSE THE DAY"));a.key(Escape);
-    a.key('5');assert(d.has(6,fr?"1  Langue":"1  Language"));assert(d.has(9,fr?"2  Enregistrer":"2  Save"));
+    a.key('5');assert(d.has(6,fr?"1  Langue":"1  Language"));assert(d.has(9,fr?"2  Couleurs":"2  Colors"));assert(d.has(12,fr?"3  Enregistrer":"3  Save"));
+    a.key('2');assert(d.has(6,fr?"1  PAL1  rouge":"1  PAL1  red"));assert(d.has(9,fr?"2  PAL2  vert":"2  PAL2  green"));assert(d.has(12,fr?"3  PAL3  bleu":"3  PAL3  blue"));a.key(Escape);
     a.key('1');assert(d.has(9,"Français"));a.key(Escape);a.key(Escape);
 }
 int main(){
@@ -56,21 +58,21 @@ int main(){
     a.key(Escape);assert(a.data().language==Language::English&&d.writes==0);
     choose(a,Language::French);assert(d.has(6,"Français"));assert(a.data().language==Language::English&&d.writes==0);
     a.key(Escape);assert(a.data().language==Language::English); // Discard before Save.
-    choose(a,Language::French);d.fail=true;a.key('2');assert(a.currentScreen()==Screen::Config);
+    choose(a,Language::French);d.fail=true;a.key('3');assert(a.currentScreen()==Screen::Config);
     assert(a.data().language==Language::English&&d.writes==0&&d.has(17,"Save failed"));
-    d.fail=false;a.key('2');assert(a.currentScreen()==Screen::Home&&d.writes==1);
+    d.fail=false;a.key('3');assert(a.currentScreen()==Screen::Home&&d.writes==1);
     assert(a.data().language==Language::French&&d.has(17,"Configuration enregistrée"));
     checkMenus(d,a,true);
     App reboot(d);reboot.start();assert(reboot.data().language==Language::French);checkMenus(d,reboot,true);
     // Proper names and user text are invariant; save settings never changes XP/days.
     reboot.key('2');for(char c:std::string("My French lesson"))reboot.key(c);reboot.key(Enter);
     reboot.key('1');reboot.key('1');reboot.key('2');reboot.key('3');reboot.key(Escape);
-    choose(reboot,Language::English);reboot.key('2');
+    choose(reboot,Language::English);reboot.key('3');
     assert(reboot.data().xp==0&&reboot.data().today.flags==7&&reboot.data().today.number==1);
     assert(std::strcmp(reboot.data().today.note.data(),"My French lesson")==0);
     reboot.key('4');reboot.key(Enter);assert(d.has(3,"DAY SAVED")&&d.has(8,"NEW KEEPSAKE"));
     assert(d.has(9,"Pocket notebook"));reboot.key(Enter);
-    choose(reboot,Language::French);reboot.key('2');
+    choose(reboot,Language::French);reboot.key('3');
     reboot.key(Left);reboot.key('2');assert(d.has(5,"My French lesson"));reboot.key(Escape);
     auto saved=d.stored;auto writes=d.writes;
     reboot.key('4');assert(d.has(17,"lecture seule"));reboot.key('5');assert(reboot.currentScreen()==Screen::Home);
@@ -85,6 +87,6 @@ int main(){
     for(unsigned i=0;i<4;++i)malformed.bytes[malformed.size-4+i]=uint8_t(crc>>(8*i));
     State decoded;assert(!decode(malformed.bytes.data(),malformed.size,decoded));
     d.stored=malformed;App corrupt(d);corrupt.start();assert(d.has(17,"Read error"));
-    choose(corrupt,Language::French);corrupt.key('2');assert(d.has(17,"writes blocked"));
+    choose(corrupt,Language::French);corrupt.key('3');assert(d.has(17,"writes blocked"));
     std::puts("PASS: EN/FR menus, all screen widths, accents, save/cancel/failure, reboot, unchanged user data, history, rewards and invalid-language protection.");
 }

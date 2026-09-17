@@ -1,4 +1,4 @@
-# LPS-Companion v1.4
+# LPS-Companion v1.5
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
@@ -6,7 +6,14 @@ LPS-Companion helps you record daily activities, write a short note, and compare
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries and progress are saved to the SD card.
 
-**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.4 adds manual dates and ICS export; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
+**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.5 adds selectable colour palettes; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
+
+## Changes in v1.5
+
+- **5 Config → 2 Colors / Couleurs** opens a live palette preview. Its labels follow the active language: **red/green/blue** in English or **rouge/vert/bleu** in French.
+- **PAL1** is red/rouge, **PAL2** is green/vert (**default**), and **PAL3** is blue/bleu.
+- Use Up/Down or `1`–`3` to preview a palette across the complete interface. Press **Enter** to save it immediately; the full screen is redrawn in the new palette. Esc returns to Configuration without saving the preview.
+- Existing v1.4 saves import unchanged and retain the default green palette until a colour is chosen.
 
 ## Changes in v1.4
 
@@ -24,7 +31,7 @@ Closing is blocked until Date is valid. ICS export happens before the A/B snapsh
 
 - **English** is the default for new profiles and imported v1.0–v1.2 saves.
 - **5 Config → 1 Language** offers **English** and **Français**.
-- Choose a language with Up/Down and Enter (or 1/2), then use **2 Save / 2 Enregistrer** in Configuration. The language takes effect only after a successful save.
+- Choose a language with Up/Down and Enter (or 1/2), then use **3 Save / 3 Enregistrer** in Configuration. The language takes effect only after a successful save.
 - Esc from Language returns to Configuration without selecting the highlighted choice. Esc from Configuration discards unsaved changes.
 - Device labels, activity names, help text, errors and keepsake names are translated. Proper names such as Gurumed and user-authored notes remain unchanged.
 - The language survives restart and is stored in the protected A/B snapshots alongside your daily data.
@@ -125,7 +132,7 @@ Select the language from Config on today's home screen. Accented French labels a
 | `2` | Notepad | Bloc notes | Write a short daily note. |
 | `3` | Weight tracker | Suivi du poids | Enter expected and actual weight. |
 | `4` | Close the day | Terminer le jour | Save and close today, then advance. |
-| `5` | Config | Config | Choose and save the language. |
+| `5` | Config | Config | Choose language or colour palette. |
 
 Use **Up/Down** to select an item, **Enter** to open it, and **Esc** to return to the main menu.
 

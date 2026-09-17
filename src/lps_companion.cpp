@@ -1,5 +1,5 @@
 /*
- LPS Companion - v1.4, 2026-09-17.
+ LPS Companion - v1.5, 2026-09-17.
  Screen: 320x320, 8x16 bitmap font, 40 columns x 20 rows.
 
  Desktop build (Fedora/Linux):
@@ -13,13 +13,14 @@
  In this package src/main.cpp supplies the LCD, keyboard and SD implementation.
  Run bash build.sh from the project root to create build/lps_companion.uf2.
  Target: original RP2040 PicoCalc, standalone BOOTSEL firmware.
- v1.2 confirmed on the user's PicoCalc; v1.4 needs device testing.
+ v1.2 confirmed on the user's PicoCalc; v1.5 needs device testing.
  The portable application remains independent of the Pico SDK; desktop and
  built-in tests below remain available for checking the UI/state machine.
 
  Behaviour:
  - English default; French selectable in Config, applied on explicit Save.
- - Format 3 saves the language and each day's calendar date; formats 1/2 import safely.
+ - PAL1 red, PAL2 green (default), and PAL3 blue are previewed live and saved on Enter.
+ - Format 4 saves language, palette, and each day's calendar date; formats 1-3 import safely.
  - Eleven daily checkboxes; 10 XP each, +10 for >=3 selections (prototype rules).
  - No Journal or collectible browser; new souvenirs still appear after closing a day.
  - Expected/actual weights are OPTIONAL daily inputs, stored as integer grams.
@@ -51,6 +52,7 @@
 
 namespace lps {
 enum class Language : uint8_t { English, French };
+enum class Palette : uint8_t { Red, Green, Blue };
 // UI text is UTF-8 in source, converted to single-byte Latin-1 display cells.
 // Notes remain printable ASCII; user-authored text is never translated.
 void displayText(const char* utf8,char* out,std::size_t capacity){
@@ -74,6 +76,8 @@ struct Platform {
     // Coordinates in pixels. reverse=true fills all 40 cells on that row.
     virtual void text(int x,int y,const char* text,bool reverse)=0;
     virtual void present()=0;
+    // Apply the selected theme before drawing. The desktop implementation may ignore it.
+    virtual void setPalette(Palette)=0;
     // Return Error for truncated/oversized/inaccessible saves, Missing only if absent.
     virtual LoadResult load(uint8_t* bytes,std::size_t capacity,std::size_t& size)=0;
     // On false, RAM is rolled back; an ambiguous late commit MUST block further
@@ -122,6 +126,7 @@ struct Day {
 };
 struct State {
     Language language=Language::English;
+    Palette palette=Palette::Green;
     uint32_t xp=0;
     Day today{};
     std::array<Day,HistoryLength> history{};
@@ -152,28 +157,30 @@ uint32_t crc32(const uint8_t* p,std::size_t n) {
     return ~c;
 }
 struct Blob { std::array<uint8_t,BlobCapacity> bytes{};std::size_t size=0; };
-// Format 1: v1 base. Format 2: adds language. Format 3: adds four date bytes/day.
-constexpr std::size_t WireV1=3568, WireV2=WireV1+1, WireSize=WireV2+32*4;
+// Format 1: v1 base. Format 2: adds language. Format 3: adds dates.
+// Format 4: adds palette after language.
+constexpr std::size_t WireV1=3568, WireV2=WireV1+1, WireV3=WireV2+32*4, WireSize=WireV3+1;
 Blob encode(const State& s) {
     Blob b;
     auto put=[&](uint32_t v,unsigned n){while(n--){b.bytes[b.size++]=uint8_t(v);v>>=8;}};
-    put(0x3153504c,4);put(3,2);put(s.xp,4);put(s.next,1);put(s.count,1);put(uint8_t(s.language),1);
+    put(0x3153504c,4);put(4,2);put(s.xp,4);put(s.next,1);put(s.count,1);put(uint8_t(s.language),1);put(uint8_t(s.palette),1);
     auto day=[&](const Day& d){put(d.date.year,2);put(d.date.month,1);put(d.date.day,1);put(d.number,4);put(d.flags,2);put(d.expected<0?0xffffffffu:uint32_t(d.expected),4);put(d.actual<0?0xffffffffu:uint32_t(d.actual),4);for(char c:d.note)put(uint8_t(c),1);};
     day(s.today);for(const Day& d:s.history)day(d);
     const auto crc=crc32(b.bytes.data(),b.size);put(crc,4);return b;
 }
 bool decode(const uint8_t* bytes,std::size_t size,State& out) {
-    if(size!=WireSize&&size!=WireV2&&size!=WireV1)return false;
+    if(size!=WireSize&&size!=WireV3&&size!=WireV2&&size!=WireV1)return false;
     std::size_t pos=size-4;
     auto get=[&](unsigned n){uint32_t v=0;for(unsigned i=0;i<n;++i)v|=uint32_t(bytes[pos++])<<(i*8);return v;};
     if(get(4)!=crc32(bytes,size-4))return false;
     pos=0;if(get(4)!=0x3153504c)return false;
     const auto version=get(2);
-    if(!((version==1&&size==WireV1)||(version==2&&size==WireV2)||(version==3&&size==WireSize)))return false;
+    if(!((version==1&&size==WireV1)||(version==2&&size==WireV2)||(version==3&&size==WireV3)||(version==4&&size==WireSize)))return false;
     State s;s.xp=get(4);s.next=uint8_t(get(1));s.count=uint8_t(get(1));
     if(version>=2){const auto language=get(1);if(language>1)return false;s.language=Language(language);}
+    if(version>=4){const auto palette=get(1);if(palette>2)return false;s.palette=Palette(palette);}
     bool valid=s.next<HistoryLength&&s.count<=HistoryLength;
-    auto day=[&](Day& d){d.date={};if(version==3){d.date.year=uint16_t(get(2));d.date.month=uint8_t(get(1));d.date.day=uint8_t(get(1));}
+    auto day=[&](Day& d){d.date={};if(version>=3){d.date.year=uint16_t(get(2));d.date.month=uint8_t(get(1));d.date.day=uint8_t(get(1));}
         d.number=get(4);d.flags=uint16_t(get(2));
         auto w=[&](){uint32_t v=get(4);if(v==0xffffffffu)return int32_t(-1);if(v==0||v>999999){valid=false;return int32_t(-1);}return int32_t(v);};
         d.expected=w();d.actual=w();for(char& c:d.note)c=char(get(1));
@@ -184,7 +191,7 @@ bool decode(const uint8_t* bytes,std::size_t size,State& out) {
     if(!valid)return false;
     out=s;return true;
 }
-enum class Screen { Home, Date, Activities, Note, Weight, Finish, Reward, Config, Language };
+enum class Screen { Home, Date, Activities, Note, Weight, Finish, Reward, Config, Language, Colors };
 class App {
     Platform& hw;
     State state{};
@@ -192,6 +199,7 @@ class App {
     unsigned selection=0,page=0,field=0,daysBack=0;
     bool blocked=false;
     Language pendingLanguage=Language::English;
+    Palette pendingPalette=Palette::Green;
     std::array<char,11> dateDraft{};
     std::array<char,NoteLength+1> draft{};
     std::array<std::array<char,8>,2> weights{};
@@ -199,6 +207,7 @@ class App {
     uint32_t earned=0;
     uint8_t unlocked=0;
     const char* tr(const char* en,const char* fr)const{return state.language==Language::French?fr:en;}
+    Palette displayedPalette()const{return screen==Screen::Colors?pendingPalette:state.palette;}
     void say(const char* text){std::snprintf(message.data(),message.size(),"%s",text);}
     void readOnly(){say(tr("Archived day: read-only","Jour archivé : lecture seule"));}
     void line(int row,const char* text,bool reverse=false){char cells[100];displayText(text,cells,sizeof cells);hw.text(0,row*16,cells,reverse);}
@@ -214,6 +223,7 @@ class App {
     }
     void go(Screen s){screen=s;selection=0;message.fill(0);
         if(s==Screen::Language)selection=unsigned(pendingLanguage);
+        if(s==Screen::Colors)selection=unsigned(pendingPalette);
         if(s==Screen::Note)draft=viewedDay().note;
         if(s==Screen::Weight){field=0;for(unsigned i=0;i<2;++i){int32_t v=i?viewedDay().actual:viewedDay().expected;weights[i].fill(0);if(v>=0)weightText(v,weights[i].data(),weights[i].size());}}
         if(s==Screen::Date){dateDraft.fill(0);Date d=validDate(state.today.date)?state.today.date:DefaultDate;dateText(d,dateDraft.data(),dateDraft.size());}
@@ -237,7 +247,7 @@ public:
         render();
     }
     void key(int k){
-        if(k==Escape){go(screen==Screen::Language?Screen::Config:Screen::Home);render();return;}
+        if(k==Escape){go((screen==Screen::Language||screen==Screen::Colors)?Screen::Config:Screen::Home);render();return;}
         message.fill(0);
         if(screen==Screen::Home){
             if(k==Left){
@@ -256,7 +266,7 @@ public:
                 constexpr Screen currentScreens[]={Screen::Date,Screen::Activities,Screen::Note,Screen::Weight,Screen::Finish,Screen::Config};
                 constexpr Screen archiveScreens[]={Screen::Activities,Screen::Note,Screen::Weight};
                 const Screen target=daysBack?archiveScreens[selection]:currentScreens[selection];
-                if(target==Screen::Config)pendingLanguage=state.language;
+                if(target==Screen::Config){pendingLanguage=state.language;pendingPalette=state.palette;}
                 go(target);}
         }else if(screen==Screen::Date){
             if(k==Enter){State next=state;Date d{};
@@ -286,10 +296,12 @@ public:
                 else if(commit(next))go(Screen::Home);
             }else if((k>='0'&&k<='9')||k=='.'||k==','||k==Backspace||k==127)edit(weights[field],k);
         }else if(screen==Screen::Config){
-            if(k==Up||k==Down)selection=1-selection;
-            if(k=='1'||k=='2'){selection=unsigned(k-'1');k=Enter;}
+            if(k==Up)selection=(selection+2)%3;
+            if(k==Down)selection=(selection+1)%3;
+            if(k>='1'&&k<='3'){selection=unsigned(k-'1');k=Enter;}
             if(k==Enter){
                 if(selection==0)go(Screen::Language);
+                else if(selection==1)go(Screen::Colors);
                 else {State next=state;next.language=pendingLanguage;
                     if(commit(next)){go(Screen::Home);say(tr("Configuration saved","Configuration enregistrée"));}}
             }
@@ -297,6 +309,13 @@ public:
             if(k==Up||k==Down)selection=1-selection;
             if(k=='1'||k=='2'){selection=unsigned(k-'1');k=Enter;}
             if(k==Enter){pendingLanguage=Language(selection);go(Screen::Config);}
+        }else if(screen==Screen::Colors){
+            if(k==Up)selection=(selection+2)%3;
+            if(k==Down)selection=(selection+1)%3;
+            if(k>='1'&&k<='3')selection=unsigned(k-'1');
+            pendingPalette=Palette(selection);
+            if(k==Enter){State next=state;next.palette=pendingPalette;
+                if(commit(next)){go(Screen::Home);say(tr("Color saved","Couleur enregistrée"));}}
         }else if(screen==Screen::Finish){
             if(k==Enter){uint32_t gain=points(state.today);
                 if(state.today.number==std::numeric_limits<uint32_t>::max()||state.xp>std::numeric_limits<uint32_t>::max()-gain)say(tr("Counter limit reached","Limite du compteur atteinte"));
@@ -315,9 +334,9 @@ public:
         render();
     }
     void render(){
-        hw.clear();char b[128];const Day& day=viewedDay();char date[11]{};
+        hw.setPalette(displayedPalette());hw.clear();char b[128];const Day& day=viewedDay();char date[11]{};
         if(validDate(day.date))dateText(day.date,date,sizeof date);else std::snprintf(date,sizeof date,"%s%lu",tr("D","J"),static_cast<unsigned long>(day.number));
-        std::snprintf(b,sizeof b,"LPS COMPANION v1.4            %s",date);line(0,b,true);
+        std::snprintf(b,sizeof b,"LPS COMPANION v1.5            %s",date);line(0,b,true);
         std::snprintf(b,sizeof b,tr("%lu XP earned","%lu XP acquis"),static_cast<unsigned long>(state.xp));line(1,b);
         if(daysBack)line(2,tr("ARCHIVED DAY - READ ONLY","JOUR ARCHIVÉ - LECTURE SEULE"));
         if(screen==Screen::Home){
@@ -353,14 +372,21 @@ public:
         }else if(screen==Screen::Config){
             line(3,tr("CONFIGURATION","CONFIGURATION"));
             std::snprintf(b,sizeof b,"%s: %s",tr("1  Language","1  Langue"),pendingLanguage==Language::English?"English":"Français");line(6,b,selection==0);
-            line(9,tr("2  Save","2  Enregistrer"),selection==1);
-            line(13,tr("Choose a language, then Save.","Choisir la langue, puis enregistrer."));
+            std::snprintf(b,sizeof b,"%s: PAL%u",tr("2  Colors","2  Couleurs"),unsigned(state.palette)+1);line(9,b,selection==1);
+            line(12,tr("3  Save","3  Enregistrer"),selection==2);
+            line(14,tr("Language: select, then Save.","Langue : choisir, puis enregistrer."));
             line(15,tr("Esc: discard changes","Échap : annuler les modifications"));
         }else if(screen==Screen::Language){
             line(3,tr("LANGUAGE","LANGUE"));
             line(6,"1  English",selection==0);line(9,"2  Français",selection==1);
             line(13,tr("Enter: select / Esc: back","Entrée : choisir / Échap : retour"));
             line(15,tr("Then Save in Configuration.","Puis enregistrer dans Configuration."));
+        }else if(screen==Screen::Colors){
+            line(3,tr("COLORS","COULEURS"));
+            line(6,tr("1  PAL1  red","1  PAL1  rouge"),selection==0);
+            line(9,tr("2  PAL2  green","2  PAL2  vert"),selection==1);
+            line(12,tr("3  PAL3  blue","3  PAL3  bleu"),selection==2);
+            line(15,tr("Enter: save color","Entrée : enregistrer couleur"));
         }else if(screen==Screen::Finish){
             line(3,tr("CLOSE THE DAY?","TERMINER LE JOUR ?"));std::snprintf(b,sizeof b,tr("Activities: %u","Activités : %u"),count(state.today.flags));line(6,b);std::snprintf(b,sizeof b,tr("Variety bonus: %u XP","Bonus variété : %u XP"),count(state.today.flags)>=3?10:0);line(8,b);std::snprintf(b,sizeof b,"Total : +%lu XP",static_cast<unsigned long>(points(state.today)));line(10,b);line(13,tr("Enter: save and advance","Entrée : enregistrer et avancer"));line(15,tr("An empty day has no penalty.","Une journée vide ne coûte rien."));
         }else{
@@ -383,6 +409,7 @@ class Terminal final:public lps::Platform {
     std::array<std::array<char,41>,20> cells{};
     std::array<bool,20> inverse{};
 public:
+    void setPalette(lps::Palette)override{}
     void clear()override{for(auto& r:cells){r.fill(' ');r[40]=0;}inverse.fill(false);}
     void text(int x,int y,const char* s,bool reverse)override{
         int row=y/16,col=x/8;if(row<0||row>=20||col<0||col>=40)return;
@@ -436,6 +463,8 @@ class Memory final:public lps::Platform {
 public:
     lps::Blob stored{};bool exists=false,fail=false,failExport=false;unsigned exports=0;
     std::array<std::array<char,41>,20> rows{};
+    lps::Palette palette=lps::Palette::Green;
+    void setPalette(lps::Palette p)override{palette=p;}
     void clear()override{}
     void text(int x,int y,const char* text,bool)override{assert(x>=0&&x<320&&y>=0&&y+16<=320);std::snprintf(rows[y/16].data(),41,"%s",text);}
     void present()override{}
@@ -477,10 +506,18 @@ int main(){
     nav.key(Right);nav.key(Enter);assert(nav.data().today.flags&1);
     nav.key(Left);nav.key(Up);nav.key(Enter);assert(!(nav.data().today.flags&(1u<<10)));
     nav.key(Escape);nav.key('4');assert(nav.currentScreen()==Screen::Finish);
-    nav.key(Escape);nav.key('5');assert(nav.currentScreen()==Screen::Config);nav.key(Escape);
+    nav.key(Escape);nav.key('5');assert(nav.currentScreen()==Screen::Config);nav.key('2');assert(nav.currentScreen()==Screen::Colors);
+    assert(pages.palette==Palette::Green);nav.key(Down);assert(pages.palette==Palette::Blue);nav.key(Escape);assert(pages.palette==Palette::Green);
+    nav.key('2');nav.key('1');nav.key(Enter);assert(nav.currentScreen()==Screen::Home&&nav.data().palette==Palette::Red&&pages.palette==Palette::Red);
+    App paletteReload(pages);paletteReload.start();assert(paletteReload.data().palette==Palette::Red);
     State old;old.today.flags=0x1ff;old.today.expected=110500;old.xp=70;
     Blob legacy=encode(old);State migrated;assert(decode(legacy.bytes.data(),legacy.size,migrated));
     assert(migrated.today.flags==0x1ff&&migrated.today.expected==110500&&migrated.xp==70);
+    // A real v1.4 payload has language then dates but no palette byte.
+    Blob v3;v3.size=WireV3;std::memcpy(v3.bytes.data(),legacy.bytes.data(),13);v3.bytes[4]=3;
+    std::memcpy(v3.bytes.data()+13,legacy.bytes.data()+14,WireV3-17);
+    auto v3crc=crc32(v3.bytes.data(),v3.size-4);for(unsigned i=0;i<4;++i)v3.bytes[v3.size-4+i]=uint8_t(v3crc>>(8*i));
+    assert(decode(v3.bytes.data(),v3.size,migrated)&&migrated.palette==Palette::Green&&migrated.today.flags==old.today.flags);
     Memory mem;App a(mem);a.start();a.key('1');a.key('1');a.key('2');a.key('3');assert(points(a.data().today)==40);
     a.key('3');assert(points(a.data().today)==20);a.key('9');assert(a.data().today.flags&(1u<<8));
     State before=a.data();mem.fail=true;a.key('4');assert(a.data().today.flags==before.today.flags);mem.fail=false;
@@ -491,6 +528,6 @@ int main(){
     assert(mem.stored.size==WireSize);State decoded;assert(decode(mem.stored.bytes.data(),mem.stored.size,decoded));assert(!decode(mem.stored.bytes.data(),10,decoded));
     for(int i=0;i<40;++i){restored.key('4');restored.key(Enter);restored.key(Enter);}assert(restored.data().count==31&&restored.data().today.number==42);
     mem.stored.bytes[20]^=1;App corrupt(mem);corrupt.start();auto original=mem.stored;corrupt.key('1');corrupt.key('1');assert(corrupt.data().today.flags==0);assert(mem.stored.bytes==original.bytes);
-    std::puts("PASS: weights, toggles, bonus, rollback, notes, closure, restore, ring history, CRC, corrupt-save protection and render bounds.");
+    std::puts("PASS: weights, toggles, bonus, rollback, notes, closure, restore, ring history, CRC, palette preview/persistence, corrupt-save protection and render bounds.");
 }
 #endif
