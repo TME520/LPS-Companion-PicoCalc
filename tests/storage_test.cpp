@@ -74,7 +74,7 @@ int main(){
     mockReadError=false;
     std::remove("SAVE_A.BIN");std::remove("SAVE_B.BIN");
     // Date + ICS: this uses PicoCalc::exportIcs itself and the host FatFs stubs.
-    std::remove("2028-02-29_LPS-Companion.ics");
+    std::remove("2028-02-29_LPS-Companion.ics");std::remove("2028.csv");
     PicoCalc datedDisk;datedDisk.init();App dated(datedDisk);dated.start();
     // Replace default date using the exact Date screen, including fixed-width edit.
     dated.key('0');for(int i=0;i<10;++i)dated.key(Backspace);for(char c:std::string("2028-02-29"))dated.key(c);dated.key(Enter);
@@ -83,7 +83,15 @@ int main(){
     FILE* ics=std::fopen("2028-02-29_LPS-Companion.ics","rb");assert(ics);char content[1024]{};const auto used=std::fread(content,1,sizeof(content)-1,ics);assert(std::fclose(ics)==0&&used>0);
     assert(std::strstr(content,"BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"));
     assert(std::strstr(content,"DTSTART;VALUE=DATE:20280229"));assert(std::strstr(content,"DTEND;VALUE=DATE:20280301"));
-    assert(std::strstr(content,"Activities: Walk, Diet"));assert(std::strstr(content,"XP: +20 (total 20)"));
+    assert(std::strstr(content,"Activities: Walk, Diet\\NXP: +20 (total 20)"));
+    // One yearly CSV, built by the same close-day path. A repeat is safe.
+    FILE* csv=std::fopen("2028.csv","rb");assert(csv);std::memset(content,0,sizeof content);std::fread(content,1,sizeof(content)-1,csv);assert(std::fclose(csv)==0);
+    assert(std::strstr(content,"date,expected_kg,measured_kg\r\n2028-02-29,,\r\n"));
+    Day weightDay;weightDay.date={2028,3,2};weightDay.expected=110000;weightDay.actual=109500;
+    assert(datedDisk.exportWeightCsv(weightDay));assert(datedDisk.exportWeightCsv(weightDay));
+    csv=std::fopen("2028.csv","rb");assert(csv);std::memset(content,0,sizeof content);std::fread(content,1,sizeof(content)-1,csv);assert(std::fclose(csv)==0);
+    assert(std::strstr(content,"2028-03-02,110.000,109.500\r\n"));
+    assert(std::strstr(std::strstr(content,"2028-03-02,")+1,"2028-03-02,")==nullptr);
     const auto generationAfterLeap=readRecord(0).generation>readRecord(1).generation?readRecord(0).generation:readRecord(1).generation;
     // Invalid dates and export failure never advance the day or A/B generation.
     dated.key('0');for(int i=0;i<10;++i)dated.key(Backspace);for(char c:std::string("2027-02-29"))dated.key(c);dated.key(Enter);assert(dated.data().today.date.year==2028);
@@ -97,7 +105,7 @@ int main(){
     std::strcpy(french.note.data(),"comma, semi; slash\\");
     assert(datedDisk.exportIcs(french,60,40,Language::French));
     ics=std::fopen("2028-03-02_LPS-Companion.ics","rb");assert(ics);std::memset(content,0,sizeof content);std::fread(content,1,sizeof(content)-1,ics);assert(std::fclose(ics)==0);
-    assert(std::strstr(content,"Activités: Régime, Congé"));assert(std::strstr(content,"Note: comma\\, semi\\; slash\\\\"));
-    std::remove("2028-02-29_LPS-Companion.ics");std::remove("2028-03-01_LPS-Companion.ics");std::remove("2028-03-02_LPS-Companion.ics");std::remove("SAVE_A.BIN");std::remove("SAVE_B.BIN");
-    std::puts("PASS: real A/B adapter with host files: history plus date, leap-day rollover, date validation, ICS content, export failure and retry.");
+    assert(std::strstr(content,"Activités: Régime, Congé\\NXP: +40 (total 60)\\NPoids attendu: 110.000 kg\\NPoids effectif: 109.500 kg\\NNote: comma\\, semi\\; slash\\\\"));
+    std::remove("2028-02-29_LPS-Companion.ics");std::remove("2028-03-01_LPS-Companion.ics");std::remove("2028-03-02_LPS-Companion.ics");std::remove("2028.csv");std::remove("SAVE_A.BIN");std::remove("SAVE_B.BIN");
+    std::puts("PASS: real A/B adapter with host files: history, date, annual CSV, ICS, retries and failure handling.");
 }

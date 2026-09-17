@@ -1,5 +1,5 @@
 /*
- LPS Companion - v1.5, 2026-09-17.
+ LPS Companion - v1.6, 2026-09-17.
  Screen: 320x320, 8x16 bitmap font, 40 columns x 20 rows.
 
  Desktop build (Fedora/Linux):
@@ -13,7 +13,7 @@
  In this package src/main.cpp supplies the LCD, keyboard and SD implementation.
  Run bash build.sh from the project root to create build/lps_companion.uf2.
  Target: original RP2040 PicoCalc, standalone BOOTSEL firmware.
- v1.2 confirmed on the user's PicoCalc; v1.5 needs device testing.
+ v1.2 confirmed on the user's PicoCalc; v1.6 needs device testing.
  The portable application remains independent of the Pico SDK; desktop and
  built-in tests below remain available for checking the UI/state machine.
 
@@ -68,13 +68,16 @@ void displayText(const char* utf8,char* out,std::size_t capacity){
 constexpr int Width=320, Height=320, Columns=40, Rows=20;
 constexpr std::size_t NoteLength=96, HistoryLength=31, BlobCapacity=4096;
 enum Key { Enter=13, Backspace=8, Escape=27, Up=1000, Down, Left, Right };
-enum class LoadResult { Missing, Ok, Error };
+enum class LoadResult { Missing, Ok, NoStorage, Error };
 struct Day;
 struct Platform {
     virtual ~Platform() = default;
     virtual void clear()=0;
     // Coordinates in pixels. reverse=true fills all 40 cells on that row.
     virtual void text(int x,int y,const char* text,bool reverse)=0;
+    // A hardware-visible error line (bold red on PicoCalc). Used for faults
+    // which need immediate attention rather than normal status text.
+    virtual void alert(int x,int y,const char* text)=0;
     virtual void present()=0;
     // Apply the selected theme before drawing. The desktop implementation may ignore it.
     virtual void setPalette(Palette)=0;
@@ -88,11 +91,14 @@ struct Platform {
     // Export first, then save the A/B state. Retrying replaces the same named
     // export if the snapshot write later fails; no duplicate calendar event.
     virtual bool exportIcs(const Day& day,uint32_t totalXp,uint32_t dayXp,Language language)=0;
+    // The yearly weight journal is exported before the state commit as well.
+    // Implementations must treat a repeated date as already exported.
+    virtual bool exportWeightCsv(const Day& day)=0;
 };
-constexpr const char* Activities[]={"Marche","Régime","Bible","Messe","Travail","Projet","Sieste","Gurumed","Maladie","Congé","Weekend"};
-constexpr const char* EnglishActivities[]={"Walk","Diet","Bible","Mass","Work","Project","Nap","Gurumed","Illness","Day off","Weekend"};
+constexpr const char* Activities[]={"Marche","Régime","Bible","Messe","Travail","Projet","Sieste","Gurumed","Maladie","Congé","Weekend","Sortie","Jeu","Docteur"};
+constexpr const char* EnglishActivities[]={"Walk","Diet","Bible","Mass","Work","Project","Nap","Gurumed","Illness","Day off","Weekend","Outing","Gaming","Doctor"};
 constexpr unsigned ActivityCount=sizeof Activities/sizeof Activities[0];
-constexpr unsigned PageSize=5, PageCount=(ActivityCount+PageSize-1)/PageSize;
+constexpr unsigned PageSize=10, PageCount=(ActivityCount+PageSize-1)/PageSize;
 constexpr uint16_t ActivityMask=(1u<<ActivityCount)-1;
 struct Gift { const char* name; uint32_t xp; };
 constexpr Gift Gifts[]={{"Carnet de poche",30},{"Tasse de thé",70},{"Boussole",120},{"Radio de poche",180},{"Mini-ordinateur",250},{"Lanterne",330}};
@@ -206,6 +212,7 @@ class App {
     std::array<char,100> message{};
     uint32_t earned=0;
     uint8_t unlocked=0;
+    bool missingStorage=false;
     const char* tr(const char* en,const char* fr)const{return state.language==Language::French?fr:en;}
     Palette displayedPalette()const{return screen==Screen::Colors?pendingPalette:state.palette;}
     void say(const char* text){std::snprintf(message.data(),message.size(),"%s",text);}
@@ -243,7 +250,10 @@ public:
         return daysBack?state.history[(state.next+HistoryLength-daysBack)%HistoryLength]:state.today;
     }
     void start(){Blob b;auto r=hw.load(b.bytes.data(),b.bytes.size(),b.size);
-        if(r==LoadResult::Error||(r==LoadResult::Ok&&!decode(b.bytes.data(),b.size,state))){blocked=true;say(tr("Read error: save protected","Erreur lecture : sauvegarde protégée"));}
+        // The language preference is on the SD card too, so a cold start with no
+        // card deliberately uses the English default rather than guessing.
+        if(r==LoadResult::NoStorage){blocked=true;missingStorage=true;say("[!] Missing SD card!");}
+        else if(r==LoadResult::Error||(r==LoadResult::Ok&&!decode(b.bytes.data(),b.size,state))){blocked=true;say(tr("Read error: save protected","Erreur lecture : sauvegarde protégée"));}
         render();
     }
     void key(int k){
@@ -281,8 +291,8 @@ public:
             else if(k==Down)selection=(selection+1)%rows;
             else if(daysBack&&(k==Enter||(k>='1'&&k<='9')))readOnly();
             else if(k==Enter||(k>='1'&&k<='9')){
-                unsigned id=k==Enter?page*5+selection:unsigned(k-'1');State next=state;next.today.flags^=uint16_t(1u<<id);
-                if(commit(next)){page=id/5;selection=id%5;}
+                unsigned id=k==Enter?page*PageSize+selection:unsigned(k-'1');State next=state;next.today.flags^=uint16_t(1u<<id);
+                if(commit(next)){page=id/PageSize;selection=id%PageSize;}
             }
         }else if(screen==Screen::Note){
             if(daysBack){if(k==Enter)go(Screen::Home);else readOnly();}
@@ -324,6 +334,7 @@ public:
                     Date tomorrow=state.today.date;if(!nextDate(tomorrow)) {say(tr("Calendar ends on 2099-12-31","Le calendrier s'arrête au 2099-12-31"));render();return;}
                     // The export is deliberately written before the A/B commit.
                     // A retry overwrites the same dated file if the snapshot fails.
+                    if(!hw.exportWeightCsv(state.today)){say(tr("Weight CSV export failed; day remains open","Export CSV poids échoué ; journée reste ouverte"));render();return;}
                     if(!hw.exportIcs(state.today,state.xp+gain,gain,state.language)){say(tr("ICS export failed; day remains open","Export ICS échoué ; journée reste ouverte"));render();return;}
                     next.xp+=gain;next.today=Day{};next.today.number=state.today.number+1;next.today.date=tomorrow;
                     uint8_t won=0;for(unsigned i=0;i<6;++i)if(state.xp<Gifts[i].xp&&next.xp>=Gifts[i].xp)won|=uint8_t(1u<<i);
@@ -336,16 +347,16 @@ public:
     void render(){
         hw.setPalette(displayedPalette());hw.clear();char b[128];const Day& day=viewedDay();char date[11]{};
         if(validDate(day.date))dateText(day.date,date,sizeof date);else std::snprintf(date,sizeof date,"%s%lu",tr("D","J"),static_cast<unsigned long>(day.number));
-        std::snprintf(b,sizeof b,"LPS COMPANION v1.5            %s",date);line(0,b,true);
+        std::snprintf(b,sizeof b,"LPS COMPANION v1.6            %s",date);line(0,b,true);
         std::snprintf(b,sizeof b,tr("%lu XP earned","%lu XP acquis"),static_cast<unsigned long>(state.xp));line(1,b);
         if(daysBack)line(2,tr("ARCHIVED DAY - READ ONLY","JOUR ARCHIVÉ - LECTURE SEULE"));
         if(screen==Screen::Home){
             line(3,daysBack?tr("CLOSED DAY","JOUR TERMINÉ"):tr("TODAY","AUJOURD'HUI"));
-            std::snprintf(b,sizeof b,tr("%u/11 activities - %lu XP %s","%u/11 activités - %lu XP %s"),count(day.flags),static_cast<unsigned long>(points(day)),daysBack?tr("banked","validés"):tr("pending","à valider"));line(4,b);
+            std::snprintf(b,sizeof b,tr("%u/%u activities - %lu XP %s","%u/%u activités - %lu XP %s"),count(day.flags),ActivityCount,static_cast<unsigned long>(points(day)),daysBack?tr("banked","validés"):tr("pending","à valider"));line(4,b);
             const char* menu[]={"0  Date",tr("1  Activities","1  Activités"),tr("2  Notepad","2  Bloc notes"),tr("3  Weight tracker","3  Suivi du poids"),tr("4  Close the day","4  Terminer le jour"),"5  Config"};
             const unsigned first=daysBack?1:0, total=daysBack?3:6;
-            for(unsigned i=0;i<total;++i)line(6+int(i)*2,menu[first+i],i==selection);
-            line(18,tr("<- Previous day   -> Current day","<- Jour précédent   -> Jour actuel"));
+            for(unsigned i=0;i<total;++i)line(6+int(i),menu[first+i],i==selection);
+            line(16,tr("<- Previous day   -> Current day","<- Jour précédent   -> Jour actuel"));
         }else if(screen==Screen::Date){
             line(3,"DATE");line(6,dateDraft.data(),true);
             line(9,tr("Calendar: 2000-01-01 to 2099-12-31","Calendrier : 2000-01-01 au 2099-12-31"));
@@ -358,9 +369,9 @@ public:
                 // Pad by display cells, not UTF-8 bytes, to align checkboxes.
                 char label[32];displayText(tr(EnglishActivities[i],Activities[i]),label,sizeof label);
                 std::snprintf(b,sizeof b,"%2u  %-24s [%c]",i+1,label,day.flags&(1u<<i)?'x':' ');
-                hw.text(0,(5+int(i-page*PageSize)*2)*16,b,i-page*PageSize==selection);
+                hw.text(0,(5+int(i-page*PageSize))*16,b,i-page*PageSize==selection);
             }
-            line(16,daysBack?tr("<- -> pages   Esc: day menu","<- -> pages   Échap : menu du jour"):tr("Enter: toggle  1-9: keys  <- -> pages","Entrée: cocher  1-9: racc.  <- -> pages"));
+            line(15,daysBack?tr("<- -> pages   Esc: day menu","<- -> pages   Échap : menu du jour"):tr("Enter: toggle  1-9: keys  <- -> pages","Entrée: cocher  1-9: racc.  <- -> pages"));
         }else if(screen==Screen::Note){
             line(3,tr("NOTEPAD","BLOC NOTES"));wrap(5,draft.data(),3);std::snprintf(b,sizeof b,tr("%zu/96 characters","%zu/96 caractères"),std::strlen(draft.data()));line(10,b);
             line(14,daysBack?tr("Enter / Esc: day menu","Entrée / Échap : menu du jour"):tr("Enter: save / Esc: cancel","Entrée : valider / Échap : annuler"));
@@ -372,21 +383,21 @@ public:
         }else if(screen==Screen::Config){
             line(3,tr("CONFIGURATION","CONFIGURATION"));
             std::snprintf(b,sizeof b,"%s: %s",tr("1  Language","1  Langue"),pendingLanguage==Language::English?"English":"Français");line(6,b,selection==0);
-            std::snprintf(b,sizeof b,"%s: PAL%u",tr("2  Colors","2  Couleurs"),unsigned(state.palette)+1);line(9,b,selection==1);
-            line(12,tr("3  Save","3  Enregistrer"),selection==2);
-            line(14,tr("Language: select, then Save.","Langue : choisir, puis enregistrer."));
-            line(15,tr("Esc: discard changes","Échap : annuler les modifications"));
+            std::snprintf(b,sizeof b,"%s: PAL%u",tr("2  Colors","2  Couleurs"),unsigned(state.palette)+1);line(7,b,selection==1);
+            line(8,tr("3  Save","3  Enregistrer"),selection==2);
+            line(11,tr("Language: select, then Save.","Langue : choisir, puis enregistrer."));
+            line(12,tr("Esc: discard changes","Échap : annuler les modifications"));
         }else if(screen==Screen::Language){
             line(3,tr("LANGUAGE","LANGUE"));
-            line(6,"1  English",selection==0);line(9,"2  Français",selection==1);
-            line(13,tr("Enter: select / Esc: back","Entrée : choisir / Échap : retour"));
-            line(15,tr("Then Save in Configuration.","Puis enregistrer dans Configuration."));
+            line(6,"1  English",selection==0);line(7,"2  Français",selection==1);
+            line(10,tr("Enter: select / Esc: back","Entrée : choisir / Échap : retour"));
+            line(11,tr("Then Save in Configuration.","Puis enregistrer dans Configuration."));
         }else if(screen==Screen::Colors){
             line(3,tr("COLORS","COULEURS"));
             line(6,tr("1  PAL1  red","1  PAL1  rouge"),selection==0);
-            line(9,tr("2  PAL2  green","2  PAL2  vert"),selection==1);
-            line(12,tr("3  PAL3  blue","3  PAL3  bleu"),selection==2);
-            line(15,tr("Enter: save color","Entrée : enregistrer couleur"));
+            line(7,tr("2  PAL2  green","2  PAL2  vert"),selection==1);
+            line(8,tr("3  PAL3  blue","3  PAL3  bleu"),selection==2);
+            line(11,tr("Enter: save color","Entrée : enregistrer couleur"));
         }else if(screen==Screen::Finish){
             line(3,tr("CLOSE THE DAY?","TERMINER LE JOUR ?"));std::snprintf(b,sizeof b,tr("Activities: %u","Activités : %u"),count(state.today.flags));line(6,b);std::snprintf(b,sizeof b,tr("Variety bonus: %u XP","Bonus variété : %u XP"),count(state.today.flags)>=3?10:0);line(8,b);std::snprintf(b,sizeof b,"Total : +%lu XP",static_cast<unsigned long>(points(state.today)));line(10,b);line(13,tr("Enter: save and advance","Entrée : enregistrer et avancer"));line(15,tr("An empty day has no penalty.","Une journée vide ne coûte rien."));
         }else{
@@ -394,7 +405,7 @@ public:
             for(unsigned i=0;i<6;++i)if(unlocked&(1u<<i)){line(row++,tr("NEW KEEPSAKE","NOUVEAU SOUVENIR"));line(row++,tr(EnglishGifts[i],Gifts[i].name));}
             line(15,tr("Enter: start the new day","Entrée : commencer le nouveau jour"));
         }
-        line(17,message.data());
+        if(missingStorage)hw.alert(0,17*16,message.data());else line(17,message.data());
         line(19,tr("Up/Down  Enter:OK  Esc:Back","Haut/Bas  Entrée:OK  Échap:Retour"),true);hw.present();
     }
 };
@@ -410,6 +421,7 @@ class Terminal final:public lps::Platform {
     std::array<bool,20> inverse{};
 public:
     void setPalette(lps::Palette)override{}
+    void alert(int x,int y,const char* s)override{text(x,y,s,true);}
     void clear()override{for(auto& r:cells){r.fill(' ');r[40]=0;}inverse.fill(false);}
     void text(int x,int y,const char* s,bool reverse)override{
         int row=y/16,col=x/8;if(row<0||row>=20||col<0||col>=40)return;
@@ -445,6 +457,7 @@ public:
         int result=std::fprintf(f,"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//LPS Companion//EN\r\nBEGIN:VEVENT\r\nUID:lps-companion-%s@desktop\r\nDTSTART;VALUE=DATE:%s\r\nDTEND;VALUE=DATE:%s\r\nSUMMARY:LPS Companion\r\nDESCRIPTION:XP: +%lu (total %lu)\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",ymd,ymd,tomorrow,static_cast<unsigned long>(dayXp),static_cast<unsigned long>(totalXp));
         return result>0&&std::fclose(f)==0;
     }
+    bool exportWeightCsv(const lps::Day&)override{return true;}
 };
 int main(){Terminal terminal;lps::App app(terminal);app.start();std::string s;
     while(std::getline(std::cin,s)){
@@ -461,16 +474,18 @@ int main(){Terminal terminal;lps::App app(terminal);app.start();std::string s;
 #include <cassert>
 class Memory final:public lps::Platform {
 public:
-    lps::Blob stored{};bool exists=false,fail=false,failExport=false;unsigned exports=0;
+    lps::Blob stored{};bool exists=false,fail=false,failExport=false,failWeightCsv=false,noStorage=false;unsigned exports=0,weightExports=0;
     std::array<std::array<char,41>,20> rows{};
     lps::Palette palette=lps::Palette::Green;
     void setPalette(lps::Palette p)override{palette=p;}
+    void alert(int x,int y,const char* text)override{this->text(x,y,text,true);}
     void clear()override{}
     void text(int x,int y,const char* text,bool)override{assert(x>=0&&x<320&&y>=0&&y+16<=320);std::snprintf(rows[y/16].data(),41,"%s",text);}
     void present()override{}
-    lps::LoadResult load(uint8_t* b,std::size_t cap,std::size_t& n)override{if(!exists)return lps::LoadResult::Missing;if(stored.size>cap)return lps::LoadResult::Error;n=stored.size;std::memcpy(b,stored.bytes.data(),n);return lps::LoadResult::Ok;}
+    lps::LoadResult load(uint8_t* b,std::size_t cap,std::size_t& n)override{if(noStorage)return lps::LoadResult::NoStorage;if(!exists)return lps::LoadResult::Missing;if(stored.size>cap)return lps::LoadResult::Error;n=stored.size;std::memcpy(b,stored.bytes.data(),n);return lps::LoadResult::Ok;}
     bool save(const uint8_t* b,std::size_t n)override{if(fail)return false;stored.size=n;std::memcpy(stored.bytes.data(),b,n);exists=true;return true;}
     bool exportIcs(const lps::Day&,uint32_t,uint32_t,lps::Language)override{if(failExport)return false;++exports;return true;}
+    bool exportWeightCsv(const lps::Day&)override{if(failWeightCsv)return false;++weightExports;return true;}
 };
 int main(){
     using namespace lps;int32_t g=0;
@@ -493,18 +508,19 @@ int main(){
     assert(std::strstr(history.rows[6].data(),"110.500"));
     assert(std::strstr(history.rows[9].data(),"111.200"));
     assert(std::strstr(history.rows[12].data(),"+0.700"));
-    browsing.key(Escape);browsing.key('1');browsing.key(Right);browsing.key(Right);
+    browsing.key(Escape);browsing.key('1');browsing.key(Right);
     assert(std::strstr(history.rows[5].data(),"Weekend")&&std::strstr(history.rows[5].data(),"[x]"));
     browsing.key(Escape);browsing.key(Right);browsing.key('3');
     assert(std::strstr(history.rows[6].data(),"120.000"));
     Memory pages;App nav(pages);nav.start();nav.key('1');
-    nav.key(Right);for(int i=0;i<4;++i)nav.key(Down);nav.key(Enter);
+    for(int i=0;i<9;++i)nav.key(Down);
+    nav.key(Enter);
     assert(nav.data().today.flags==(1u<<9));
-    nav.key(Right);nav.key(Down);nav.key(Enter);
+    nav.key(Right);nav.key(Enter);
     assert(nav.data().today.flags==((1u<<9)|(1u<<10)));
     App reload(pages);reload.start();assert(reload.data().today.flags==nav.data().today.flags);
-    nav.key(Right);nav.key(Enter);assert(nav.data().today.flags&1);
-    nav.key(Left);nav.key(Up);nav.key(Enter);assert(!(nav.data().today.flags&(1u<<10)));
+    nav.key('1');assert(nav.data().today.flags&1);
+    nav.key(Right);nav.key(Enter);assert(!(nav.data().today.flags&(1u<<10)));
     nav.key(Escape);nav.key('4');assert(nav.currentScreen()==Screen::Finish);
     nav.key(Escape);nav.key('5');assert(nav.currentScreen()==Screen::Config);nav.key('2');assert(nav.currentScreen()==Screen::Colors);
     assert(pages.palette==Palette::Green);nav.key(Down);assert(pages.palette==Palette::Blue);nav.key(Escape);assert(pages.palette==Palette::Green);
@@ -518,6 +534,7 @@ int main(){
     std::memcpy(v3.bytes.data()+13,legacy.bytes.data()+14,WireV3-17);
     auto v3crc=crc32(v3.bytes.data(),v3.size-4);for(unsigned i=0;i<4;++i)v3.bytes[v3.size-4+i]=uint8_t(v3crc>>(8*i));
     assert(decode(v3.bytes.data(),v3.size,migrated)&&migrated.palette==Palette::Green&&migrated.today.flags==old.today.flags);
+    Memory missing;missing.noStorage=true;App noCard(missing);noCard.start();assert(std::strstr(missing.rows[17].data(),"Missing SD card"));
     Memory mem;App a(mem);a.start();a.key('1');a.key('1');a.key('2');a.key('3');assert(points(a.data().today)==40);
     a.key('3');assert(points(a.data().today)==20);a.key('9');assert(a.data().today.flags&(1u<<8));
     State before=a.data();mem.fail=true;a.key('4');assert(a.data().today.flags==before.today.flags);mem.fail=false;

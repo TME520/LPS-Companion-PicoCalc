@@ -6,7 +6,7 @@
 using UINT=unsigned;
 using FRESULT=int;
 constexpr int FR_OK=0,FR_NO_FILE=1,FR_NO_PATH=2,FR_EXIST=3,FR_DISK_ERR=4;
-constexpr int FA_READ=1,FA_WRITE=2,FA_CREATE_ALWAYS=4,GPIO_OUT=1;
+constexpr int FA_READ=1,FA_WRITE=2,FA_CREATE_ALWAYS=4,FA_OPEN_APPEND=8,GPIO_OUT=1;
 struct FIL { FILE* file=nullptr; };
 struct sd_card_t { int fatfs=0; };
 inline bool mockReadError=false;
@@ -15,7 +15,7 @@ inline unsigned mockWrites=0;
 inline FRESULT f_open(FIL* f,const char* path,int mode){
     if(mockReadError&&mode==FA_READ)return FR_DISK_ERR;
     const char* name=std::strrchr(path,'/');name=name?name+1:path;
-    f->file=std::fopen(name,mode==FA_READ?"rb":"wb");
+    f->file=std::fopen(name,mode==FA_READ?"rb":(mode&FA_OPEN_APPEND?"ab":"wb"));
     return f->file?FR_OK:(errno==ENOENT?FR_NO_FILE:FR_DISK_ERR);
 }
 inline long f_size(FIL* f){std::fseek(f->file,0,SEEK_END);long n=std::ftell(f->file);std::rewind(f->file);return n;}

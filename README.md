@@ -1,4 +1,4 @@
-# LPS-Companion v1.5
+# LPS-Companion v1.6
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
@@ -6,7 +6,14 @@ LPS-Companion helps you record daily activities, write a short note, and compare
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries and progress are saved to the SD card.
 
-**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.5 adds selectable colour palettes; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
+**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.6 improves SD-card feedback, menus, ICS descriptions and annual weight CSV exports; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
+
+## Changes in v1.6
+
+- A cold start without an SD card displays a **bold red** **`[!] Missing SD card!`** warning and blocks writes. English is used because the saved language preference cannot be read while the card is absent.
+- Main and selection menus use consecutive rows for a denser, faster-to-scan layout.
+- Activities now show **10 entries per page**; Weekend, Sortie/Outing, Jeu/Gaming and Docteur/Doctor appear on the second page.
+- ICS descriptions use RFC 5545 newline escapes, so activities, XP, weights and note import as separate lines in calendar applications.
 
 ## Changes in v1.5
 
@@ -21,6 +28,7 @@ It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display
 - The field is pre-filled as `YYYY-MM-DD`. New profiles begin with the build's suggested date, **2026-09-17**; imported v1.0–v1.3 entries are explicitly undated until you confirm Date.
 - The built-in Gregorian calendar covers **2000-01-01 through 2099-12-31**, including leap years. No separate calendar file is needed on the SD card: the rules are compiled into the firmware, so there is no extra file to corrupt or maintain.
 - Closing a dated day automatically gives the new day the next valid calendar date.
+- Closing a dated day also appends its weight values to `LPS/WEIGHTS/YYYY.csv` on the SD card. The columns are `date,expected_kg,measured_kg`; an unrecorded weight is left blank. Repeating a failed close does not duplicate the date.
 - Every successfully closed dated day writes `LPS/EXPORT/YYYY-MM-DD_LPS-Companion.ics` to the SD card. It is a standard all-day calendar event containing activities, day XP/total XP, recorded weights, and note.
 
 Closing is blocked until Date is valid. ICS export happens before the A/B snapshot is committed: a failed export leaves the day open and removes its incomplete ICS file. If the snapshot write fails after a successful export, retrying replaces that same date-named export; it never creates a duplicate event.
@@ -159,8 +167,11 @@ After closing a day, the next date is set automatically, including month/year bo
 | `9` | Illness | Maladie |
 | Arrows + Enter | Day off (10) | Congé (10) |
 | Arrows + Enter | Weekend (11) | Weekend (11) |
+| Arrows + Enter | Outing (12) | Sortie (12) |
+| Arrows + Enter | Gaming (13) | Jeu (13) |
+| Arrows + Enter | Doctor (14) | Docteur (14) |
 
-Activities are displayed across three pages (5 + 5 + 1). **Left/Right** changes page; **Up/Down** selects an activity; **Enter** toggles its checkbox. Keys **1–9** toggle the corresponding activity from any page. Select **Congé** on page 2 or **Weekend** on page 3 with Up/Down, then press Enter.
+Activities are displayed across two pages (10 + 4). **Left/Right** changes page; **Up/Down** selects an activity; **Enter** toggles its checkbox. Keys **1–9** toggle the corresponding activity from any page. Select activities 10–14 with Up/Down, then press Enter.
 
 Each checkbox can be counted once per day. Checking or unchecking an activity saves immediately.
 
