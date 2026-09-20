@@ -79,7 +79,7 @@ int main(){
     // Replace default date using the exact Date screen, including fixed-width edit.
     dated.key('0');for(int i=0;i<10;++i)dated.key(Backspace);for(char c:std::string("2028-02-29"))dated.key(c);dated.key(Enter);
     dated.key('1');dated.key('1');dated.key('2');dated.key(Escape);
-    dated.key('4');dated.key(Enter);assert(dated.data().today.date.year==2028&&dated.data().today.date.month==3&&dated.data().today.date.day==1);
+    dated.key('6');dated.key(Enter);assert(dated.data().today.date.year==2028&&dated.data().today.date.month==3&&dated.data().today.date.day==1);
     FILE* ics=std::fopen("2028-02-29_LPS-Companion.ics","rb");assert(ics);char content[1024]{};const auto used=std::fread(content,1,sizeof(content)-1,ics);assert(std::fclose(ics)==0&&used>0);
     assert(std::strstr(content,"BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"));
     assert(std::strstr(content,"DTSTART;VALUE=DATE:20280229"));assert(std::strstr(content,"DTEND;VALUE=DATE:20280301"));
@@ -95,7 +95,7 @@ int main(){
     const auto generationAfterLeap=readRecord(0).generation>readRecord(1).generation?readRecord(0).generation:readRecord(1).generation;
     // Invalid dates and export failure never advance the day or A/B generation.
     dated.key('0');for(int i=0;i<10;++i)dated.key(Backspace);for(char c:std::string("2027-02-29"))dated.key(c);dated.key(Enter);assert(dated.data().today.date.year==2028);
-    dated.key(Escape);dated.key('4');std::remove("2028-03-01_LPS-Companion.ics");
+    dated.key(Escape);dated.key('6');std::remove("2028-03-01_LPS-Companion.ics");
     mockWriteError=true;dated.key(Enter);assert(dated.data().today.date.day==1);FILE* missing=std::fopen("2028-03-01_LPS-Companion.ics","rb");assert(!missing);
     mockWriteError=false;dated.key(Enter);assert(dated.data().today.date.day==2);
     const auto generationAfterRetry=readRecord(0).generation>readRecord(1).generation?readRecord(0).generation:readRecord(1).generation;

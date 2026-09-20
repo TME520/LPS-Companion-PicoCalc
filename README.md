@@ -15,6 +15,8 @@ It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display
 - Added **Lecture / Reading** as activity 15.
 - Added **Shopping** as activity 16 in both languages.
 - Both activities appear on the second Activities page and are included in XP totals and calendar exports.
+- Added an inactive **4 Kanban** main-menu entry as the placeholder for the upcoming Kanban feature.
+- **5 Config** remains unchanged; **Close the day / Terminer le jour** moves to item **6**.
 
 ## Changes in v1.6
 
@@ -147,8 +149,9 @@ Select the language from Config on today's home screen. Accented French labels a
 | `1` | Activities | Activités | Check or uncheck today's activities. |
 | `2` | Notepad | Bloc notes | Write a short daily note. |
 | `3` | Weight tracker | Suivi du poids | Enter expected and actual weight. |
-| `4` | Close the day | Terminer le jour | Save and close today, then advance. |
+| `4` | Kanban | Kanban | Placeholder; no action yet. |
 | `5` | Config | Config | Choose language or colour palette. |
+| `6` | Close the day | Terminer le jour | Save and close today, then advance. |
 
 Use **Up/Down** to select an item, **Enter** to open it, and **Esc** to return to the main menu.
 
