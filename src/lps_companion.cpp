@@ -20,8 +20,8 @@
  Behaviour:
  - English default; French selectable in Config, applied on explicit Save.
  - PAL1 red, PAL2 green (default), and PAL3 blue are previewed live and saved on Enter.
- - Format 4 saves language, palette, and each day's calendar date; formats 1-3 import safely.
- - Eleven daily checkboxes; 10 XP each, +10 for >=3 selections (prototype rules).
+ - Format 5 adds a persistent 24-task Kanban; formats 1-4 import safely.
+ - Sixteen daily checkboxes; 10 XP each, +10 for >=3 selections (prototype rules).
  - No Journal or collectible browser; new souvenirs still appear after closing a day.
  - Expected/actual weights are OPTIONAL daily inputs, stored as integer grams.
    Comma or dot accepted, up to three decimals. No generated weight-loss target.
@@ -66,8 +66,8 @@ void displayText(const char* utf8,char* out,std::size_t capacity){
     out[n]=0;
 }
 constexpr int Width=320, Height=320, Columns=40, Rows=20;
-constexpr std::size_t NoteLength=96, HistoryLength=31, BlobCapacity=4096;
-enum Key { Enter=13, Backspace=8, Escape=27, Up=1000, Down, Left, Right };
+constexpr std::size_t NoteLength=96, HistoryLength=31, TaskNameLength=32, TaskCapacity=24, BlobCapacity=6144;
+enum Key { Enter=13, Backspace=8, Escape=27, Up=1000, Down, Left, Right, DeleteKey, F1, F2, F3, F4, F5 };
 enum class LoadResult { Missing, Ok, NoStorage, Error };
 struct Day;
 struct Platform {
@@ -131,6 +131,11 @@ struct Day {
     int32_t expected=-1, actual=-1; // grams; -1 is missing
     std::array<char,NoteLength+1> note{};
 };
+enum class TaskStatus : uint8_t { Todo, Doing, Done };
+struct Task {
+    TaskStatus status=TaskStatus::Todo;
+    std::array<char,TaskNameLength+1> name{};
+};
 struct State {
     Language language=Language::English;
     Palette palette=Palette::Green;
@@ -138,6 +143,8 @@ struct State {
     Day today{};
     std::array<Day,HistoryLength> history{};
     uint8_t next=0, count=0;
+    uint8_t taskCount=0;
+    std::array<Task,TaskCapacity> tasks{};
 };
 unsigned count(uint16_t flags) { unsigned n=0;for(;flags;flags>>=1)n+=flags&1;return n; }
 uint32_t points(const Day& d) { unsigned n=count(d.flags);return n*10+(n>=3?10:0); }
@@ -165,24 +172,26 @@ uint32_t crc32(const uint8_t* p,std::size_t n) {
 }
 struct Blob { std::array<uint8_t,BlobCapacity> bytes{};std::size_t size=0; };
 // Format 1: v1 base. Format 2: adds language. Format 3: adds dates.
-// Format 4: adds palette after language.
-constexpr std::size_t WireV1=3568, WireV2=WireV1+1, WireV3=WireV2+32*4, WireSize=WireV3+1;
+// Format 4: adds palette after language. Format 5: adds the persistent Kanban.
+constexpr std::size_t WireV1=3568, WireV2=WireV1+1, WireV3=WireV2+32*4, WireV4=WireV3+1;
+constexpr std::size_t WireSize=WireV4+1+TaskCapacity*(1+TaskNameLength+1);
 Blob encode(const State& s) {
     Blob b;
     auto put=[&](uint32_t v,unsigned n){while(n--){b.bytes[b.size++]=uint8_t(v);v>>=8;}};
-    put(0x3153504c,4);put(4,2);put(s.xp,4);put(s.next,1);put(s.count,1);put(uint8_t(s.language),1);put(uint8_t(s.palette),1);
+    put(0x3153504c,4);put(5,2);put(s.xp,4);put(s.next,1);put(s.count,1);put(uint8_t(s.language),1);put(uint8_t(s.palette),1);
     auto day=[&](const Day& d){put(d.date.year,2);put(d.date.month,1);put(d.date.day,1);put(d.number,4);put(d.flags,2);put(d.expected<0?0xffffffffu:uint32_t(d.expected),4);put(d.actual<0?0xffffffffu:uint32_t(d.actual),4);for(char c:d.note)put(uint8_t(c),1);};
     day(s.today);for(const Day& d:s.history)day(d);
+    put(s.taskCount,1);for(const Task& task:s.tasks){put(uint8_t(task.status),1);for(char c:task.name)put(uint8_t(c),1);}
     const auto crc=crc32(b.bytes.data(),b.size);put(crc,4);return b;
 }
 bool decode(const uint8_t* bytes,std::size_t size,State& out) {
-    if(size!=WireSize&&size!=WireV3&&size!=WireV2&&size!=WireV1)return false;
+    if(size!=WireSize&&size!=WireV4&&size!=WireV3&&size!=WireV2&&size!=WireV1)return false;
     std::size_t pos=size-4;
     auto get=[&](unsigned n){uint32_t v=0;for(unsigned i=0;i<n;++i)v|=uint32_t(bytes[pos++])<<(i*8);return v;};
     if(get(4)!=crc32(bytes,size-4))return false;
     pos=0;if(get(4)!=0x3153504c)return false;
     const auto version=get(2);
-    if(!((version==1&&size==WireV1)||(version==2&&size==WireV2)||(version==3&&size==WireV3)||(version==4&&size==WireSize)))return false;
+    if(!((version==1&&size==WireV1)||(version==2&&size==WireV2)||(version==3&&size==WireV3)||(version==4&&size==WireV4)||(version==5&&size==WireSize)))return false;
     State s;s.xp=get(4);s.next=uint8_t(get(1));s.count=uint8_t(get(1));
     if(version>=2){const auto language=get(1);if(language>1)return false;s.language=Language(language);}
     if(version>=4){const auto palette=get(1);if(palette>2)return false;s.palette=Palette(palette);}
@@ -195,10 +204,20 @@ bool decode(const uint8_t* bytes,std::size_t size,State& out) {
         bool ended=false;for(char c:d.note){if(!c)ended=true;else if(!ended&&(c<32||c>126))valid=false;}
     };
     day(s.today);for(Day& d:s.history)day(d);
+    if(version>=5){
+        s.taskCount=uint8_t(get(1));valid=valid&&s.taskCount<=TaskCapacity;
+        for(unsigned i=0;i<TaskCapacity;++i){
+            const auto status=get(1);if(status>2)valid=false;s.tasks[i].status=TaskStatus(status);
+            for(char& c:s.tasks[i].name)c=char(get(1));
+            valid=valid&&s.tasks[i].name.back()==0;
+            bool ended=false;for(char c:s.tasks[i].name){if(!c)ended=true;else if(!ended&&(c<32||c>126))valid=false;}
+            if(i<s.taskCount&&s.tasks[i].name[0]==0)valid=false;
+        }
+    }
     if(!valid)return false;
     out=s;return true;
 }
-enum class Screen { Home, Date, Activities, Note, Weight, Finish, Reward, Config, Language, Colors };
+enum class Screen { Home, Date, Activities, Note, Weight, Kanban, TaskEdit, Finish, Reward, Config, Language, Colors };
 class App {
     Platform& hw;
     State state{};
@@ -209,11 +228,14 @@ class App {
     Palette pendingPalette=Palette::Green;
     std::array<char,11> dateDraft{};
     std::array<char,NoteLength+1> draft{};
+    std::array<char,TaskNameLength+1> taskDraft{};
     std::array<std::array<char,8>,2> weights{};
     std::array<char,100> message{};
     uint32_t earned=0;
     uint8_t unlocked=0;
     bool missingStorage=false;
+    TaskStatus kanbanColumn=TaskStatus::Todo;
+    unsigned editedTask=TaskCapacity;
     const char* tr(const char* en,const char* fr)const{return state.language==Language::French?fr:en;}
     Palette displayedPalette()const{return screen==Screen::Colors?pendingPalette:state.palette;}
     void say(const char* text){std::snprintf(message.data(),message.size(),"%s",text);}
@@ -228,6 +250,48 @@ class App {
         Blob b=encode(candidate);
         if(!hw.save(b.bytes.data(),b.size)){say(tr("Save failed: restart device","Échec sauvegarde : redémarrer"));return false;}
         state=candidate;return true;
+    }
+    unsigned tasksIn(TaskStatus status)const{
+        unsigned n=0;for(unsigned i=0;i<state.taskCount;++i)if(state.tasks[i].status==status)++n;return n;
+    }
+    unsigned taskAt(TaskStatus status,unsigned position)const{
+        for(unsigned i=0;i<state.taskCount;++i)if(state.tasks[i].status==status&&position--==0)return i;
+        return TaskCapacity;
+    }
+    unsigned taskPosition(TaskStatus status,unsigned index)const{
+        unsigned position=0;for(unsigned i=0;i<index&&i<state.taskCount;++i)if(state.tasks[i].status==status)++position;return position;
+    }
+    const char* taskStatusName(TaskStatus status)const{
+        constexpr const char* en[]={"TODO","DOING","DONE"};constexpr const char* fr[]={"À FAIRE","EN COURS","FINI"};
+        return state.language==Language::French?fr[unsigned(status)]:en[unsigned(status)];
+    }
+    void beginTaskEdit(unsigned index){
+        editedTask=index;taskDraft.fill(0);if(index<TaskCapacity)taskDraft=state.tasks[index].name;go(Screen::TaskEdit);
+    }
+    void moveTaskTo(TaskStatus target){
+        const unsigned n=tasksIn(kanbanColumn),index=n?taskAt(kanbanColumn,selection):TaskCapacity;
+        if(index>=state.taskCount)return;
+        if(state.tasks[index].status==target){say(tr("Task is already in this column","Tâche déjà dans cette colonne"));return;}
+        State next=state;Task moved=next.tasks[index];moved.status=target;
+        for(unsigned i=index;i+1<next.taskCount;++i)next.tasks[i]=next.tasks[i+1];
+        next.tasks[next.taskCount-1]=moved;
+        if(commit(next)){kanbanColumn=target;selection=tasksIn(target)-1;say(tr("Task moved","Tâche déplacée"));}
+    }
+    void reorderTask(bool downward){
+        const unsigned n=tasksIn(kanbanColumn);if(n<2)return;
+        std::array<unsigned,TaskCapacity> indices{};for(unsigned i=0;i<n;++i)indices[i]=taskAt(kanbanColumn,i);
+        State next=state;unsigned destination=selection;
+        if(!downward&&selection==0){
+            const Task moved=next.tasks[indices[0]];for(unsigned i=0;i+1<n;++i)next.tasks[indices[i]]=next.tasks[indices[i+1]];
+            next.tasks[indices[n-1]]=moved;destination=n-1;
+        }else if(downward&&selection==n-1){
+            const Task moved=next.tasks[indices[n-1]];for(unsigned i=n-1;i>0;--i)next.tasks[indices[i]]=next.tasks[indices[i-1]];
+            next.tasks[indices[0]]=moved;destination=0;
+        }else {
+            destination=downward?selection+1:selection-1;const Task moved=next.tasks[indices[selection]];
+            next.tasks[indices[selection]]=next.tasks[indices[destination]];next.tasks[indices[destination]]=moved;
+        }
+        if(commit(next))selection=destination;
     }
     void go(Screen s){screen=s;selection=0;message.fill(0);
         if(s==Screen::Language)selection=unsigned(pendingLanguage);
@@ -258,7 +322,7 @@ public:
         render();
     }
     void key(int k){
-        if(k==Escape){go((screen==Screen::Language||screen==Screen::Colors)?Screen::Config:Screen::Home);render();return;}
+        if(k==Escape){go((screen==Screen::Language||screen==Screen::Colors)?Screen::Config:screen==Screen::TaskEdit?Screen::Kanban:Screen::Home);render();return;}
         message.fill(0);
         if(screen==Screen::Home){
             if(k==Left){
@@ -274,10 +338,10 @@ public:
             else if(!daysBack&&k>='1'&&k<='6'){selection=unsigned(k-'0');k=Enter;}
             if((k=='0'||(k>='4'&&k<='6'))&&daysBack)readOnly();
             if(k==Enter){
-                constexpr Screen currentScreens[]={Screen::Date,Screen::Activities,Screen::Note,Screen::Weight,Screen::Home,Screen::Config,Screen::Finish};
+                constexpr Screen currentScreens[]={Screen::Date,Screen::Activities,Screen::Note,Screen::Weight,Screen::Kanban,Screen::Config,Screen::Finish};
                 constexpr Screen archiveScreens[]={Screen::Activities,Screen::Note,Screen::Weight};
-                if(!daysBack&&selection==4){render();return;}
                 const Screen target=daysBack?archiveScreens[selection]:currentScreens[selection];
+                if(target==Screen::Kanban)kanbanColumn=TaskStatus::Todo;
                 if(target==Screen::Config){pendingLanguage=state.language;pendingPalette=state.palette;}
                 go(target);}
         }else if(screen==Screen::Date){
@@ -307,6 +371,35 @@ public:
                 if(!parseWeight(weights[0].data(),next.today.expected)||!parseWeight(weights[1].data(),next.today.actual))say(tr("Invalid weight (example: 110.500)","Poids invalide (exemple : 110,500)"));
                 else if(commit(next))go(Screen::Home);
             }else if((k>='0'&&k<='9')||k=='.'||k==','||k==Backspace||k==127)edit(weights[field],k);
+        }else if(screen==Screen::Kanban){
+            unsigned n=tasksIn(kanbanColumn);if(n&&selection>=n)selection=n-1;
+            if(k==Left||k==Right){
+                const unsigned column=unsigned(kanbanColumn);kanbanColumn=TaskStatus((column+(k==Right?1:2))%3);selection=0;
+            }else if(k==Up&&n)selection=(selection+n-1)%n;
+            else if(k==Down&&n)selection=(selection+1)%n;
+            else if(k=='n'||k=='N'){
+                if(state.taskCount>=TaskCapacity)say(tr("Kanban is full (24 tasks)","Kanban complet (24 tâches)"));
+                else beginTaskEdit(TaskCapacity);
+            }else if(k==Enter&&n)beginTaskEdit(taskAt(kanbanColumn,selection));
+            else if(k==DeleteKey&&n){
+                const unsigned index=taskAt(kanbanColumn,selection);State next=state;
+                for(unsigned i=index;i+1<next.taskCount;++i)next.tasks[i]=next.tasks[i+1];
+                next.tasks[--next.taskCount]=Task{};
+                if(commit(next)&&selection>=tasksIn(kanbanColumn)&&selection) --selection;
+            }else if(k>=F1&&k<=F3&&n)moveTaskTo(TaskStatus(unsigned(k-F1)));
+            else if(k==F4&&n)reorderTask(false);
+            else if(k==F5&&n)reorderTask(true);
+        }else if(screen==Screen::TaskEdit){
+            if(k==Enter){
+                if(!taskDraft[0])say(tr("Task name cannot be empty","Le nom ne peut pas être vide"));
+                else {State next=state;
+                    unsigned destination=editedTask;
+                    if(editedTask<TaskCapacity)next.tasks[editedTask].name=taskDraft;
+                    else if(next.taskCount>=TaskCapacity){say(tr("Kanban is full (24 tasks)","Kanban complet (24 tâches)"));render();return;}
+                    else {destination=next.taskCount;next.tasks[next.taskCount].status=kanbanColumn;next.tasks[next.taskCount].name=taskDraft;++next.taskCount;}
+                    if(commit(next)){editedTask=destination;selection=taskPosition(kanbanColumn,editedTask);screen=Screen::Kanban;message.fill(0);}
+                }
+            }else edit(taskDraft,k);
         }else if(screen==Screen::Config){
             if(k==Up)selection=(selection+2)%3;
             if(k==Down)selection=(selection+1)%3;
@@ -382,6 +475,28 @@ public:
             int32_t a=0,c=0;bool valid=parseWeight(weights[0].data(),a)&&parseWeight(weights[1].data(),c)&&a>=0&&c>=0;
             if(valid){int32_t d=c-a,abs=d<0?-d:d;std::snprintf(b,sizeof b,tr("Difference: %c%ld.%03ld kg","Écart : %c%ld.%03ld kg"),d<0?'-':'+',long(abs/1000),long(abs%1000));}else std::snprintf(b,sizeof b,"%s",tr("Difference: --","Écart : --"));line(12,b);
             line(14,tr("Blank = not recorded","Vide = non renseigné"));line(15,daysBack?tr("Enter / Esc: day menu","Entrée / Échap : menu du jour"):tr("Up/Down: field - Enter: save","Haut/Bas : champ - Entrée : valider"));
+        }else if(screen==Screen::Kanban){
+            const unsigned n=tasksIn(kanbanColumn);if(n&&selection>=n)selection=n-1;
+            std::snprintf(b,sizeof b,"KANBAN  < %s >  (%u)",taskStatusName(kanbanColumn),n);line(3,b);
+            if(!n)line(6,tr("No tasks. Press N to create one.","Aucune tâche. Appuyez sur N."));
+            else {
+                constexpr unsigned visible=9;const unsigned first=selection>=visible?selection-visible+1:0;
+                const unsigned end=(first+visible<n)?first+visible:n;
+                for(unsigned position=first;position<end;++position){
+                    const unsigned index=taskAt(kanbanColumn,position);
+                    std::snprintf(b,sizeof b,"%2u  %-32s",position+1,state.tasks[index].name.data());
+                    line(5+int(position-first),b,position==selection);
+                }
+            }
+            line(14,tr("N New  Enter Edit  Del Delete","N Nouveau Entrée Modifier Suppr Effacer"));
+            line(15,tr("F1 TODO  F2 DOING  F3 DONE","F1 À FAIRE F2 EN COURS F3 FINI"));
+            line(16,tr("F4 Up F5 Down  <- -> Columns","F4 Monter F5 Descendre <- -> Colonnes"));
+        }else if(screen==Screen::TaskEdit){
+            line(3,editedTask<TaskCapacity?tr("EDIT TASK","MODIFIER LA TÂCHE"):tr("NEW TASK","NOUVELLE TÂCHE"));
+            line(6,taskDraft.data(),true);
+            std::snprintf(b,sizeof b,tr("%zu/32 characters","%zu/32 caractères"),std::strlen(taskDraft.data()));line(9,b);
+            line(13,tr("Enter: save task","Entrée : enregistrer la tâche"));
+            line(15,tr("Backspace: erase  Esc: cancel","Retour: effacer  Échap: annuler"));
         }else if(screen==Screen::Config){
             line(3,tr("CONFIGURATION","CONFIGURATION"));
             std::snprintf(b,sizeof b,"%s: %s",tr("1  Language","1  Langue"),pendingLanguage==Language::English?"English":"Français");line(6,b,selection==0);
@@ -523,7 +638,7 @@ int main(){
     App reload(pages);reload.start();assert(reload.data().today.flags==nav.data().today.flags);
     nav.key('1');assert(nav.data().today.flags&1);
     nav.key(Right);nav.key(Enter);assert(!(nav.data().today.flags&(1u<<10)));
-    nav.key(Escape);nav.key('4');assert(nav.currentScreen()==Screen::Home);
+    nav.key(Escape);nav.key('4');assert(nav.currentScreen()==Screen::Kanban);nav.key(Escape);
     nav.key('6');assert(nav.currentScreen()==Screen::Finish);
     nav.key(Escape);nav.key('5');assert(nav.currentScreen()==Screen::Config);nav.key('2');assert(nav.currentScreen()==Screen::Colors);
     assert(pages.palette==Palette::Green);nav.key(Down);assert(pages.palette==Palette::Blue);nav.key(Escape);assert(pages.palette==Palette::Green);
@@ -537,6 +652,9 @@ int main(){
     std::memcpy(v3.bytes.data()+13,legacy.bytes.data()+14,WireV3-17);
     auto v3crc=crc32(v3.bytes.data(),v3.size-4);for(unsigned i=0;i<4;++i)v3.bytes[v3.size-4+i]=uint8_t(v3crc>>(8*i));
     assert(decode(v3.bytes.data(),v3.size,migrated)&&migrated.palette==Palette::Green&&migrated.today.flags==old.today.flags);
+    Blob v4;v4.size=WireV4;std::memcpy(v4.bytes.data(),legacy.bytes.data(),WireV4-4);v4.bytes[4]=4;
+    auto v4crc=crc32(v4.bytes.data(),v4.size-4);for(unsigned i=0;i<4;++i)v4.bytes[v4.size-4+i]=uint8_t(v4crc>>(8*i));
+    assert(decode(v4.bytes.data(),v4.size,migrated)&&migrated.taskCount==0&&migrated.palette==Palette::Green);
     Memory missing;missing.noStorage=true;App noCard(missing);noCard.start();assert(std::strstr(missing.rows[17].data(),"Missing SD card"));
     Memory mem;App a(mem);a.start();a.key('1');a.key('1');a.key('2');a.key('3');assert(points(a.data().today)==40);
     a.key('3');assert(points(a.data().today)==20);a.key('9');assert(a.data().today.flags&(1u<<8));

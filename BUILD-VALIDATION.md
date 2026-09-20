@@ -2,7 +2,9 @@
 
 Completed:
 
-- The four host test suites pass for v1.7: application, language, storage and migration.
+- All five host test suites pass for v1.7: application, language, Kanban, storage and migration.
+- The dedicated Kanban suite covers creation, editing, deletion, circular column navigation, circular selection, F1–F3 state moves, F4/F5 reordering, failed-save retry/rollback and restart persistence.
+- Official PicoCalc key codes are mapped for Del and F1–F5 and covered by the hardware-adapter test.
 - Date parser, 2000–2099 range, normal rollover, leap-day rollover, year rollover and final-date boundary tested.
 - The real PicoCalc/FatFs adapter wrote and read an English leap-day ICS export. Its DTSTART/DTEND, activities and XP fields were verified. French activities, weights and escaped commas/semicolons/backslashes in notes were also checked.
 - Export write failure removes the incomplete file, does not advance the day or save a new A/B generation, and a later retry succeeds.
@@ -19,14 +21,14 @@ Completed:
 - All 31 retained completed days retrieved correctly after the circular history wraps; oldest boundary and direct return to today checked.
 - Read-only history rejects edits and closing a day, leaves XP unchanged and preserves both save files byte-for-byte. Editing today still saves and survives a fresh load.
 - Damaged newest snapshot falls back to the older valid snapshot; missing newest file also falls back. Invalid existing records and simulated read errors block writes.
-- Format 4 adds one palette byte. Formats 1–3 remain accepted; v1–v2 dates remain deliberately unset and v1–v4 palettes default to green when absent.
+- Format 5 adds the global 24-task Kanban. Formats 1–4 remain accepted with an empty Kanban; v1–v2 dates remain deliberately unset and palettes default to green when absent.
 - Actual adapter tested with mixed old/new A/B snapshots in both slot orders; damaged first v1.3 write falls back to the original v1.2 save with English as default. Both slots subsequently upgrade safely. Invalid language values with recomputed CRC are rejected.
 - v1.2 was confirmed working on a physical PicoCalc by the user.
 
 Pending:
 
-- v1.7 physical PicoCalc test, including the new Reading/Lecture and Shopping activities, missing-SD warning, compact menus, corrected ICS line breaks, palette preview, persistence after restart, annual CSV export, actual SD-card behavior and power-loss conditions.
+- v1.7 physical PicoCalc test, including Kanban keys and persistence, the new Reading/Lecture and Shopping activities, missing-SD warning, compact menus, corrected ICS line breaks, palette preview, annual CSV export, actual SD-card behavior and power-loss conditions.
 - v1.7 ARM/UF2 build and UF2 structural verification. The current execution environment does not provide CMake or the Arm GNU toolchain.
 - UF2 launcher compatibility; this remains a standalone BOOTSEL build.
 
-No prebuilt UF2 is included for v1.7. `test.sh` runs four host test suites (application, language, storage and migration). The tests/stubs headers are never included in the Pico firmware build. Dependencies remain pinned and downloaded separately by build.sh.
+No prebuilt UF2 is included for v1.7. `test.sh` runs five host test suites (application, language, Kanban, storage and migration). The tests/stubs headers are never included in the Pico firmware build. Dependencies remain pinned and downloaded separately by build.sh.

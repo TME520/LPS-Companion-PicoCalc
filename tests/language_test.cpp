@@ -12,7 +12,7 @@ public:
         assert(x==0&&y>=0&&y%16==0&&y+16<=320);
         assert(std::strlen(text)<=40); // Fail on untranslated byte widths or clipped hints.
         for(const unsigned char* p=reinterpret_cast<const unsigned char*>(text);*p;++p)
-            assert((*p>=32&&*p<=126)||*p==0xe9||*p==0xe8||*p==0xe0||*p==0xf4||*p==0xfb||*p==0xe7||*p==0xc9);
+            assert((*p>=32&&*p<=126)||*p==0xe9||*p==0xe8||*p==0xe0||*p==0xe2||*p==0xf4||*p==0xfb||*p==0xe7||*p==0xc0||*p==0xc9);
         std::snprintf(rows[y/16].data(),41,"%s",text);
     }
     void alert(int x,int y,const char* value)override{this->text(x,y,value,true);}
@@ -49,7 +49,7 @@ void checkMenus(Display& d,App& a,bool fr){
     a.key('3');assert(d.has(3,fr?"SUIVI DU POIDS":"WEIGHT TRACKER"));
     assert(d.has(6,fr?"Attendu":"Expected"));assert(d.has(9,fr?"Effectif":"Actual"));
     a.key('0');a.key(Enter);assert(d.has(17,fr?"Poids invalide":"Invalid weight"));a.key(Escape);
-    a.key('4');assert(a.currentScreen()==Screen::Home);assert(d.has(10,"4  Kanban"));
+    a.key('4');assert(a.currentScreen()==Screen::Kanban);assert(d.has(3,fr?"À FAIRE":"TODO"));a.key(Escape);
     a.key('6');assert(d.has(3,fr?"TERMINER LE JOUR":"CLOSE THE DAY"));a.key(Escape);
     a.key('5');assert(d.has(6,fr?"1  Langue":"1  Language"));assert(d.has(7,fr?"2  Couleurs":"2  Colors"));assert(d.has(8,fr?"3  Enregistrer":"3  Save"));
     a.key('2');assert(d.has(6,fr?"1  PAL1  rouge":"1  PAL1  red"));assert(d.has(7,fr?"2  PAL2  vert":"2  PAL2  green"));assert(d.has(8,fr?"3  PAL3  bleu":"3  PAL3  blue"));a.key(Escape);

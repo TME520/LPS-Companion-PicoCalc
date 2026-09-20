@@ -15,7 +15,7 @@ void draw_bitmap_spi(int,int,int,int,int,int,int,unsigned char*);
 namespace {
 constexpr const char* paths[]={"0:/LPS/SAVE_A.BIN","0:/LPS/SAVE_B.BIN"};
 constexpr size_t RecordSize=lps::WireSize+16;
-constexpr size_t RecordSizeV3=lps::WireV3+16,RecordSizeV2=lps::WireV2+16,RecordSizeV1=lps::WireV1+16;
+constexpr size_t RecordSizeV4=lps::WireV4+16,RecordSizeV3=lps::WireV3+16,RecordSizeV2=lps::WireV2+16,RecordSizeV1=lps::WireV1+16;
 void put32(uint8_t* p,uint32_t x){for(int i=0;i<4;++i){p[i]=uint8_t(x);x>>=8;}}
 uint32_t get32(const uint8_t* p){return uint32_t(p[0])|(uint32_t(p[1])<<8)|(uint32_t(p[2])<<16)|(uint32_t(p[3])<<24);}
 struct Record {
@@ -29,7 +29,7 @@ Record readRecord(unsigned slot){
     if(result==FR_NO_FILE||result==FR_NO_PATH)return r;
     if(result!=FR_OK){r.status=Record::IOError;return r;}
     const size_t recordSize=f_size(&f);
-    bool rightSize=recordSize==RecordSize||recordSize==RecordSizeV3||recordSize==RecordSizeV2||recordSize==RecordSizeV1;UINT n=0;
+    bool rightSize=recordSize==RecordSize||recordSize==RecordSizeV4||recordSize==RecordSizeV3||recordSize==RecordSizeV2||recordSize==RecordSizeV1;UINT n=0;
     result=rightSize?f_read(&f,r.bytes.data(),recordSize,&n):FR_OK;
     FRESULT closed=f_close(&f);
     if(result!=FR_OK||closed!=FR_OK){r.status=Record::IOError;return r;}
@@ -99,6 +99,7 @@ public:
                 // accents over its ASCII bases in the padded 8x16 cell.
                 unsigned accent=0;bool upper=false;
                 switch(c){
+                case 0xc0:c='A';accent=2;upper=true;break;
                 case 0xe9:c='e';accent=1;break;case 0xe8:c='e';accent=2;break;
                 case 0xea:c='e';accent=3;break;case 0xe0:c='a';accent=2;break;
                 case 0xe2:c='a';accent=3;break;case 0xee:c='i';accent=3;break;
@@ -214,6 +215,7 @@ int keymap(int c){
     // ClockworkPi Code/picocalc_kbd_tester/keyboard_define.h
     switch(c){case 0xb5:return lps::Up;case 0xb6:return lps::Down;case 0xb4:return lps::Left;case 0xb7:return lps::Right;
     case 0xb1:case 27:return lps::Escape;case 10:case 13:return lps::Enter;case 8:case 127:return lps::Backspace;
+    case 0xd4:return lps::DeleteKey;case 0x81:return lps::F1;case 0x82:return lps::F2;case 0x83:return lps::F3;case 0x84:return lps::F4;case 0x85:return lps::F5;
     default:return (c>=32&&c<=126)||c==9?c:-1;}
 }
 }

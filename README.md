@@ -8,15 +8,19 @@ LPS-Companion helps you record daily activities, write a short note, and compare
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries and progress are saved to the SD card.
 
-**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.7 adds Reading/Lecture and Shopping activities; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
+**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.7 adds a persistent Kanban and two activities; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
 
 ## Changes in v1.7
 
 - Added **Lecture / Reading** as activity 15.
 - Added **Shopping** as activity 16 in both languages.
 - Both activities appear on the second Activities page and are included in XP totals and calendar exports.
-- Added an inactive **4 Kanban** main-menu entry as the placeholder for the upcoming Kanban feature.
+- Added a persistent **Kanban** for up to 24 user-defined tasks, each with a 32-character name.
+- Tasks move between **TODO / À FAIRE**, **DOING / EN COURS**, and **DONE / FINI** and may be renamed, deleted or reordered.
+- Kanban displays contextual key reminders and always opens on TODO / À FAIRE.
 - **5 Config** remains unchanged; **Close the day / Terminer le jour** moves to item **6**.
+
+The save format is now version 5. Existing version 1–4 saves import with an empty Kanban. Back up the complete SD-card `LPS` directory before updating; older firmware cannot read a save after v1.7 has rewritten it.
 
 ## Changes in v1.6
 
@@ -134,8 +138,9 @@ Flashing replaces the current Pico firmware, including any installed interpreter
 2. Open **Activities / Activités** and check the activities you have completed.
 3. Open **Notepad / Bloc notes**, type a short note, and press Enter to save it.
 4. Open **Weight tracker / Suivi du poids** to enter your expected and actual weight.
-5. At the end of the day, choose **Close the day / Terminer le jour** and press Enter to confirm. The ICS export is written automatically.
-5. Your XP is banked, any new keepsakes are unlocked, and the next day begins.
+5. Optionally open **Kanban** to create or update persistent tasks.
+6. At the end of the day, choose **Close the day / Terminer le jour** and press Enter to confirm. The ICS export is written automatically.
+7. Your XP is banked, any new keepsakes are unlocked, and the next day begins.
 
 Days advance manually. Leaving the device switched off does not automatically start a new day.
 
@@ -149,7 +154,7 @@ Select the language from Config on today's home screen. Accented French labels a
 | `1` | Activities | Activités | Check or uncheck today's activities. |
 | `2` | Notepad | Bloc notes | Write a short daily note. |
 | `3` | Weight tracker | Suivi du poids | Enter expected and actual weight. |
-| `4` | Kanban | Kanban | Placeholder; no action yet. |
+| `4` | Kanban | Kanban | Manage persistent user-defined tasks. |
 | `5` | Config | Config | Choose language or colour palette. |
 | `6` | Close the day | Terminer le jour | Save and close today, then advance. |
 
@@ -187,6 +192,36 @@ After closing a day, the next date is set automatically, including month/year bo
 Activities are displayed across two pages (10 + 6). **Left/Right** changes page; **Up/Down** selects an activity; **Enter** toggles its checkbox. Keys **1–9** toggle the corresponding activity from any page. Select activities 10–16 with Up/Down, then press Enter.
 
 Each checkbox can be counted once per day. Checking or unchecking an activity saves immediately.
+
+### Kanban
+
+The Kanban is one persistent global board. It is not reset when a day is closed and is not attached to archived days. It holds up to **24 tasks**, with names of up to **32 printable ASCII characters**.
+
+It has three circular columns:
+
+| English | Français | Meaning |
+| --- | --- | --- |
+| TODO | À FAIRE | Work not started. |
+| DOING | EN COURS | Work currently underway. |
+| DONE | FINI | Completed work. |
+
+Kanban always opens on **TODO / À FAIRE**. The screen shows the active column, its task count, the selected task, and compact reminders for the available keys.
+
+| Key | Action |
+| --- | --- |
+| `N` | Create a task in the current column. |
+| Left / Right | Move between columns, wrapping at either end. |
+| Up / Down | Select the previous or next task, wrapping through the list. |
+| Enter | Edit the selected task name. |
+| Del | Delete the selected task immediately. |
+| `F1` | Move the selected task to TODO / À FAIRE. |
+| `F2` | Move the selected task to DOING / EN COURS. |
+| `F3` | Move the selected task to DONE / FINI. |
+| `F4` | Move the selected task up, wrapping from top to bottom. |
+| `F5` | Move the selected task down, wrapping from bottom to top. |
+| Esc | Return to the main menu, or cancel name editing. |
+
+New names and every Kanban operation are saved immediately. If a save fails, the previous board remains intact.
 
 ### Daily note
 
@@ -260,11 +295,11 @@ LPS-Companion stores data in the SD card's `LPS` directory:
 - `SAVE_A.BIN`
 - `SAVE_B.BIN`
 
-Each file is a complete snapshot of the current day, total XP and retained history; the two files are not assigned to different days. The app alternates writes between them. At startup it checks both records and loads the highest-generation valid snapshot. If the newest is missing or fails validation, it uses the older intact snapshot, which may lack the latest change. If loading fails due to an I/O error or neither existing record is valid, writes are blocked.
+Each file is a complete snapshot of the current day, total XP, retained history, configuration and global Kanban; the two files are not assigned to different days. The app alternates writes between them. At startup it checks both records and loads the highest-generation valid snapshot. If the newest is missing or fails validation, it uses the older intact snapshot, which may lack the latest change. If loading fails due to an I/O error or neither existing record is valid, writes are blocked.
 
 Day navigation uses the history from that loaded snapshot in RAM. It indexes backwards from the history ring's next-write position, so the correct day is selected even after the 31 slots wrap. It does not reload the card at every arrow press, switch between A and B to change days, or write while browsing. Back up the **whole `LPS` directory** to preserve your data.
 
-The save contains the language preference, current date, total XP and the last **31 completed days**. Older completed days are replaced as new days are added. Browse the retained entries with Left on the home screen. The total XP shown remains your current cumulative total; the activity summary shows XP for the selected day.
+The save contains the language and palette preferences, current date, total XP, global Kanban and the last **31 completed days**. Older completed days are replaced as new days are added. Browse the retained entries with Left on the home screen. The total XP shown remains your current cumulative total; the activity summary shows XP for the selected day.
 
 If saving fails, restart with a working SD card before continuing. A missing, unreadable or corrupt card does not silently become a new saved profile. Avoid removing the SD card while the app is running.
 
@@ -273,6 +308,7 @@ If saving fails, restart with a working SD card before continuing. A missing, un
 - Date is manually entered; there is no RTC/autonomous clock integration.
 - Activities are daily checkboxes, without duration or repetition counts.
 - Notes support ASCII text only.
+- Kanban is limited to 24 tasks; task names support 32 printable ASCII characters.
 - Saved history is limited to 31 completed days; earlier days cannot be recovered by browsing. Past days are read-only.
 - The current build targets the original RP2040 model.
 
@@ -286,6 +322,7 @@ If saving fails, restart with a working SD card before continuing. A missing, un
 | `CMakeLists.txt` | Firmware build and memory layout. |
 | `build.sh` | Dependency download and compilation. |
 | `test.sh` | Application tests and A/B storage integration tests with host files. |
+| `tests/kanban_test.cpp` | Kanban navigation, editing, movement, ordering, rollback and persistence tests. |
 | `tests/` | Hardware/FatFs stand-ins used only for host tests of the actual firmware adapter. |
 | `verify_uf2.py` | UF2 format, target and address checks. |
 

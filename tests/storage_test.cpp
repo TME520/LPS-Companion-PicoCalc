@@ -20,6 +20,7 @@ void checkDay(const lps::Day& d,unsigned n){
 }
 int main(){
     using namespace lps;
+    assert(keymap(0x81)==F1&&keymap(0x82)==F2&&keymap(0x83)==F3&&keymap(0x84)==F4&&keymap(0x85)==F5&&keymap(0xd4)==DeleteKey);
     std::remove("SAVE_A.BIN");std::remove("SAVE_B.BIN");
     PicoCalc disk;disk.init();App initial(disk);initial.start();
     initial.key(Left);assert(initial.viewedDay().number==1);

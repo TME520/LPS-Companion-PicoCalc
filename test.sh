@@ -6,6 +6,8 @@ g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror -DLPS_TEST src/lps_companion.cpp
 ./build-host/lps_test
 g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/language_test.cpp -o build-host/language_test
 ./build-host/language_test
+g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/kanban_test.cpp -o build-host/kanban_test
+./build-host/kanban_test
 g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror -Itests/stubs tests/storage_test.cpp -o build-host/storage_test
 g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror -Itests/stubs tests/migration_test.cpp -o build-host/migration_test
 storage_test_path="$PWD/build-host/storage_test"
