@@ -43,7 +43,7 @@ void checkMenus(Display& d,App& a,bool fr){
     a.key('0');assert(d.has(3,"DATE"));assert(d.has(6,"2026-09-17"));
     assert(d.has(9,fr?"Calendrier":"Calendar"));a.key(Escape);
     a.key('1');assert(d.has(3,fr?"ACTIVITÉS":"ACTIVITIES"));assert(d.has(6,fr?"Régime":"Diet"));
-    assert(d.has(14,fr?"Congé":"Day off"));a.key(Right);assert(d.has(5,"Weekend"));assert(d.has(6,fr?"Sortie":"Outing"));assert(d.has(7,fr?"Jeu":"Gaming"));assert(d.has(8,fr?"Docteur":"Doctor"));a.key(Right);a.key(Escape);
+    assert(d.has(14,fr?"Congé":"Day off"));a.key(Right);assert(d.has(5,"Weekend"));assert(d.has(6,fr?"Sortie":"Outing"));assert(d.has(7,fr?"Jeu":"Gaming"));assert(d.has(8,fr?"Docteur":"Doctor"));assert(d.has(9,fr?"Lecture":"Reading"));assert(d.has(10,"Shopping"));a.key(Right);a.key(Escape);
     a.key('2');assert(d.has(3,fr?"BLOC NOTES":"NOTEPAD"));a.key(Escape);
     a.key('3');assert(d.has(3,fr?"SUIVI DU POIDS":"WEIGHT TRACKER"));
     assert(d.has(6,fr?"Attendu":"Expected"));assert(d.has(9,fr?"Effectif":"Actual"));
@@ -54,6 +54,9 @@ void checkMenus(Display& d,App& a,bool fr){
     a.key('1');assert(d.has(7,"Français"));a.key(Escape);a.key(Escape);
 }
 int main(){
+    { Display activityDisplay;App activityApp(activityDisplay);activityApp.start();activityApp.key('1');activityApp.key(Right);
+      for(unsigned i=0;i<5;++i){activityApp.key(Down);}activityApp.key(Enter);
+      assert(activityApp.data().today.flags==uint16_t(1u<<15));assert(activityDisplay.has(10,"Shopping")); }
     Display d;App a(d);a.start();assert(a.data().language==Language::English);checkMenus(d,a,false);
     a.key(Up);a.key(Enter);assert(a.currentScreen()==Screen::Config);
     a.key(Enter);a.key(Down);a.key(Escape);assert(d.has(6,"English"));

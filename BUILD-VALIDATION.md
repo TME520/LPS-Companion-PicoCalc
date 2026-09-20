@@ -1,9 +1,8 @@
-# Build validation — v1.6, 17 September 2026
+# Build validation — v1.7, 20 September 2026
 
 Completed:
 
-- ARM Cortex-M0+ build with Arm GNU Toolchain 14.2.Rel1 and Pico SDK 2.2.0.
-- UF2 verified: 703 blocks, 359,936 bytes, RP2040 family and valid flash addresses.
+- The four host test suites pass for v1.7: application, language, storage and migration.
 - Date parser, 2000–2099 range, normal rollover, leap-day rollover, year rollover and final-date boundary tested.
 - The real PicoCalc/FatFs adapter wrote and read an English leap-day ICS export. Its DTSTART/DTEND, activities and XP fields were verified. French activities, weights and escaped commas/semicolons/backslashes in notes were also checked.
 - Export write failure removes the incomplete file, does not advance the day or save a new A/B generation, and a later retry succeeds.
@@ -11,7 +10,7 @@ Completed:
 - English default; exact EN/FR home labels; language selection by arrows and shortcuts; Save, Cancel, failed-save rollback and language persistence after restart tested.
 - Palette labels are tested in their selected language. A changed palette invalidates the cached LCD frame, forcing all 20 lines to redraw immediately.
 - Missing SD storage is distinguished from a damaged save and produces a clear startup warning with writes blocked. Menu-row bounds and RFC 5545 ICS `\\N` line breaks are covered by host tests.
-- The actual PicoCalc adapter renders the missing-SD warning in red with an overdrawn glyph for bold weight; activity pagination is tested with ten rows on page one and Weekend alone on page two.
+- The actual PicoCalc adapter renders the missing-SD warning in red with an overdrawn glyph for bold weight; activity pagination is tested with ten rows on page one and six rows on page two.
 - Menus, activity labels, notepad, weight fields, instructions, errors, day closure, rewards and read-only history tested in both languages. Display-cell width assertions check text fits the 40-column screen.
 - Screens rendered with the actual font and firmware drawing adapter were visually checked: English/French home, language picker and French activities, including accents.
 - Application tests: activity, weight, note, XP and save checks; archived note text, weights, difference and checked Weekend displayed from the selected day; return to current-day values.
@@ -26,7 +25,8 @@ Completed:
 
 Pending:
 
-- v1.6 physical PicoCalc test, including missing-SD warning, compact menus, corrected ICS line breaks, palette preview, persistence after restart, annual CSV export, actual SD-card behavior and power-loss conditions.
+- v1.7 physical PicoCalc test, including the new Reading/Lecture and Shopping activities, missing-SD warning, compact menus, corrected ICS line breaks, palette preview, persistence after restart, annual CSV export, actual SD-card behavior and power-loss conditions.
+- v1.7 ARM/UF2 build and UF2 structural verification. The current execution environment does not provide CMake or the Arm GNU toolchain.
 - UF2 launcher compatibility; this remains a standalone BOOTSEL build.
 
-The prebuilt UF2 matches the included source. test.sh runs four host test suites (application, language, storage and migration). The tests/stubs headers are never included in the Pico firmware build. Dependencies remain pinned and downloaded separately by build.sh.
+No prebuilt UF2 is included for v1.7. `test.sh` runs four host test suites (application, language, storage and migration). The tests/stubs headers are never included in the Pico firmware build. Dependencies remain pinned and downloaded separately by build.sh.

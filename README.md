@@ -1,4 +1,4 @@
-# LPS-Companion v1.6
+# LPS-Companion v1.7
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
@@ -8,7 +8,13 @@ LPS-Companion helps you record daily activities, write a short note, and compare
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries and progress are saved to the SD card.
 
-**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.6 improves SD-card feedback, menus, ICS descriptions and annual weight CSV exports; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
+**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.7 adds Reading/Lecture and Shopping activities; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
+
+## Changes in v1.7
+
+- Added **Lecture / Reading** as activity 15.
+- Added **Shopping** as activity 16 in both languages.
+- Both activities appear on the second Activities page and are included in XP totals and calendar exports.
 
 ## Changes in v1.6
 
@@ -102,7 +108,7 @@ Subsequent builds reuse the downloaded dependencies. To reduce memory usage whil
 LPS_JOBS=2 bash build.sh
 ```
 
-The package also contains **`prebuilt/lps_companion.uf2`**, which can be installed without compiling.
+Build the v1.7 UF2 from the included source using `build.sh`.
 
 ## Install
 
@@ -111,7 +117,7 @@ This project produces standalone firmware for **direct BOOTSEL flashing**. Compa
 1. Insert a FAT16/FAT32 SD card into the PicoCalc.
 2. Hold the **BOOTSEL** button on the Pico module while connecting the module's USB port to your computer.
 3. When the **`RPI-RP2`** drive appears, release BOOTSEL.
-4. Copy `build/lps_companion.uf2` or `prebuilt/lps_companion.uf2` onto that drive.
+4. Copy `build/lps_companion.uf2` onto that drive.
 5. The Pico restarts into LPS-Companion.
 
 Use the **Pico module's USB port** for BOOTSEL flashing, rather than assuming the case USB-C port provides it.
@@ -172,8 +178,10 @@ After closing a day, the next date is set automatically, including month/year bo
 | Arrows + Enter | Outing (12) | Sortie (12) |
 | Arrows + Enter | Gaming (13) | Jeu (13) |
 | Arrows + Enter | Doctor (14) | Docteur (14) |
+| Arrows + Enter | Reading (15) | Lecture (15) |
+| Arrows + Enter | Shopping (16) | Shopping (16) |
 
-Activities are displayed across two pages (10 + 4). **Left/Right** changes page; **Up/Down** selects an activity; **Enter** toggles its checkbox. Keys **1–9** toggle the corresponding activity from any page. Select activities 10–14 with Up/Down, then press Enter.
+Activities are displayed across two pages (10 + 6). **Left/Right** changes page; **Up/Down** selects an activity; **Enter** toggles its checkbox. Keys **1–9** toggle the corresponding activity from any page. Select activities 10–16 with Up/Down, then press Enter.
 
 Each checkbox can be counted once per day. Checking or unchecking an activity saves immediately.
 

@@ -1,5 +1,5 @@
 /*
- LPS Companion - v1.6, 2026-09-17.
+ LPS Companion - v1.7, 2026-09-20.
  Screen: 320x320, 8x16 bitmap font, 40 columns x 20 rows.
 
  Desktop build (Fedora/Linux):
@@ -13,7 +13,7 @@
  In this package src/main.cpp supplies the LCD, keyboard and SD implementation.
  Run bash build.sh from the project root to create build/lps_companion.uf2.
  Target: original RP2040 PicoCalc, standalone BOOTSEL firmware.
- v1.2 confirmed on the user's PicoCalc; v1.6 needs device testing.
+ v1.2 confirmed on the user's PicoCalc; v1.7 needs device testing.
  The portable application remains independent of the Pico SDK; desktop and
  built-in tests below remain available for checking the UI/state machine.
 
@@ -95,10 +95,11 @@ struct Platform {
     // Implementations must treat a repeated date as already exported.
     virtual bool exportWeightCsv(const Day& day)=0;
 };
-constexpr const char* Activities[]={"Marche","Régime","Bible","Messe","Travail","Projet","Sieste","Gurumed","Maladie","Congé","Weekend","Sortie","Jeu","Docteur"};
-constexpr const char* EnglishActivities[]={"Walk","Diet","Bible","Mass","Work","Project","Nap","Gurumed","Illness","Day off","Weekend","Outing","Gaming","Doctor"};
+constexpr const char* Activities[]={"Marche","Régime","Bible","Messe","Travail","Projet","Sieste","Gurumed","Maladie","Congé","Weekend","Sortie","Jeu","Docteur","Lecture","Shopping"};
+constexpr const char* EnglishActivities[]={"Walk","Diet","Bible","Mass","Work","Project","Nap","Gurumed","Illness","Day off","Weekend","Outing","Gaming","Doctor","Reading","Shopping"};
 constexpr unsigned ActivityCount=sizeof Activities/sizeof Activities[0];
 constexpr unsigned PageSize=10, PageCount=(ActivityCount+PageSize-1)/PageSize;
+static_assert(ActivityCount<=16,"Activity flags require more than 16 bits");
 constexpr uint16_t ActivityMask=(1u<<ActivityCount)-1;
 struct Gift { const char* name; uint32_t xp; };
 constexpr Gift Gifts[]={{"Carnet de poche",30},{"Tasse de thé",70},{"Boussole",120},{"Radio de poche",180},{"Mini-ordinateur",250},{"Lanterne",330}};
@@ -347,7 +348,7 @@ public:
     void render(){
         hw.setPalette(displayedPalette());hw.clear();char b[128];const Day& day=viewedDay();char date[11]{};
         if(validDate(day.date))dateText(day.date,date,sizeof date);else std::snprintf(date,sizeof date,"%s%lu",tr("D","J"),static_cast<unsigned long>(day.number));
-        std::snprintf(b,sizeof b,"LPS COMPANION v1.6            %s",date);line(0,b,true);
+        std::snprintf(b,sizeof b,"LPS COMPANION v1.7            %s",date);line(0,b,true);
         std::snprintf(b,sizeof b,tr("%lu XP earned","%lu XP acquis"),static_cast<unsigned long>(state.xp));line(1,b);
         if(daysBack)line(2,tr("ARCHIVED DAY - READ ONLY","JOUR ARCHIVÉ - LECTURE SEULE"));
         if(screen==Screen::Home){
@@ -363,7 +364,7 @@ public:
             line(12,tr("Enter: save / Esc: cancel","Entrée : valider / Échap : annuler"));
             line(14,tr("Next day is suggested after closing.","Jour suivant proposé après clôture."));
         }else if(screen==Screen::Activities){
-            std::snprintf(b,sizeof b,tr("ACTIVITIES                      %u/3","ACTIVITÉS                       %u/3"),page+1);line(3,b);
+            std::snprintf(b,sizeof b,tr("ACTIVITIES                      %u/%u","ACTIVITÉS                       %u/%u"),page+1,PageCount);line(3,b);
             unsigned end=(page+1)*PageSize;if(end>ActivityCount)end=ActivityCount;
             for(unsigned i=page*PageSize;i<end;++i){
                 // Pad by display cells, not UTF-8 bytes, to align checkboxes.
