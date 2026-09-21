@@ -12,6 +12,7 @@ Completed:
 - English default; exact EN/FR home labels; language selection by arrows and shortcuts; Save, Cancel, failed-save rollback and language persistence after restart tested.
 - Palette labels are tested in their selected language. A changed palette invalidates the cached LCD frame, forcing all 20 lines to redraw immediately.
 - Missing SD storage is distinguished from a damaged save and produces a clear startup warning with writes blocked. Menu-row bounds and RFC 5545 ICS `\\N` line breaks are covered by host tests.
+- A below-20% battery condition is tested through the same bold-red alert path as the missing-SD warning.
 - The actual PicoCalc adapter renders the missing-SD warning in red with an overdrawn glyph for bold weight; activity pagination is tested with ten rows on page one and six rows on page two.
 - Menus, activity labels, notepad, weight fields, instructions, errors, day closure, rewards and read-only history tested in both languages. Display-cell width assertions check text fits the 40-column screen.
 - Screens rendered with the actual font and firmware drawing adapter were visually checked: English/French home, language picker and French activities, including accents.
@@ -27,7 +28,7 @@ Completed:
 
 Pending:
 
-- v1.7 physical PicoCalc test, including Kanban keys and persistence, the new Reading/Lecture and Shopping activities, missing-SD warning, compact menus, corrected ICS line breaks, palette preview, annual CSV export, actual SD-card behavior and power-loss conditions.
+- v1.7 physical PicoCalc test, including battery-threshold calibration, the low-battery warning, Kanban keys and persistence, the new Reading/Lecture and Shopping activities, missing-SD warning, compact menus, corrected ICS line breaks, palette preview, annual CSV export, actual SD-card behavior and power-loss conditions.
 - v1.7 ARM/UF2 build and UF2 structural verification. The current execution environment does not provide CMake or the Arm GNU toolchain.
 - UF2 launcher compatibility; this remains a standalone BOOTSEL build.
 

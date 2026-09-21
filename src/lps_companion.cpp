@@ -78,6 +78,8 @@ struct Platform {
     // A hardware-visible error line (bold red on PicoCalc). Used for faults
     // which need immediate attention rather than normal status text.
     virtual void alert(int x,int y,const char* text)=0;
+    // Hardware may override this. Host/test platforms report a healthy battery.
+    virtual bool batteryBelow20(){return false;}
     virtual void present()=0;
     // Apply the selected theme before drawing. The desktop implementation may ignore it.
     virtual void setPalette(Palette)=0;
@@ -523,6 +525,7 @@ public:
             line(15,tr("Enter: start the new day","Entrée : commencer le nouveau jour"));
         }
         if(missingStorage)hw.alert(0,17*16,message.data());else line(17,message.data());
+        if(hw.batteryBelow20())hw.alert(0,18*16,tr("[!] Low battery!","[!] Batterie faible !"));
         line(19,tr("Up/Down  Enter:OK  Esc:Back","Haut/Bas  Entrée:OK  Échap:Retour"),true);hw.present();
     }
 };
@@ -591,11 +594,13 @@ int main(){Terminal terminal;lps::App app(terminal);app.start();std::string s;
 #include <cassert>
 class Memory final:public lps::Platform {
 public:
-    lps::Blob stored{};bool exists=false,fail=false,failExport=false,failWeightCsv=false,noStorage=false;unsigned exports=0,weightExports=0;
+    lps::Blob stored{};bool exists=false,fail=false,failExport=false,failWeightCsv=false,noStorage=false,lowBattery=false;unsigned exports=0,weightExports=0;
     std::array<std::array<char,41>,20> rows{};
+    std::array<bool,20> alerts{};
     lps::Palette palette=lps::Palette::Green;
     void setPalette(lps::Palette p)override{palette=p;}
-    void alert(int x,int y,const char* text)override{this->text(x,y,text,true);}
+    void alert(int x,int y,const char* text)override{alerts[y/16]=true;this->text(x,y,text,true);}
+    bool batteryBelow20()override{return lowBattery;}
     void clear()override{}
     void text(int x,int y,const char* text,bool)override{assert(x>=0&&x<320&&y>=0&&y+16<=320);std::snprintf(rows[y/16].data(),41,"%s",text);}
     void present()override{}
@@ -656,6 +661,7 @@ int main(){
     auto v4crc=crc32(v4.bytes.data(),v4.size-4);for(unsigned i=0;i<4;++i)v4.bytes[v4.size-4+i]=uint8_t(v4crc>>(8*i));
     assert(decode(v4.bytes.data(),v4.size,migrated)&&migrated.taskCount==0&&migrated.palette==Palette::Green);
     Memory missing;missing.noStorage=true;App noCard(missing);noCard.start();assert(std::strstr(missing.rows[17].data(),"Missing SD card"));
+    Memory battery;battery.lowBattery=true;App lowPower(battery);lowPower.start();assert(battery.alerts[18]&&std::strstr(battery.rows[18].data(),"Low battery"));
     Memory mem;App a(mem);a.start();a.key('1');a.key('1');a.key('2');a.key('3');assert(points(a.data().today)==40);
     a.key('3');assert(points(a.data().today)==20);a.key('9');assert(a.data().today.flags&(1u<<8));
     State before=a.data();mem.fail=true;a.key('4');assert(a.data().today.flags==before.today.flags);mem.fail=false;

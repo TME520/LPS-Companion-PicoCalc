@@ -12,6 +12,7 @@ It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display
 
 ## Changes in v1.7
 
+- A bold red **`[!] Low battery!`** / **`[!] Batterie faible !`** warning appears when the estimated battery level falls below 20%. Hysteresis prevents flicker near the threshold.
 - Added **Lecture / Reading** as activity 15.
 - Added **Shopping** as activity 16 in both languages.
 - Both activities appear on the second Activities page and are included in XP totals and calendar exports.
@@ -305,6 +306,7 @@ If saving fails, restart with a working SD card before continuing. A missing, un
 
 ## Current limits
 
+- Battery charge is estimated from RP2040 VSYS voltage; the 20% warning must be calibrated on the physical PicoCalc.
 - Date is manually entered; there is no RTC/autonomous clock integration.
 - Activities are daily checkboxes, without duration or repetition counts.
 - Notes support ASCII text only.

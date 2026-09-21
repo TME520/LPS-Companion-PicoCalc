@@ -3,6 +3,7 @@
 #include "lps_companion.cpp"
 #include "pico/stdlib.h"
 #include "hardware/clocks.h"
+#include "hardware/adc.h"
 extern "C" {
 #include "i2ckbd.h"
 #include "lcdspi.h"
@@ -44,6 +45,7 @@ class PicoCalc final:public lps::Platform {
     std::array<bool,20> reverse{},oldReverse{};
     std::array<bool,20> alertRow{},oldAlertRow{};
     bool first=true,mounted=false,writeFault=false;
+    bool lowBattery=false;
     int active=-1;
     uint32_t generation=0;
     // A full year of the compact CSV is below 16 KiB.  Keeping this buffer in
@@ -66,6 +68,8 @@ public:
         init_i2c_kbd();lcd_init();
         // Keep unused PSRAM deselected; no PSRAM or multicore required.
         gpio_init(20);gpio_set_dir(20,GPIO_OUT);gpio_put(20,1);
+        // Pico VSYS is available on ADC3 through the board's 1/3 divider.
+        adc_init();adc_gpio_init(29);
         if(sd_init_driver())mounted=f_mount(&sd_get_by_num(0)->fatfs,"0:",1)==FR_OK;
     }
     void clear()override{for(auto& row:frame)row.fill(' ');reverse.fill(false);alertRow.fill(false);}
@@ -86,6 +90,15 @@ public:
     void alert(int x,int y,const char* s)override{
         int row=y/16,col=x/8;if(row<0||row>=20||col<0||col>=40)return;
         alertRow[row]=true;while(*s&&col<40)frame[row][col++]=*s++;
+    }
+    bool batteryBelow20()override{
+        adc_select_input(3);uint32_t total=0;
+        for(unsigned i=0;i<16;++i)total+=adc_read();
+        const uint32_t millivolts=(total/16)*9900u/4095u;
+        // Approximate 20% threshold, with hysteresis to prevent flicker.
+        if(millivolts<3480)lowBattery=true;
+        else if(millivolts>3550)lowBattery=false;
+        return lowBattery;
     }
     void present()override{
         // Upstream font is 8x12. Pad two rows above/below to make 8x16 cells.

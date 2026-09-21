@@ -18,7 +18,7 @@ add_subdirectory("${FATFS_PATH}/FatFs_SPI" fatfs)
 add_executable(lps_companion src/main.cpp src/hw_config.c
   "${HELLO}/lcdspi/lcdspi.c" "${HELLO}/i2ckbd/i2ckbd.c")
 target_include_directories(lps_companion PRIVATE "${HELLO}/lcdspi" "${HELLO}/i2ckbd")
-target_link_libraries(lps_companion pico_stdlib hardware_spi hardware_i2c FatFs_SPI)
+target_link_libraries(lps_companion pico_stdlib hardware_spi hardware_i2c hardware_adc FatFs_SPI)
 pico_enable_stdio_uart(lps_companion 0)
 pico_enable_stdio_usb(lps_companion 0)
 # Reserve 64 KiB for the bounded serialization/validation call stack.
