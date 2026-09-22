@@ -1,8 +1,10 @@
-# Build validation — v1.7, 20 September 2026
+# Build validation — v1.8, 22 September 2026
 
 Completed:
 
-- All five host test suites pass for v1.7: application, language, Kanban, storage and migration.
+- All six host test suites pass for v1.8: application, language, Kanban, Rosary, storage and migration.
+- The dedicated Rosary suite covers all four modes, date-based Thursday/Luminous selection, manual decade choice, prayer pagination, Scripture, meditation, contemplative silence and successful completion.
+- English and French Rosary menus are rendered under the same 40-column bounds checks as the rest of the application. Uppercase È support was added to the PicoCalc accent compositor.
 - The dedicated Kanban suite covers creation, editing, deletion, circular column navigation, circular selection, F1–F3 state moves, F4/F5 reordering, failed-save retry/rollback and restart persistence.
 - Official PicoCalc key codes are mapped for Del and F1–F5 and covered by the hardware-adapter test.
 - Date parser, 2000–2099 range, normal rollover, leap-day rollover, year rollover and final-date boundary tested.
@@ -28,8 +30,8 @@ Completed:
 
 Pending:
 
-- v1.7 physical PicoCalc test, including battery-threshold calibration, the low-battery warning, Kanban keys and persistence, the new Reading/Lecture and Shopping activities, missing-SD warning, compact menus, corrected ICS line breaks, palette preview, annual CSV export, actual SD-card behavior and power-loss conditions.
-- v1.7 ARM/UF2 build and UF2 structural verification. The current execution environment does not provide CMake or the Arm GNU toolchain.
+- v1.8 physical PicoCalc test, including Rosary navigation/readability/timing, battery-threshold calibration, the low-battery warning, Kanban keys and persistence, Reading/Lecture and Shopping activities, missing-SD warning, compact menus, corrected ICS line breaks, palette preview, annual CSV export, actual SD-card behavior and power-loss conditions.
+- v1.8 ARM/UF2 build and UF2 structural verification. The current execution environment may not provide CMake or the Arm GNU toolchain.
 - UF2 launcher compatibility; this remains a standalone BOOTSEL build.
 
-No prebuilt UF2 is included for v1.7. `test.sh` runs five host test suites (application, language, Kanban, storage and migration). The tests/stubs headers are never included in the Pico firmware build. Dependencies remain pinned and downloaded separately by build.sh.
+No prebuilt UF2 is included for v1.8 unless `build.sh` succeeds. `test.sh` runs six host test suites (application, language, Kanban, Rosary, storage and migration). The tests/stubs headers are never included in the Pico firmware build. Dependencies remain pinned and downloaded separately by build.sh.

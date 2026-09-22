@@ -1,4 +1,4 @@
-# LPS-Companion v1.7
+# LPS-Companion v1.8
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
@@ -8,7 +8,18 @@ LPS-Companion helps you record daily activities, write a short note, and compare
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries and progress are saved to the SD card.
 
-**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.7 adds a persistent Kanban and two activities; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
+**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.8 adds a guided Christian Rosary; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
+
+## Changes in v1.8
+
+- Added **7 Christian Rosary / Rosaire chrétien** to today's main menu.
+- Every new session begins by choosing one of four modes: **one decade (3–5 min)**, **full Rosary (15–20 min)**, **Scripture and short meditations (20–30 min)**, or **slow contemplation (30–40 min)**.
+- The app proposes the traditional mysteries for the selected date: Joyful on Monday/Saturday, Sorrowful on Tuesday/Friday, Glorious on Wednesday/Sunday, and Luminous on Thursday. Any cycle can be selected manually.
+- One-decade mode asks which of the five mysteries to pray.
+- Complete English and French guidance includes the opening prayers, mystery announcements, five decades where applicable, Fatima Prayer, Hail Holy Queen, closing prayer and Sign of the Cross.
+- Guided and contemplative modes add a short Scripture passage and meditation for every mystery. Contemplative mode also adds a dedicated silent pause.
+- The prayer view displays the current prayer, mystery/decade progress, Hail Mary count and a ten-bead indicator. Long prayers are paginated safely for the 40-column display.
+- **Enter/Right** advances, **Left** returns to the previous page or prayer, and **Esc** leaves the session. Rosary progress is intentionally session-only and does not modify the existing version-5 save format.
 
 ## Changes in v1.7
 
@@ -115,7 +126,7 @@ Subsequent builds reuse the downloaded dependencies. To reduce memory usage whil
 LPS_JOBS=2 bash build.sh
 ```
 
-Build the v1.7 UF2 from the included source using `build.sh`.
+Build the v1.8 UF2 from the included source using `build.sh`.
 
 ## Install
 
@@ -140,8 +151,9 @@ Flashing replaces the current Pico firmware, including any installed interpreter
 3. Open **Notepad / Bloc notes**, type a short note, and press Enter to save it.
 4. Open **Weight tracker / Suivi du poids** to enter your expected and actual weight.
 5. Optionally open **Kanban** to create or update persistent tasks.
-6. At the end of the day, choose **Close the day / Terminer le jour** and press Enter to confirm. The ICS export is written automatically.
-7. Your XP is banked, any new keepsakes are unlocked, and the next day begins.
+6. Optionally open **Christian Rosary / Rosaire chrétien** for a guided prayer session.
+7. At the end of the day, choose **Close the day / Terminer le jour** and press Enter to confirm. The ICS export is written automatically.
+8. Your XP is banked, any new keepsakes are unlocked, and the next day begins.
 
 Days advance manually. Leaving the device switched off does not automatically start a new day.
 
@@ -158,10 +170,26 @@ Select the language from Config on today's home screen. Accented French labels a
 | `4` | Kanban | Kanban | Manage persistent user-defined tasks. |
 | `5` | Config | Config | Choose language or colour palette. |
 | `6` | Close the day | Terminer le jour | Save and close today, then advance. |
+| `7` | Christian Rosary | Rosaire chrétien | Start a guided Rosary session. |
 
 Use **Up/Down** to select an item, **Enter** to open it, and **Esc** to return to the main menu.
 
 In read-only history, only items 1–3 are available. Press Right on the home screen to return to today before opening Date or Config.
+
+### Christian Rosary
+
+The mode is chosen at the beginning of every new session:
+
+| Mode | Contents | Expected duration |
+| --- | --- | --- |
+| One decade | One selected mystery and one decade | 3–5 minutes |
+| Full Rosary | Five mysteries and prayers | 15–20 minutes |
+| Scripture + guidance | Full Rosary, Scripture and short meditations | 20–30 minutes |
+| Slow contemplation | Guided Rosary with silent contemplative pauses | 30–40 minutes |
+
+After choosing the mode, accept the proposed mysteries for today's saved date or select Joyful, Luminous, Sorrowful or Glorious manually. One-decade mode then asks for one of the five mysteries.
+
+During prayer, press **Enter** or **Right** to advance. A long prayer may occupy several pages; Enter advances the page before proceeding to the next prayer. Press **Left** to return to the previous page or prayer. **Esc** leaves the current session and returns home.
 
 ### Date and calendar
 

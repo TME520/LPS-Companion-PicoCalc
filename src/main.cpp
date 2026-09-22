@@ -118,7 +118,7 @@ public:
                 case 0xe2:c='a';accent=3;break;case 0xee:c='i';accent=3;break;
                 case 0xf4:c='o';accent=3;break;case 0xf9:c='u';accent=2;break;
                 case 0xfb:c='u';accent=3;break;case 0xe7:c='c';accent=4;break;
-                case 0xc9:c='E';accent=1;upper=true;break;
+                case 0xc9:c='E';accent=1;upper=true;break;case 0xc8:c='E';accent=2;upper=true;break;
                 }
                 if(c<32||c>126)c=32;
                 for(int y=0;y<12;++y){const auto glyph=MainFont[4+(c-32)*12+y];bitmap[(y+2)*40+col]=glyph;

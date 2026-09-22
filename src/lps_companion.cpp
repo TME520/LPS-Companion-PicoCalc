@@ -1,5 +1,5 @@
 /*
- LPS Companion - v1.7, 2026-09-20.
+ LPS Companion - v1.8, 2026-09-22.
  Screen: 320x320, 8x16 bitmap font, 40 columns x 20 rows.
 
  Desktop build (Fedora/Linux):
@@ -13,7 +13,7 @@
  In this package src/main.cpp supplies the LCD, keyboard and SD implementation.
  Run bash build.sh from the project root to create build/lps_companion.uf2.
  Target: original RP2040 PicoCalc, standalone BOOTSEL firmware.
- v1.2 confirmed on the user's PicoCalc; v1.7 needs device testing.
+ v1.2 confirmed on the user's PicoCalc; v1.8 needs device testing.
  The portable application remains independent of the Pico SDK; desktop and
  built-in tests below remain available for checking the UI/state machine.
 
@@ -53,6 +53,8 @@
 namespace lps {
 enum class Language : uint8_t { English, French };
 enum class Palette : uint8_t { Red, Green, Blue };
+enum class RosaryMode : uint8_t { Decade, Full, Guided, Contemplative };
+enum class MysterySet : uint8_t { Joyful, Luminous, Sorrowful, Glorious };
 // UI text is UTF-8 in source, converted to single-byte Latin-1 display cells.
 // Notes remain printable ASCII; user-authored text is never translated.
 void displayText(const char* utf8,char* out,std::size_t capacity){
@@ -219,7 +221,8 @@ bool decode(const uint8_t* bytes,std::size_t size,State& out) {
     if(!valid)return false;
     out=s;return true;
 }
-enum class Screen { Home, Date, Activities, Note, Weight, Kanban, TaskEdit, Finish, Reward, Config, Language, Colors };
+enum class Screen { Home, Date, Activities, Note, Weight, Kanban, TaskEdit, Finish, Reward, Config, Language, Colors,
+                    RosaryMode, RosarySet, RosaryDecade, RosaryPrayer, RosaryComplete };
 class App {
     Platform& hw;
     State state{};
@@ -238,10 +241,154 @@ class App {
     bool missingStorage=false;
     TaskStatus kanbanColumn=TaskStatus::Todo;
     unsigned editedTask=TaskCapacity;
+    RosaryMode rosaryMode=RosaryMode::Decade;
+    MysterySet rosarySet=MysterySet::Joyful;
+    unsigned rosaryDecade=0,rosaryStep=0,rosaryPage=0;
     const char* tr(const char* en,const char* fr)const{return state.language==Language::French?fr:en;}
     Palette displayedPalette()const{return screen==Screen::Colors?pendingPalette:state.palette;}
     void say(const char* text){std::snprintf(message.data(),message.size(),"%s",text);}
     void readOnly(){say(tr("Archived day: read-only","Jour archivé : lecture seule"));}
+    enum class RosaryPart { Sign, Creed, OpeningOurFather, OpeningHail, Glory, Mystery, Scripture, Meditation, Silence,
+                            OurFather, Hail, Fatima, HailHolyQueen, Closing, EndSign };
+    struct RosaryView { RosaryPart part=RosaryPart::Sign;unsigned decade=0,count=0; };
+    static unsigned weekday(Date d){
+        // Gregorian calendar, 0=Sunday. Dates in LPS are restricted to 2000-2099.
+        static constexpr unsigned offsets[]={0,3,2,5,0,3,5,1,4,6,2,4};
+        unsigned y=d.year;if(d.month<3)--y;
+        return (y+y/4-y/100+y/400+offsets[d.month-1]+d.day)%7;
+    }
+    MysterySet suggestedMysteries()const{
+        if(!validDate(state.today.date))return MysterySet::Joyful;
+        switch(weekday(state.today.date)){
+            case 1:case 6:return MysterySet::Joyful;
+            case 2:case 5:return MysterySet::Sorrowful;
+            case 4:return MysterySet::Luminous;
+            default:return MysterySet::Glorious;
+        }
+    }
+    const char* mysterySetName(MysterySet set)const{
+        static constexpr const char* en[]={"Joyful","Luminous","Sorrowful","Glorious"};
+        static constexpr const char* fr[]={"Joyeux","Lumineux","Douloureux","Glorieux"};
+        return state.language==Language::French?fr[unsigned(set)]:en[unsigned(set)];
+    }
+    const char* mysteryName(MysterySet set,unsigned decade)const{
+        static constexpr const char* en[4][5]={
+            {"The Annunciation","The Visitation","The Nativity","The Presentation","Finding Jesus in the Temple"},
+            {"The Baptism of Jesus","The Wedding at Cana","Proclamation of the Kingdom","The Transfiguration","Institution of the Eucharist"},
+            {"The Agony in the Garden","The Scourging at the Pillar","The Crowning with Thorns","The Carrying of the Cross","The Crucifixion"},
+            {"The Resurrection","The Ascension","The Descent of the Holy Spirit","The Assumption of Mary","The Coronation of Mary"}};
+        static constexpr const char* fr[4][5]={
+            {"L'Annonciation","La Visitation","La Nativité","La Présentation","Jésus retrouvé au Temple"},
+            {"Le Baptême de Jésus","Les Noces de Cana","L'annonce du Royaume","La Transfiguration","L'institution de l'Eucharistie"},
+            {"L'Agonie au Jardin","La Flagellation","Le Couronnement d'épines","Le Portement de la Croix","La Crucifixion"},
+            {"La Résurrection","L'Ascension","La Pentecôte","L'Assomption de Marie","Le Couronnement de Marie"}};
+        return state.language==Language::French?fr[unsigned(set)][decade]:en[unsigned(set)][decade];
+    }
+    const char* scripture(MysterySet set,unsigned decade)const{
+        static constexpr const char* en[4][5]={
+            {"Luke 1:38 - Let it be to me according to your word.","Luke 1:42 - Blessed are you among women.","Luke 2:7 - She gave birth to her firstborn son.","Luke 2:30 - My eyes have seen your salvation.","Luke 2:49 - I must be in my Father's house."},
+            {"Matthew 3:17 - This is my beloved Son.","John 2:5 - Do whatever he tells you.","Mark 1:15 - Repent and believe in the Gospel.","Matthew 17:2 - His face shone like the sun.","Luke 22:19 - This is my body, given for you."},
+            {"Luke 22:42 - Not my will, but yours be done.","John 19:1 - Pilate took Jesus and had him scourged.","Matthew 27:29 - They placed a crown of thorns on his head.","Luke 23:26 - They laid the cross on Simon.","Luke 23:46 - Father, into your hands I commend my spirit."},
+            {"Matthew 28:6 - He is not here; he has risen.","Acts 1:9 - He was lifted up before their eyes.","Acts 2:4 - They were all filled with the Holy Spirit.","Luke 1:49 - The Almighty has done great things for me.","Revelation 12:1 - A woman clothed with the sun."}};
+        static constexpr const char* fr[4][5]={
+            {"Luc 1,38 - Qu'il me soit fait selon ta parole.","Luc 1,42 - Tu es bénie entre les femmes.","Luc 2,7 - Elle mit au monde son fils premier-né.","Luc 2,30 - Mes yeux ont vu ton salut.","Luc 2,49 - Je dois être chez mon Père."},
+            {"Matthieu 3,17 - Celui-ci est mon Fils bien-aimé.","Jean 2,5 - Faites tout ce qu'il vous dira.","Marc 1,15 - Convertissez-vous et croyez à l'Évangile.","Matthieu 17,2 - Son visage devint brillant comme le soleil.","Luc 22,19 - Ceci est mon corps donné pour vous."},
+            {"Luc 22,42 - Non pas ma volonté, mais la tienne.","Jean 19,1 - Pilate fit flageller Jésus.","Matthieu 27,29 - Ils posèrent sur sa tête une couronne d'épines.","Luc 23,26 - Ils chargèrent Simon de la croix.","Luc 23,46 - Père, entre tes mains je remets mon esprit."},
+            {"Matthieu 28,6 - Il n'est pas ici, il est ressuscité.","Actes 1,9 - Il s'éleva sous leurs yeux.","Actes 2,4 - Tous furent remplis de l'Esprit Saint.","Luc 1,49 - Le Puissant fit pour moi des merveilles.","Apocalypse 12,1 - Une femme vêtue du soleil."}};
+        return state.language==Language::French?fr[unsigned(set)][decade]:en[unsigned(set)][decade];
+    }
+    const char* meditation(MysterySet set,unsigned decade)const{
+        static constexpr const char* en[4][5]={
+            {"Ask for Mary's trust: receive God's call without fear.","Carry Christ toward another person with humble joy.","Welcome Jesus in poverty, simplicity and gratitude.","Offer to God what is most precious, without possessing it.","Seek Christ patiently whenever he seems absent."},
+            {"Remember your baptism and live today as a beloved child of God.","Entrust the ordinary needs of life to Christ and obey him.","Let Christ rule first within your own heart.","Ask to see Christ's light behind present difficulties.","Receive Christ's self-gift and learn to give yourself."},
+            {"Bring anguish to the Father and choose his will in trust.","Pray for endurance when suffering is undeserved.","Reject pride and contemplate the quiet kingship of Christ.","Carry today's burden beside Jesus, one step at a time.","Remain at the Cross and receive the mercy flowing from it."},
+            {"Let the risen Christ awaken hope where life seems closed.","Lift your heart toward heaven while serving faithfully on earth.","Ask the Holy Spirit for courage, wisdom and charity.","Entrust your whole life to God as Mary did.","Contemplate the dignity promised to a life united with God."}};
+        static constexpr const char* fr[4][5]={
+            {"Demandez la confiance de Marie : accueillir l'appel de Dieu sans peur.","Portez le Christ vers autrui avec une joie humble.","Accueillez Jésus dans la pauvreté, la simplicité et la gratitude.","Offrez à Dieu ce qui est précieux sans chercher à le posséder.","Cherchez patiemment le Christ lorsqu'il semble absent."},
+            {"Souvenez-vous de votre baptême et vivez en enfant aimé de Dieu.","Confiez au Christ les besoins ordinaires et faites ce qu'il dit.","Laissez d'abord le Christ régner dans votre propre coeur.","Demandez à voir la lumière du Christ derrière les difficultés.","Recevez le don du Christ et apprenez à vous donner."},
+            {"Portez votre angoisse au Père et choisissez sa volonté avec confiance.","Demandez la force d'endurer une souffrance imméritée.","Rejetez l'orgueil et contemplez la royauté silencieuse du Christ.","Portez le fardeau du jour auprès de Jésus, pas après pas.","Demeurez au pied de la Croix et recevez sa miséricorde."},
+            {"Que le Christ ressuscité réveille l'espérance là où tout semble fermé.","Élevez votre coeur vers le ciel en servant fidèlement sur terre.","Demandez à l'Esprit Saint courage, sagesse et charité.","Confiez toute votre vie à Dieu comme Marie.","Contemplez la dignité promise à une vie unie à Dieu."}};
+        return state.language==Language::French?fr[unsigned(set)][decade]:en[unsigned(set)][decade];
+    }
+    RosaryView rosaryView(unsigned step)const{
+        if(rosaryMode==RosaryMode::Decade){
+            if(step==0)return {RosaryPart::Sign,rosaryDecade,0};
+            if(step==1)return {RosaryPart::Mystery,rosaryDecade,0};
+            if(step==2)return {RosaryPart::OurFather,rosaryDecade,0};
+            if(step<13)return {RosaryPart::Hail,rosaryDecade,step-2};
+            if(step==13)return {RosaryPart::Glory,rosaryDecade,0};
+            if(step==14)return {RosaryPart::Fatima,rosaryDecade,0};
+            if(step==15)return {RosaryPart::Closing,rosaryDecade,0};
+            return {RosaryPart::EndSign,rosaryDecade,0};
+        }
+        if(step==0)return {RosaryPart::Sign,0,0};
+        if(step==1)return {RosaryPart::Creed,0,0};
+        if(step==2)return {RosaryPart::OpeningOurFather,0,0};
+        if(step>=3&&step<=5)return {RosaryPart::OpeningHail,0,step-2};
+        if(step==6)return {RosaryPart::Glory,0,0};
+        unsigned local=step-7;
+        const unsigned extras=rosaryMode==RosaryMode::Full?0:rosaryMode==RosaryMode::Guided?2:3;
+        const unsigned block=14+extras;
+        if(local<5*block){
+            const unsigned decade=local/block,pos=local%block;
+            if(pos==0)return {RosaryPart::Mystery,decade,0};
+            unsigned p=pos-1;
+            if(extras){if(p==0)return {RosaryPart::Scripture,decade,0};if(p==1)return {RosaryPart::Meditation,decade,0};if(extras==3&&p==2)return {RosaryPart::Silence,decade,0};p-=extras;}
+            if(p==0)return {RosaryPart::OurFather,decade,0};
+            if(p<=10)return {RosaryPart::Hail,decade,p};
+            if(p==11)return {RosaryPart::Glory,decade,0};
+            return {RosaryPart::Fatima,decade,0};
+        }
+        local-=5*block;
+        if(local==0)return {RosaryPart::HailHolyQueen,4,0};
+        if(local==1)return {RosaryPart::Closing,4,0};
+        return {RosaryPart::EndSign,4,0};
+    }
+    unsigned rosarySteps()const{
+        if(rosaryMode==RosaryMode::Decade)return 17;
+        const unsigned extras=rosaryMode==RosaryMode::Full?0:rosaryMode==RosaryMode::Guided?2:3;
+        return 7+5*(14+extras)+3;
+    }
+    const char* rosaryText(RosaryView v)const{
+        switch(v.part){
+            case RosaryPart::Sign:return tr("In the name of the Father, and of the Son, and of the Holy Spirit. Amen.","Au nom du Père, du Fils et du Saint-Esprit. Amen.");
+            case RosaryPart::Creed:return tr("I believe in God, the Father almighty, Creator of heaven and earth, and in Jesus Christ, his only Son, our Lord, who was conceived by the Holy Spirit, born of the Virgin Mary, suffered under Pontius Pilate, was crucified, died and was buried; he descended into hell; on the third day he rose again from the dead; he ascended into heaven, and is seated at the right hand of God the Father almighty; from there he will come to judge the living and the dead. I believe in the Holy Spirit, the holy catholic Church, the communion of saints, the forgiveness of sins, the resurrection of the body, and life everlasting. Amen.","Je crois en Dieu, le Père tout-puissant, créateur du ciel et de la terre. Et en Jésus-Christ, son Fils unique, notre Seigneur, qui a été conçu du Saint-Esprit, est né de la Vierge Marie, a souffert sous Ponce Pilate, a été crucifié, est mort et a été enseveli, est descendu aux enfers. Le troisième jour est ressuscité des morts, est monté aux cieux, est assis à la droite de Dieu le Père tout-puissant, d'où il viendra juger les vivants et les morts. Je crois en l'Esprit Saint, à la sainte Église catholique, à la communion des saints, à la rémission des péchés, à la résurrection de la chair, à la vie éternelle. Amen.");
+            case RosaryPart::OpeningOurFather:case RosaryPart::OurFather:return tr("Our Father, who art in heaven, hallowed be thy name; thy kingdom come; thy will be done on earth as it is in heaven. Give us this day our daily bread; and forgive us our trespasses, as we forgive those who trespass against us; and lead us not into temptation, but deliver us from evil. Amen.","Notre Père, qui es aux cieux, que ton nom soit sanctifié, que ton règne vienne, que ta volonté soit faite sur la terre comme au ciel. Donne-nous aujourd'hui notre pain de ce jour. Pardonne-nous nos offenses, comme nous pardonnons aussi à ceux qui nous ont offensés. Et ne nous laisse pas entrer en tentation, mais délivre-nous du Mal. Amen.");
+            case RosaryPart::OpeningHail:case RosaryPart::Hail:return tr("Hail Mary, full of grace, the Lord is with thee. Blessed art thou among women, and blessed is the fruit of thy womb, Jesus. Holy Mary, Mother of God, pray for us sinners, now and at the hour of our death. Amen.","Je vous salue, Marie, pleine de grâce ; le Seigneur est avec vous. Vous êtes bénie entre toutes les femmes, et Jésus, le fruit de vos entrailles, est béni. Sainte Marie, Mère de Dieu, priez pour nous pauvres pécheurs, maintenant et à l'heure de notre mort. Amen.");
+            case RosaryPart::Glory:return tr("Glory be to the Father, and to the Son, and to the Holy Spirit, as it was in the beginning, is now, and ever shall be, world without end. Amen.","Gloire au Père, au Fils et au Saint-Esprit, comme il était au commencement, maintenant et toujours, pour les siècles des siècles. Amen.");
+            case RosaryPart::Mystery:return mysteryName(rosarySet,v.decade);
+            case RosaryPart::Scripture:return scripture(rosarySet,v.decade);
+            case RosaryPart::Meditation:return meditation(rosarySet,v.decade);
+            case RosaryPart::Silence:return tr("Remain in silence. Place this mystery, your intentions and your whole attention before God. Press Enter when you are ready to continue.","Demeurez en silence. Placez ce mystère, vos intentions et toute votre attention devant Dieu. Appuyez sur Entrée lorsque vous êtes prêt à continuer.");
+            case RosaryPart::Fatima:return tr("O my Jesus, forgive us our sins, save us from the fires of hell, lead all souls to heaven, especially those most in need of thy mercy. Amen.","Ô mon Jésus, pardonnez-nous nos péchés, préservez-nous du feu de l'enfer et conduisez au ciel toutes les âmes, surtout celles qui ont le plus besoin de votre miséricorde. Amen.");
+            case RosaryPart::HailHolyQueen:return tr("Hail, holy Queen, Mother of mercy, our life, our sweetness and our hope. To thee do we cry, poor banished children of Eve. To thee do we send up our sighs, mourning and weeping in this valley of tears. Turn then, most gracious advocate, thine eyes of mercy toward us, and after this our exile show unto us the blessed fruit of thy womb, Jesus. O clement, O loving, O sweet Virgin Mary. Pray for us, O holy Mother of God, that we may be made worthy of the promises of Christ.","Salut, ô Reine, Mère de miséricorde, notre vie, notre douceur et notre espérance, salut. Enfants d'Ève exilés, nous crions vers vous. Vers vous nous soupirons, gémissant et pleurant dans cette vallée de larmes. Ô vous, notre avocate, tournez vers nous vos regards miséricordieux. Et après cet exil, montrez-nous Jésus, le fruit béni de vos entrailles. Ô clémente, ô miséricordieuse, ô douce Vierge Marie. Priez pour nous, sainte Mère de Dieu, afin que nous devenions dignes des promesses du Christ.");
+            case RosaryPart::Closing:return tr("O God, whose only-begotten Son, by his life, death and resurrection, has purchased for us the rewards of eternal life: grant that, meditating upon these mysteries of the holy Rosary, we may imitate what they contain and obtain what they promise, through Christ our Lord. Amen.","Ô Dieu, dont le Fils unique, par sa vie, sa mort et sa résurrection, nous a acquis les récompenses de la vie éternelle, accordez-nous, en méditant ces mystères du très saint Rosaire, d'imiter ce qu'ils contiennent et d'obtenir ce qu'ils promettent, par le Christ notre Seigneur. Amen.");
+            case RosaryPart::EndSign:return tr("In the name of the Father, and of the Son, and of the Holy Spirit. Amen.","Au nom du Père, du Fils et du Saint-Esprit. Amen.");
+        }
+        return "";
+    }
+    const char* rosaryPartName(RosaryView v)const{
+        switch(v.part){
+            case RosaryPart::Sign:case RosaryPart::EndSign:return tr("SIGN OF THE CROSS","SIGNE DE CROIX");
+            case RosaryPart::Creed:return tr("APOSTLES' CREED","SYMBOLE DES APÔTRES");
+            case RosaryPart::OpeningOurFather:case RosaryPart::OurFather:return tr("OUR FATHER","NOTRE PÈRE");
+            case RosaryPart::OpeningHail:case RosaryPart::Hail:return tr("HAIL MARY","JE VOUS SALUE MARIE");
+            case RosaryPart::Glory:return tr("GLORY BE","GLOIRE AU PÈRE");
+            case RosaryPart::Mystery:return tr("MYSTERY","MYSTÈRE");
+            case RosaryPart::Scripture:return tr("SCRIPTURE","ÉCRITURE");
+            case RosaryPart::Meditation:return tr("MEDITATION","MÉDITATION");
+            case RosaryPart::Silence:return tr("CONTEMPLATIVE SILENCE","SILENCE CONTEMPLATIF");
+            case RosaryPart::Fatima:return tr("FATIMA PRAYER","PRIÈRE DE FATIMA");
+            case RosaryPart::HailHolyQueen:return tr("HAIL, HOLY QUEEN","SALUT, Ô REINE");
+            case RosaryPart::Closing:return tr("CLOSING PRAYER","PRIÈRE FINALE");
+        }
+        return "";
+    }
+    static unsigned displayCells(const char* text){unsigned n=0;while(*text){unsigned c=static_cast<unsigned char>(*text++);if((c==0xc2||c==0xc3)&&*text)++text;++n;}return n;}
+    static void cellSlice(const char* text,unsigned first,unsigned count,char* out,std::size_t capacity){
+        while(*text&&first){unsigned c=static_cast<unsigned char>(*text++);if((c==0xc2||c==0xc3)&&*text)++text;--first;}
+        std::size_t n=0;while(*text&&count&&n+2<capacity){unsigned c=static_cast<unsigned char>(*text++);out[n++]=char(c);if((c==0xc2||c==0xc3)&&*text)out[n++]=*text++;--count;}out[n]=0;
+    }
     void line(int row,const char* text,bool reverse=false){char cells[100];displayText(text,cells,sizeof cells);hw.text(0,row*16,cells,reverse);}
     void wrap(int row,const char* text,unsigned limit){
         for(unsigned i=0;*text&&i<limit;++i){char b[41]{};std::size_t n=std::strlen(text);if(n>40)n=40;std::memcpy(b,text,n);line(row+int(i),b);text+=n;}
@@ -324,7 +471,14 @@ public:
         render();
     }
     void key(int k){
-        if(k==Escape){go((screen==Screen::Language||screen==Screen::Colors)?Screen::Config:screen==Screen::TaskEdit?Screen::Kanban:Screen::Home);render();return;}
+        if(k==Escape){
+            Screen target=Screen::Home;
+            if(screen==Screen::Language||screen==Screen::Colors)target=Screen::Config;
+            else if(screen==Screen::TaskEdit)target=Screen::Kanban;
+            else if(screen==Screen::RosarySet)target=Screen::RosaryMode;
+            else if(screen==Screen::RosaryDecade)target=Screen::RosarySet;
+            go(target);render();return;
+        }
         message.fill(0);
         if(screen==Screen::Home){
             if(k==Left){
@@ -332,15 +486,15 @@ public:
                 else say(state.count?tr("Oldest saved day","Plus ancien jour conservé"):tr("No archived days","Aucun jour archivé"));
             }
             if(k==Right){daysBack=0;selection=0;page=0;}
-            const unsigned menuCount=daysBack?3:7;
+            const unsigned menuCount=daysBack?3:8;
             if(k==Up)selection=(selection+menuCount-1)%menuCount;
             if(k==Down)selection=(selection+1)%menuCount;
             if(!daysBack&&k=='0'){selection=0;k=Enter;}
             else if(daysBack&&k>='1'&&k<='3'){selection=unsigned(k-'1');k=Enter;}
-            else if(!daysBack&&k>='1'&&k<='6'){selection=unsigned(k-'0');k=Enter;}
-            if((k=='0'||(k>='4'&&k<='6'))&&daysBack)readOnly();
+            else if(!daysBack&&k>='1'&&k<='7'){selection=unsigned(k-'0');k=Enter;}
+            if((k=='0'||(k>='4'&&k<='7'))&&daysBack)readOnly();
             if(k==Enter){
-                constexpr Screen currentScreens[]={Screen::Date,Screen::Activities,Screen::Note,Screen::Weight,Screen::Kanban,Screen::Config,Screen::Finish};
+                constexpr Screen currentScreens[]={Screen::Date,Screen::Activities,Screen::Note,Screen::Weight,Screen::Kanban,Screen::Config,Screen::Finish,Screen::RosaryMode};
                 constexpr Screen archiveScreens[]={Screen::Activities,Screen::Note,Screen::Weight};
                 const Screen target=daysBack?archiveScreens[selection]:currentScreens[selection];
                 if(target==Screen::Kanban)kanbanColumn=TaskStatus::Todo;
@@ -423,6 +577,29 @@ public:
             pendingPalette=Palette(selection);
             if(k==Enter){State next=state;next.palette=pendingPalette;
                 if(commit(next)){go(Screen::Home);say(tr("Color saved","Couleur enregistrée"));}}
+        }else if(screen==Screen::RosaryMode){
+            if(k==Up)selection=(selection+3)%4;
+            if(k==Down)selection=(selection+1)%4;
+            if(k>='1'&&k<='4'){selection=unsigned(k-'1');k=Enter;}
+            if(k==Enter){rosaryMode=RosaryMode(selection);go(Screen::RosarySet);}
+        }else if(screen==Screen::RosarySet){
+            if(k==Up)selection=(selection+4)%5;
+            if(k==Down)selection=(selection+1)%5;
+            if(k>='1'&&k<='5'){selection=unsigned(k-'1');k=Enter;}
+            if(k==Enter){rosarySet=selection?MysterySet(selection-1):suggestedMysteries();
+                if(rosaryMode==RosaryMode::Decade)go(Screen::RosaryDecade);
+                else {rosaryStep=rosaryPage=0;go(Screen::RosaryPrayer);}}
+        }else if(screen==Screen::RosaryDecade){
+            if(k==Up)selection=(selection+4)%5;
+            if(k==Down)selection=(selection+1)%5;
+            if(k>='1'&&k<='5'){selection=unsigned(k-'1');k=Enter;}
+            if(k==Enter){rosaryDecade=selection;rosaryStep=rosaryPage=0;go(Screen::RosaryPrayer);}
+        }else if(screen==Screen::RosaryPrayer){
+            const char* text=rosaryText(rosaryView(rosaryStep));const unsigned pages=(displayCells(text)+359)/360;
+            if(k==Left){if(rosaryPage)--rosaryPage;else if(rosaryStep){--rosaryStep;const char* prior=rosaryText(rosaryView(rosaryStep));rosaryPage=(displayCells(prior)+359)/360-1;}}
+            else if(k==Right||k==Enter){if(rosaryPage+1<pages)++rosaryPage;else if(rosaryStep+1<rosarySteps()){++rosaryStep;rosaryPage=0;}else go(Screen::RosaryComplete);}
+        }else if(screen==Screen::RosaryComplete){
+            if(k==Enter)go(Screen::Home);
         }else if(screen==Screen::Finish){
             if(k==Enter){uint32_t gain=points(state.today);
                 if(state.today.number==std::numeric_limits<uint32_t>::max()||state.xp>std::numeric_limits<uint32_t>::max()-gain)say(tr("Counter limit reached","Limite du compteur atteinte"));
@@ -444,14 +621,14 @@ public:
     void render(){
         hw.setPalette(displayedPalette());hw.clear();char b[128];const Day& day=viewedDay();char date[11]{};
         if(validDate(day.date))dateText(day.date,date,sizeof date);else std::snprintf(date,sizeof date,"%s%lu",tr("D","J"),static_cast<unsigned long>(day.number));
-        std::snprintf(b,sizeof b,"LPS COMPANION v1.7            %s",date);line(0,b,true);
+        std::snprintf(b,sizeof b,"LPS COMPANION v1.8            %s",date);line(0,b,true);
         std::snprintf(b,sizeof b,tr("%lu XP earned","%lu XP acquis"),static_cast<unsigned long>(state.xp));line(1,b);
         if(daysBack)line(2,tr("ARCHIVED DAY - READ ONLY","JOUR ARCHIVÉ - LECTURE SEULE"));
         if(screen==Screen::Home){
             line(3,daysBack?tr("CLOSED DAY","JOUR TERMINÉ"):tr("TODAY","AUJOURD'HUI"));
             std::snprintf(b,sizeof b,tr("%u/%u activities - %lu XP %s","%u/%u activités - %lu XP %s"),count(day.flags),ActivityCount,static_cast<unsigned long>(points(day)),daysBack?tr("banked","validés"):tr("pending","à valider"));line(4,b);
-            const char* menu[]={"0  Date",tr("1  Activities","1  Activités"),tr("2  Notepad","2  Bloc notes"),tr("3  Weight tracker","3  Suivi du poids"),"4  Kanban","5  Config",tr("6  Close the day","6  Terminer le jour")};
-            const unsigned first=daysBack?1:0, total=daysBack?3:7;
+            const char* menu[]={"0  Date",tr("1  Activities","1  Activités"),tr("2  Notepad","2  Bloc notes"),tr("3  Weight tracker","3  Suivi du poids"),"4  Kanban","5  Config",tr("6  Close the day","6  Terminer le jour"),tr("7  Christian Rosary","7  Rosaire chrétien")};
+            const unsigned first=daysBack?1:0, total=daysBack?3:8;
             for(unsigned i=0;i<total;++i)line(6+int(i),menu[first+i],i==selection);
             line(16,tr("<- Previous day   -> Current day","<- Jour précédent   -> Jour actuel"));
         }else if(screen==Screen::Date){
@@ -517,6 +694,41 @@ public:
             line(7,tr("2  PAL2  green","2  PAL2  vert"),selection==1);
             line(8,tr("3  PAL3  blue","3  PAL3  bleu"),selection==2);
             line(11,tr("Enter: save color","Entrée : enregistrer couleur"));
+        }else if(screen==Screen::RosaryMode){
+            line(3,tr("CHOOSE ROSARY MODE","CHOISIR LE MODE DU ROSAIRE"));
+            line(6,tr("1  One decade             3-5 min","1  Une dizaine            3-5 min"),selection==0);
+            line(8,tr("2  Full Rosary          15-20 min","2  Rosaire complet      15-20 min"),selection==1);
+            line(10,tr("3  Scripture + guidance 20-30 min","3  Écriture + méditation 20-30 min"),selection==2);
+            line(12,tr("4  Slow contemplation   30-40 min","4  Contemplation lente  30-40 min"),selection==3);
+            line(15,tr("Choose before every new session.","Choix demandé à chaque nouvelle séance."));
+        }else if(screen==Screen::RosarySet){
+            line(3,tr("CHOOSE THE MYSTERIES","CHOISIR LES MYSTÈRES"));
+            std::snprintf(b,sizeof b,tr("1  Today: %s","1  Aujourd'hui : %s"),mysterySetName(suggestedMysteries()));line(6,b,selection==0);
+            for(unsigned i=0;i<4;++i){std::snprintf(b,sizeof b,"%u  %s",i+2,mysterySetName(MysterySet(i)));line(7+int(i),b,selection==i+1);}
+            line(14,tr("Today's cycle is selected by date.","Cycle du jour proposé automatiquement."));
+        }else if(screen==Screen::RosaryDecade){
+            std::snprintf(b,sizeof b,tr("ONE DECADE - %s MYSTERIES","UNE DIZAINE - MYSTÈRES %s"),mysterySetName(rosarySet));line(3,b);
+            for(unsigned i=0;i<5;++i){std::snprintf(b,sizeof b,"%u  %s",i+1,mysteryName(rosarySet,i));line(6+int(i),b,selection==i);}
+            line(14,tr("Choose the mystery to pray.","Choisissez le mystère à prier."));
+        }else if(screen==Screen::RosaryPrayer){
+            const RosaryView view=rosaryView(rosaryStep);const char* text=rosaryText(view);
+            std::snprintf(b,sizeof b,"%s  %u/%u",rosaryPartName(view),rosaryStep+1,rosarySteps());line(3,b,true);
+            if(view.part==RosaryPart::Mystery||view.part==RosaryPart::Scripture||view.part==RosaryPart::Meditation||view.part==RosaryPart::Silence){
+                std::snprintf(b,sizeof b,tr("Mystery %u/%u - %s","Mystère %u/%u - %s"),rosaryMode==RosaryMode::Decade?1:view.decade+1,rosaryMode==RosaryMode::Decade?1:5,mysterySetName(rosarySet));line(4,b);
+            }else if(view.part==RosaryPart::Hail){
+                std::snprintf(b,sizeof b,tr("Decade %u/%u    Hail Mary %u/10","Dizaine %u/%u    Ave Maria %u/10"),rosaryMode==RosaryMode::Decade?1:view.decade+1,rosaryMode==RosaryMode::Decade?1:5,view.count);line(4,b);
+                char beads[12];for(unsigned i=0;i<10;++i)beads[i]=i<view.count?'*':'o';beads[10]=0;line(5,beads);
+            }else if(view.part==RosaryPart::OpeningHail){std::snprintf(b,sizeof b,tr("Opening Hail Mary %u/3","Ave Maria d'ouverture %u/3"),view.count);line(4,b);}
+            const unsigned pages=(displayCells(text)+359)/360;
+            for(unsigned i=0;i<9;++i){char slice[96];cellSlice(text,rosaryPage*360+i*40,40,slice,sizeof slice);line(6+int(i),slice);}
+            if(pages>1){std::snprintf(b,sizeof b,tr("Page %u/%u  Enter: continue","Page %u/%u  Entrée : continuer"),rosaryPage+1,pages);line(15,b);}
+            else line(15,tr("Enter: next prayer   <- previous","Entrée : suite       <- précédent"));
+            line(16,tr("Esc: leave session","Échap : quitter la séance"));
+        }else if(screen==Screen::RosaryComplete){
+            line(3,tr("ROSARY COMPLETED","ROSAIRE TERMINÉ"),true);
+            line(6,tr("The prayer session is complete.","La séance de prière est terminée."));
+            line(9,tr("Remain for a moment in God's peace.","Demeurez un instant dans la paix de Dieu."));
+            line(13,tr("Enter: return to LPS Companion","Entrée : retour à LPS Companion"));
         }else if(screen==Screen::Finish){
             line(3,tr("CLOSE THE DAY?","TERMINER LE JOUR ?"));std::snprintf(b,sizeof b,tr("Activities: %u","Activités : %u"),count(state.today.flags));line(6,b);std::snprintf(b,sizeof b,tr("Variety bonus: %u XP","Bonus variété : %u XP"),count(state.today.flags)>=3?10:0);line(8,b);std::snprintf(b,sizeof b,"Total : +%lu XP",static_cast<unsigned long>(points(state.today)));line(10,b);line(13,tr("Enter: save and advance","Entrée : enregistrer et avancer"));line(15,tr("An empty day has no penalty.","Une journée vide ne coûte rien."));
         }else{
@@ -569,7 +781,8 @@ public:
         return std::rename("lps_companion.sav.tmp","lps_companion.sav")==0;
     }
     bool exportIcs(const lps::Day& day,uint32_t totalXp,uint32_t dayXp,lps::Language)override{
-        char name[48],ymd[9],tomorrow[9];lps::dateText(day.date,name,sizeof name);
+        // Oversized date buffers keep strict host builds independent of range inference.
+        char name[48],ymd[13],tomorrow[13];lps::dateText(day.date,name,sizeof name);
         std::snprintf(ymd,sizeof ymd,"%04u%02u%02u",day.date.year,day.date.month,day.date.day);
         auto next=day.date;if(!lps::nextDate(next))return false;std::snprintf(tomorrow,sizeof tomorrow,"%04u%02u%02u",next.year,next.month,next.day);
         std::snprintf(name,sizeof name,"%04u-%02u-%02u_LPS-Companion.ics",day.date.year,day.date.month,day.date.day);
