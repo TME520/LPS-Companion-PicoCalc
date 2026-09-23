@@ -1,4 +1,4 @@
-# LPS-Companion v1.8
+# LPS-Companion for Clockwork PicoCalc
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
