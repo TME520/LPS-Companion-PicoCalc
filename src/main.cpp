@@ -16,6 +16,7 @@ void draw_bitmap_spi(int,int,int,int,int,int,int,unsigned char*);
 namespace {
 constexpr const char* paths[]={"0:/LPS/SAVE_A.BIN","0:/LPS/SAVE_B.BIN"};
 constexpr size_t RecordSize=lps::WireSize+16;
+constexpr size_t RecordSizeV5=lps::WireV5+16;
 constexpr size_t RecordSizeV4=lps::WireV4+16,RecordSizeV3=lps::WireV3+16,RecordSizeV2=lps::WireV2+16,RecordSizeV1=lps::WireV1+16;
 void put32(uint8_t* p,uint32_t x){for(int i=0;i<4;++i){p[i]=uint8_t(x);x>>=8;}}
 uint32_t get32(const uint8_t* p){return uint32_t(p[0])|(uint32_t(p[1])<<8)|(uint32_t(p[2])<<16)|(uint32_t(p[3])<<24);}
@@ -30,7 +31,7 @@ Record readRecord(unsigned slot){
     if(result==FR_NO_FILE||result==FR_NO_PATH)return r;
     if(result!=FR_OK){r.status=Record::IOError;return r;}
     const size_t recordSize=f_size(&f);
-    bool rightSize=recordSize==RecordSize||recordSize==RecordSizeV4||recordSize==RecordSizeV3||recordSize==RecordSizeV2||recordSize==RecordSizeV1;UINT n=0;
+    bool rightSize=recordSize==RecordSize||recordSize==RecordSizeV5||recordSize==RecordSizeV4||recordSize==RecordSizeV3||recordSize==RecordSizeV2||recordSize==RecordSizeV1;UINT n=0;
     result=rightSize?f_read(&f,r.bytes.data(),recordSize,&n):FR_OK;
     FRESULT closed=f_close(&f);
     if(result!=FR_OK||closed!=FR_OK){r.status=Record::IOError;return r;}
@@ -44,6 +45,7 @@ class PicoCalc final:public lps::Platform {
     std::array<std::array<char,40>,20> frame{},previous{};
     std::array<bool,20> reverse{},oldReverse{};
     std::array<bool,20> alertRow{},oldAlertRow{};
+    std::array<std::array<bool,40>,20> bold{},oldBold{};
     bool first=true,mounted=false,writeFault=false;
     bool lowBattery=false;
     int active=-1;
@@ -72,13 +74,15 @@ public:
         adc_init();adc_gpio_init(29);
         if(sd_init_driver())mounted=f_mount(&sd_get_by_num(0)->fatfs,"0:",1)==FR_OK;
     }
-    void clear()override{for(auto& row:frame)row.fill(' ');reverse.fill(false);alertRow.fill(false);}
+    void clear()override{for(auto& row:frame)row.fill(' ');reverse.fill(false);alertRow.fill(false);for(auto& row:bold)row.fill(false);}
     void setPalette(lps::Palette palette)override{
         const int oldForeground=foreground,oldBackground=background,oldSelected=selected;
         switch(palette){
         case lps::Palette::Red: foreground=0xf4ddd2;background=0x2a1515;selected=0xd78778;break;
         case lps::Palette::Green: foreground=0xe4eed5;background=0x18291c;selected=0xbad99f;break;
         case lps::Palette::Blue: foreground=0xdce9f5;background=0x152332;selected=0x8ebde3;break;
+        case lps::Palette::Orange: foreground=0xffe5ba;background=0x302016;selected=0xf3ad62;break;
+        case lps::Palette::Pink: foreground=0xffe7f1;background=0x31202c;selected=0xeeb2d0;break;
         }
         // A changed palette must repaint every line, even where its text did not change.
         if(foreground!=oldForeground||background!=oldBackground||selected!=oldSelected)first=true;
@@ -86,6 +90,10 @@ public:
     void text(int x,int y,const char* s,bool rev)override{
         int row=y/16,col=x/8;if(row<0||row>=20||col<0||col>=40)return;
         reverse[row]=rev;while(*s&&col<40)frame[row][col++]=*s++;
+    }
+    void emphasize(int x,int y,int length)override{
+        const int row=y/16,start=x/8;if(row<0||row>=20)return;
+        for(int col=start;col<start+length&&col<40;++col)if(col>=0)bold[row][col]=true;
     }
     void alert(int x,int y,const char* s)override{
         int row=y/16,col=x/8;if(row<0||row>=20||col<0||col>=40)return;
@@ -105,7 +113,7 @@ public:
         // One 640-byte monochrome line buffer, not a 307,200-byte framebuffer.
         std::array<unsigned char,640> bitmap{};
         for(int row=0;row<20;++row){
-            if(!first&&frame[row]==previous[row]&&reverse[row]==oldReverse[row]&&alertRow[row]==oldAlertRow[row])continue;
+            if(!first&&frame[row]==previous[row]&&reverse[row]==oldReverse[row]&&alertRow[row]==oldAlertRow[row]&&bold[row]==oldBold[row])continue;
             bitmap.fill(0);
             for(int col=0;col<40;++col){unsigned c=static_cast<unsigned char>(frame[row][col]);
                 // The upstream extended font is NOT Latin-1. Compose French
@@ -121,8 +129,8 @@ public:
                 case 0xc9:c='E';accent=1;upper=true;break;case 0xc8:c='E';accent=2;upper=true;break;
                 }
                 if(c<32||c>126)c=32;
-                for(int y=0;y<12;++y){const auto glyph=MainFont[4+(c-32)*12+y];bitmap[(y+2)*40+col]=glyph;
-                    if(alertRow[row]&&col<39)bitmap[(y+2)*40+col+1]|=glyph;}
+                for(int y=0;y<12;++y){const auto glyph=MainFont[4+(c-32)*12+y];
+                    bitmap[(y+2)*40+col]=(alertRow[row]||bold[row][col])?static_cast<unsigned char>(glyph|(glyph>>1)):glyph;}
                 const unsigned top=upper?0:3;
                 if(accent==1){bitmap[top*40+col]=0x08;bitmap[(top+1)*40+col]=0x10;}
                 if(accent==2){bitmap[top*40+col]=0x10;bitmap[(top+1)*40+col]=0x08;}
@@ -132,7 +140,7 @@ public:
             const int fg=alertRow[row]?0xf05252:(reverse[row]?background:foreground),bg=reverse[row]?selected:background;
             draw_bitmap_spi(0,row*16,320,16,1,fg,bg,bitmap.data());
         }
-        previous=frame;oldReverse=reverse;oldAlertRow=alertRow;first=false;
+        previous=frame;oldReverse=reverse;oldAlertRow=alertRow;oldBold=bold;first=false;
     }
     lps::LoadResult load(uint8_t* bytes,size_t cap,size_t& size)override{
         if(!mounted)return lps::LoadResult::NoStorage;

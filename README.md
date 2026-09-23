@@ -8,18 +8,27 @@ LPS-Companion helps you record daily activities, write a short note, and compare
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries and progress are saved to the SD card.
 
-**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.8 adds a guided Christian Rosary; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
+**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.10.2 adjusts key emphasis and the home screen spacing; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
+
+## Changes in v1.10.2
+
+- The French word **Retour** is normal weight in helper text. The previous/current day hint moves to the next line, and the header date shifts three columns to the right. Home screen status messages remain visible on the line above the day hint.
+
+## Changes in v1.10.1
+
+- **Config → Colors / Couleurs** now offers **PAL4 Orange** and **PAL5 Pink / Rose** alongside red, green, and blue. Up/Down previews; Enter saves, and Esc cancels the preview. New palettes persist in the existing version 6 save format.
+- Key names in on-screen hints, including **Enter/Entrée**, **Esc/Échap**, **N**, **Delete/Suppr**, and the arrow keys, use bold character strokes on the PicoCalc display.
 
 ## Changes in v1.8
 
-- Added **7 Christian Rosary / Rosaire chrétien** to today's main menu.
+- Added **5 Christian Rosary / Rosaire chrétien** to today's main menu.
 - Every new session begins by choosing one of four modes: **one decade (3–5 min)**, **full Rosary (15–20 min)**, **Scripture and short meditations (20–30 min)**, or **slow contemplation (30–40 min)**.
 - The app proposes the traditional mysteries for the selected date: Joyful on Monday/Saturday, Sorrowful on Tuesday/Friday, Glorious on Wednesday/Sunday, and Luminous on Thursday. Any cycle can be selected manually.
 - One-decade mode asks which of the five mysteries to pray.
 - Complete English and French guidance includes the opening prayers, mystery announcements, five decades where applicable, Fatima Prayer, Hail Holy Queen, closing prayer and Sign of the Cross.
 - Guided and contemplative modes add a short Scripture passage and meditation for every mystery. Contemplative mode also adds a dedicated silent pause.
 - The prayer view displays the current prayer, mystery/decade progress, Hail Mary count and a ten-bead indicator. Long prayers are paginated safely for the 40-column display.
-- **Enter/Right** advances, **Left** returns to the previous page or prayer, and **Esc** leaves the session. Rosary progress is intentionally session-only and does not modify the existing version-5 save format.
+- **Enter/Right** advances, **Left** returns to the previous page or prayer, and **Esc** leaves the session. Rosary progress is intentionally session-only and does not modify saved data.
 
 ## Changes in v1.7
 
@@ -32,7 +41,7 @@ It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display
 - Kanban displays contextual key reminders and always opens on TODO / À FAIRE.
 - **5 Config** remains unchanged; **Close the day / Terminer le jour** moves to item **6**.
 
-The save format is now version 5. Existing version 1–4 saves import with an empty Kanban. Back up the complete SD-card `LPS` directory before updating; older firmware cannot read a save after v1.7 has rewritten it.
+The save format introduced in v1.7 was version 5. Existing version 1–4 saves import with an empty Kanban. Back up the complete SD-card `LPS` directory before updating; older firmware cannot read a save after v1.7 has rewritten it.
 
 ## Changes in v1.6
 
@@ -43,9 +52,9 @@ The save format is now version 5. Existing version 1–4 saves import with an em
 
 ## Changes in v1.5
 
-- **5 Config → 2 Colors / Couleurs** opens a live palette preview. Its labels follow the active language: **red/green/blue** in English or **rouge/vert/bleu** in French.
+- **5 Config → 2 Colors / Couleurs** opens a live palette preview. Its labels follow the active language: **red/green/blue/Orange/Pink** in English or **rouge/vert/bleu/Orange/Rose** in French.
 - **PAL1** is red/rouge, **PAL2** is green/vert (**default**), and **PAL3** is blue/bleu.
-- Use Up/Down or `1`–`3` to preview a palette across the complete interface. Press **Enter** to save it immediately; the full screen is redrawn in the new palette. Esc returns to Configuration without saving the preview.
+- Use Up/Down or `1`–`5` to preview a palette across the complete interface. Press **Enter** to save it immediately; the full screen is redrawn in the new palette. Esc returns to Configuration without saving the preview.
 - Existing v1.4 saves import unchanged and retain the default green palette until a colour is chosen.
 
 ## Changes in v1.4
@@ -168,13 +177,25 @@ Select the language from Config on today's home screen. Accented French labels a
 | `2` | Notepad | Bloc notes | Write a short daily note. |
 | `3` | Weight tracker | Suivi du poids | Enter expected and actual weight. |
 | `4` | Kanban | Kanban | Manage persistent user-defined tasks. |
-| `5` | Config | Config | Choose language or colour palette. |
-| `6` | Close the day | Terminer le jour | Save and close today, then advance. |
-| `7` | Christian Rosary | Rosaire chrétien | Start a guided Rosary session. |
+| `5` | Christian Rosary | Rosaire chrétien | Start a guided Rosary session. |
+| `6` | Daily review | Revue journalière | Show today’s date, selected activities, actual weight, and TODO/DOING tasks. |
+| `7` | Config | Config | Choose language or colour palette. |
+| `8` | Reminders | Rappels | Create, edit, and delete up to three reminders. |
+| `9` | Close the day | Terminer le jour | Save and close today, then advance. |
 
 Use **Up/Down** to select an item, **Enter** to open it, and **Esc** to return to the main menu.
 
 In read-only history, only items 1–3 are available. Press Right on the home screen to return to today before opening Date or Config.
+
+### Reminders / Rappels (v1.10)
+
+Choose **8** to manage a maximum of **three stored reminders**. Press N to create, Up/Down to select, Enter to edit, and Delete to remove one. In the editor, Up/Down switches between **From** (`YYYY-MM-DD`), **Days** (`1–365`), and **Text** (up to 32 ASCII characters); Enter validates and saves. Esc cancels. Edit the prefilled date with Backspace.
+
+Every startup shows **one screen containing all active reminders, one per line**; any key dismisses it for that launch. A reminder starting on October 1 for three days appears October 1–3 and expires October 4. Expired reminders are permanently removed from the SD save on startup, freeing their slots. Future reminders occupy a slot until they expire or are deleted. The app uses its saved **today** date, which advances when you close the day or edit Date; it has no automatic real-time calendar. An SD save failure leaves the old reminder record intact and displays an error. Version 5 saves migrate automatically to version 6 on the next successful write. Back up the SD card's `LPS` folder before installing; older firmware cannot read version 6 saves.
+
+### Daily review / Revue journalière
+
+Choose **6** to see today’s date and actual weight, followed by the selected activities and all global Kanban TODO / DOING tasks. Finished tasks are excluded. Use Up/Down to scroll one line, Left/Right to move eight lines, and Esc to return. Unrecorded weight and empty lists are shown explicitly. The review does not change saved data.
 
 ### Christian Rosary
 

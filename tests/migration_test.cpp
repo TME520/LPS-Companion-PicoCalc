@@ -42,7 +42,7 @@ int main(int argc,char** argv){
         PicoCalc disk;disk.init();App app(disk);app.start();checkData(app);
         assert(app.data().language==Language::English);
         app.key(Left);assert(app.viewedDay().number==2&&app.viewedDay().actual==111500);
-        app.key(Right);app.key('5');app.key('1');app.key('2');app.key('3');
+        app.key(Right);app.key('7');app.key('1');app.key('2');app.key('3');
         checkData(app);assert(app.data().language==Language::French);
         assert(readRecord(old).payloadSize==WireV1&&readRecord(1-old).payloadSize==WireSize);
         {PicoCalc reboot;reboot.init();App a(reboot);a.start();checkData(a);assert(a.data().language==Language::French);}
@@ -50,8 +50,8 @@ int main(int argc,char** argv){
         f=std::fopen(names[1-old],"wb");assert(f);std::fputs("partial",f);std::fclose(f);
         {PicoCalc reboot;reboot.init();App a(reboot);a.start();checkData(a);
          assert(a.data().language==Language::English);
-         a.key('5');a.key('1');a.key('2');a.key('3');
-         a.key('5');a.key('3'); // Second save upgrades the remaining legacy slot.
+         a.key('7');a.key('1');a.key('2');a.key('3');
+         a.key('7');a.key('3'); // Second save upgrades the remaining legacy slot.
          assert(readRecord(0).payloadSize==WireSize&&readRecord(1).payloadSize==WireSize);}
         {PicoCalc reboot;reboot.init();App a(reboot);a.start();checkData(a);assert(a.data().language==Language::French);}
     }

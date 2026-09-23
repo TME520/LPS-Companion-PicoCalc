@@ -35,3 +35,15 @@ Pending:
 - UF2 launcher compatibility; this remains a standalone BOOTSEL build.
 
 No prebuilt UF2 is included for v1.8 unless `build.sh` succeeds. `test.sh` runs six host test suites (application, language, Kanban, Rosary, storage and migration). The tests/stubs headers are never included in the Pico firmware build. Dependencies remain pinned and downloaded separately by build.sh.
+
+## v1.9 menu update
+
+Main menu: 5 Rosary, 6 Daily review (date, selected activities, actual weight, TODO and DOING with scrolling), 7 Config, 8 Close the day. Host tests pass; device validation remains pending.
+
+## v1.10 reminders
+
+Host checks cover three slots, popup on each startup, inclusive dates over leap day, expired-record deletion, failed writes, and v5-to-v6 decoding. Hardware and PicoCalc keyboard mapping remain to be checked on device.
+
+## v1.10.1 palettes and helper text
+
+Host checks verify English/French palette labels, Orange/Pink preview and persistence, and emphasized key spans in both languages. Actual LCD appearance awaits device testing.

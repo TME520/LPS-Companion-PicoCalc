@@ -33,21 +33,21 @@ static void finish(App& app,unsigned limit=250){
 
 int main(){
     RosaryDisplay d;App app(d);app.start();
-    app.key('7');assert(app.currentScreen()==Screen::RosaryMode);assert(d.has("One decade"));assert(d.has("30-40 min"));
+    app.key('5');assert(app.currentScreen()==Screen::RosaryMode);assert(d.has("One decade"));assert(d.has("30-40 min"));
     app.key(Enter);assert(app.currentScreen()==Screen::RosarySet);assert(d.has("Today: Luminous"));
     app.key(Enter);assert(app.currentScreen()==Screen::RosaryDecade);assert(d.has("The Baptism of Jesus"));
     app.key('1');assert(app.currentScreen()==Screen::RosaryPrayer);assert(d.has("SIGN OF THE CROSS"));
     finish(app);assert(d.has("ROSARY COMPLETED"));app.key(Enter);
 
-    app.key('7');app.key('2');assert(app.currentScreen()==Screen::RosarySet);app.key(Enter);
+    app.key('5');app.key('2');assert(app.currentScreen()==Screen::RosarySet);app.key(Enter);
     assert(app.currentScreen()==Screen::RosaryPrayer);finish(app);
 
-    app.key(Enter);app.key('7');app.key('3');app.key(Enter);
+    app.key(Enter);app.key('5');app.key('3');app.key(Enter);
     bool scripture=false,meditation=false;
     for(unsigned i=0;i<250&&app.currentScreen()==Screen::RosaryPrayer;++i){scripture=scripture||d.has("SCRIPTURE");meditation=meditation||d.has("MEDITATION");app.key(Enter);}
     assert(scripture&&meditation&&app.currentScreen()==Screen::RosaryComplete);
 
-    app.key(Enter);app.key('7');app.key('4');app.key(Enter);
+    app.key(Enter);app.key('5');app.key('4');app.key(Enter);
     bool silence=false;
     for(unsigned i=0;i<250&&app.currentScreen()==Screen::RosaryPrayer;++i){silence=silence||d.has("CONTEMPLATIVE SILENCE");app.key(Enter);}
     assert(silence&&app.currentScreen()==Screen::RosaryComplete);

@@ -10,6 +10,10 @@ g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/kanban_test.cpp -o build-h
 ./build-host/kanban_test
 g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/rosary_test.cpp -o build-host/rosary_test
 ./build-host/rosary_test
+g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/daily_review_test.cpp -o build-host/daily_review_test
+./build-host/daily_review_test
+g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/reminders_test.cpp -o build-host/reminders_test
+./build-host/reminders_test
 g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror -Itests/stubs tests/storage_test.cpp -o build-host/storage_test
 g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror -Itests/stubs tests/migration_test.cpp -o build-host/migration_test
 storage_test_path="$PWD/build-host/storage_test"
