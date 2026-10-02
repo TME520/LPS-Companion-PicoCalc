@@ -1,3 +1,14 @@
+# Validation v1.11 — 2 October 2026
+
+- All nine host test suites pass with C++17 and warnings treated as errors.
+- Timer tests cover 5/15/30-minute durations, normal colour at 01:00, red at 00:59, pause/resume, completion, cancellation, no save writes and item 10 navigation.
+- The actual PicoCalc hardware adapter compiles against the existing host hardware/FatFs stubs.
+- The terminal desktop build compiles with warnings treated as errors and now ticks while waiting for input.
+- Countdown on PicoCalc uses a 4× scaled bitmap font, centred at 160×64 pixels, with palette foreground or red.
+- ARM toolchain unavailable in this environment: no UF2 generated. Physical display, timing and keyboard operation still require PicoCalc testing.
+
+## Earlier validation (historical)
+
 # Build validation — v1.8, 22 September 2026
 
 Completed:

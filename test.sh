@@ -23,3 +23,5 @@ storage_test_dir="$(mktemp -d)"
 trap 'rm -rf -- "$storage_test_dir"' EXIT
 (cd "$storage_test_dir" && "$storage_test_path")
 (cd "$storage_test_dir" && "$migration_test_path" "$legacy_fixture_path")
+g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/timer_test.cpp -o build-host/timer_test
+./build-host/timer_test

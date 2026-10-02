@@ -49,12 +49,12 @@ void checkMenus(Display& d,App& a,bool fr){
     assert(d.has(12,fr?"6  Revue journalière":"6  Daily review"));
     assert(d.has(13,"7  Config"));
     assert(d.has(14,fr?"8  Rappels":"8  Reminders"));
-    assert(d.has(15,fr?"9  Terminer le jour":"9  Close the day"));
+    assert(d.has(16,fr?"10 Terminer le jour":"10 Close the day"));
     const char* footer=d.rows[19].data();char desired[24];displayText(fr?"Entrée":"Enter",desired,sizeof desired);const char* key=std::strstr(footer,desired);
     assert(key&&d.bold[19][unsigned(key-footer)]);
     if(fr){char back[24];displayText("Retour",back,sizeof back);const char* plain=std::strstr(footer,back);assert(plain);for(unsigned i=0;i<std::strlen(back);++i)assert(!d.bold[19][unsigned(plain-footer)+i]);}
     assert(d.has(17,fr?"Jour précédent":"Previous day"));
-    assert(d.has(0,"v1.10.2    2026-09-17"));
+    assert(d.has(0,"v1.11    2026-09-17"));
     a.key('0');assert(d.has(3,"DATE"));assert(d.has(6,"2026-09-17"));
     assert(d.has(9,fr?"Calendrier":"Calendar"));a.key(Escape);
     a.key('1');assert(d.has(3,fr?"ACTIVITÉS":"ACTIVITIES"));assert(d.has(6,fr?"Régime":"Diet"));
@@ -64,7 +64,7 @@ void checkMenus(Display& d,App& a,bool fr){
     assert(d.has(6,fr?"Attendu":"Expected"));assert(d.has(9,fr?"Effectif":"Actual"));
     a.key('0');a.key(Enter);assert(d.has(17,fr?"Poids invalide":"Invalid weight"));a.key(Escape);
     a.key('4');assert(a.currentScreen()==Screen::Kanban);assert(d.has(3,fr?"À FAIRE":"TODO"));a.key(Escape);
-    a.key('9');assert(d.has(3,fr?"TERMINER LE JOUR":"CLOSE THE DAY"));a.key(Escape);
+    a.key('9');a.key(Escape);a.key(Up);a.key(Enter);assert(d.has(3,fr?"TERMINER LE JOUR":"CLOSE THE DAY"));a.key(Escape);
     a.key('5');assert(a.currentScreen()==Screen::RosaryMode);assert(d.has(3,fr?"MODE DU ROSAIRE":"ROSARY MODE"));
     a.key(Enter);a.key(Enter);assert(a.currentScreen()==Screen::RosaryDecade);a.key(Escape);a.key(Escape);a.key(Escape);
     a.key('7');assert(d.has(6,fr?"1  Langue":"1  Language"));assert(d.has(7,fr?"2  Couleurs":"2  Colors"));assert(d.has(8,fr?"3  Enregistrer":"3  Save"));
@@ -77,7 +77,7 @@ int main(){
       for(unsigned i=0;i<5;++i){activityApp.key(Down);}activityApp.key(Enter);
       assert(activityApp.data().today.flags==uint16_t(1u<<15));assert(activityDisplay.has(10,"Shopping")); }
     Display d;App a(d);a.start();assert(a.data().language==Language::English);checkMenus(d,a,false);
-    a.key(Up);a.key(Up);a.key(Up);a.key(Enter);assert(a.currentScreen()==Screen::Config);
+    a.key(Up);a.key(Up);a.key(Up);a.key(Up);a.key(Enter);assert(a.currentScreen()==Screen::Config);
     a.key(Enter);a.key(Down);a.key(Escape);assert(d.has(6,"English"));
     a.key(Escape);assert(a.data().language==Language::English&&d.writes==0);
     choose(a,Language::French);assert(d.has(6,"Français"));assert(a.data().language==Language::English&&d.writes==0);
@@ -85,7 +85,7 @@ int main(){
     choose(a,Language::French);d.fail=true;a.key('3');assert(a.currentScreen()==Screen::Config);
     assert(a.data().language==Language::English&&d.writes==0&&d.has(17,"Save failed"));
     d.fail=false;a.key('3');assert(a.currentScreen()==Screen::Home&&d.writes==1);
-    assert(a.data().language==Language::French&&d.has(16,"Configuration enregistrée"));
+    assert(a.data().language==Language::French&&d.has(18,"Configuration enregistrée"));
     checkMenus(d,a,true);
     a.key('7');a.key('2');a.key('4');assert(d.shown==Palette::Orange);a.key(Enter);
     assert(a.data().palette==Palette::Orange&&a.currentScreen()==Screen::Home);
@@ -99,15 +99,15 @@ int main(){
     choose(reboot,Language::English);reboot.key('3');
     assert(reboot.data().xp==0&&reboot.data().today.flags==7&&reboot.data().today.number==1);
     assert(std::strcmp(reboot.data().today.note.data(),"My French lesson")==0);
-    reboot.key('9');reboot.key(Enter);assert(d.has(3,"DAY SAVED")&&d.has(8,"NEW KEEPSAKE"));
+    reboot.key('9');reboot.key(Escape);reboot.key(Up);reboot.key(Enter);reboot.key(Enter);assert(d.has(3,"DAY SAVED")&&d.has(8,"NEW KEEPSAKE"));
     assert(d.has(9,"Pocket notebook"));reboot.key(Enter);
     choose(reboot,Language::French);reboot.key('3');
     reboot.key(Left);reboot.key('2');assert(d.has(5,"My French lesson"));reboot.key(Escape);
     auto saved=d.stored;auto writes=d.writes;
-    reboot.key('4');assert(d.has(16,"lecture seule"));reboot.key('5');assert(reboot.currentScreen()==Screen::Home);
+    reboot.key('4');assert(d.has(18,"lecture seule"));reboot.key('5');assert(reboot.currentScreen()==Screen::Home);
     assert(d.writes==writes&&d.stored.bytes==saved.bytes);
     reboot.key(Right);reboot.key('1');d.fail=true;reboot.key('1');assert(d.has(17,"Échec sauvegarde"));
-    d.fail=false;reboot.key('1');reboot.key('2');reboot.key('3');reboot.key(Escape);reboot.key('9');reboot.key(Enter);
+    d.fail=false;reboot.key('1');reboot.key('2');reboot.key('3');reboot.key(Escape);reboot.key('9');reboot.key(Escape);reboot.key(Up);reboot.key(Enter);reboot.key(Enter);
     assert(d.has(3,"JOUR ENREGISTRÉ")&&d.has(9,"Tasse de thé"));reboot.key(Enter);
     assert(reboot.data().language==Language::French);
     // Reject an invalid language even if an attacker/error recomputed the CRC.
@@ -115,7 +115,7 @@ int main(){
     auto crc=crc32(malformed.bytes.data(),malformed.size-4);
     for(unsigned i=0;i<4;++i)malformed.bytes[malformed.size-4+i]=uint8_t(crc>>(8*i));
     State decoded;assert(!decode(malformed.bytes.data(),malformed.size,decoded));
-    d.stored=malformed;App corrupt(d);corrupt.start();assert(d.has(16,"Read error"));
+    d.stored=malformed;App corrupt(d);corrupt.start();assert(d.has(18,"Read error"));
     choose(corrupt,Language::French);corrupt.key('3');assert(d.has(17,"writes blocked"));
     std::puts("PASS: EN/FR menus, all screen widths, accents, save/cancel/failure, reboot, unchanged user data, history, rewards and invalid-language protection.");
 }

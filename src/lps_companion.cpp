@@ -1,5 +1,5 @@
 /*
- LPS Companion - v1.10.2, 2026-09-23.
+ LPS Companion - v1.11, 2026-10-02.
  Screen: 320x320, 8x16 bitmap font, 40 columns x 20 rows.
 
  Desktop build (Fedora/Linux):
@@ -13,7 +13,7 @@
  In this package src/main.cpp supplies the LCD, keyboard and SD implementation.
  Run bash build.sh from the project root to create build/lps_companion.uf2.
  Target: original RP2040 PicoCalc, standalone BOOTSEL firmware.
- v1.2 confirmed on the user's PicoCalc; v1.10.2 needs device testing.
+ v1.2 confirmed on the user's PicoCalc; v1.11 needs device testing.
  The portable application remains independent of the Pico SDK; desktop and
  built-in tests below remain available for checking the UI/state machine.
 
@@ -84,6 +84,7 @@ struct Platform {
     virtual void alert(int x,int y,const char* text)=0;
     // Hardware may override this. Host/test platforms report a healthy battery.
     virtual bool batteryBelow20(){return false;}
+    virtual void largeText(const char* value,bool red){if(red)alert(80,128,value);else text(80,128,value,false);}
     virtual void present()=0;
     // Apply the selected theme before drawing. The desktop implementation may ignore it.
     virtual void setPalette(Palette)=0;
@@ -238,7 +239,7 @@ bool decode(const uint8_t* bytes,std::size_t size,State& out) {
     if(!valid)return false;
     out=s;return true;
 }
-enum class Screen { Home, ReminderPopup, Reminders, ReminderEdit, Date, Activities, Note, Weight, Kanban, TaskEdit, DailyReview, Finish, Reward, Config, Language, Colors,
+enum class Screen { TimerSelect, TimerRunning, TimerComplete, Home, ReminderPopup, Reminders, ReminderEdit, Date, Activities, Note, Weight, Kanban, TaskEdit, DailyReview, Finish, Reward, Config, Language, Colors,
                     RosaryMode, RosarySet, RosaryDecade, RosaryPrayer, RosaryComplete };
 class App {
     Platform& hw;
@@ -267,6 +268,9 @@ class App {
     RosaryMode rosaryMode=RosaryMode::Decade;
     MysterySet rosarySet=MysterySet::Joyful;
     unsigned rosaryDecade=0,rosaryStep=0,rosaryPage=0;
+    uint64_t timerNow=0,timerLast=0,timerRemaining=0;
+    bool timerPaused=false;
+    unsigned timerSeconds()const{return unsigned((timerRemaining+999)/1000);}
     const char* tr(const char* en,const char* fr)const{return state.language==Language::French?fr:en;}
     Palette displayedPalette()const{return screen==Screen::Colors?pendingPalette:state.palette;}
     void say(const char* text){std::snprintf(message.data(),message.size(),"%s",text);}
@@ -540,6 +544,15 @@ class App {
     }
 public:
     explicit App(Platform& platform):hw(platform){}
+    void tick(uint64_t milliseconds){
+        timerNow=milliseconds;
+        if(screen!=Screen::TimerRunning)return;
+        const unsigned before=timerSeconds();
+        if(!timerPaused){const uint64_t elapsed=timerNow-timerLast;timerRemaining=elapsed>=timerRemaining?0:timerRemaining-elapsed;}
+        timerLast=timerNow;
+        if(!timerRemaining){go(Screen::TimerComplete);render();}
+        else if(before!=timerSeconds())render();
+    }
     const State& data()const{return state;}
     Screen currentScreen()const{return screen;}
     const Day& viewedDay()const{
@@ -573,7 +586,7 @@ public:
                 else say(state.count?tr("Oldest saved day","Plus ancien jour conservé"):tr("No archived days","Aucun jour archivé"));
             }
             if(k==Right){daysBack=0;selection=0;page=0;}
-            const unsigned menuCount=daysBack?3:10;
+            const unsigned menuCount=daysBack?3:11;
             if(k==Up)selection=(selection+menuCount-1)%menuCount;
             if(k==Down)selection=(selection+1)%menuCount;
             if(!daysBack&&k=='0'){selection=0;k=Enter;}
@@ -581,13 +594,21 @@ public:
             else if(!daysBack&&k>='1'&&k<='9'){selection=unsigned(k-'0');k=Enter;}
             if((k=='0'||(k>='4'&&k<='9'))&&daysBack)readOnly();
             if(k==Enter){
-                constexpr Screen currentScreens[]={Screen::Date,Screen::Activities,Screen::Note,Screen::Weight,Screen::Kanban,Screen::RosaryMode,Screen::DailyReview,Screen::Config,Screen::Reminders,Screen::Finish};
+                constexpr Screen currentScreens[]={Screen::Date,Screen::Activities,Screen::Note,Screen::Weight,Screen::Kanban,Screen::RosaryMode,Screen::DailyReview,Screen::Config,Screen::Reminders,Screen::TimerSelect,Screen::Finish};
                 constexpr Screen archiveScreens[]={Screen::Activities,Screen::Note,Screen::Weight};
                 const Screen target=daysBack?archiveScreens[selection]:currentScreens[selection];
                 if(target==Screen::Kanban)kanbanColumn=TaskStatus::Todo;
                 if(target==Screen::Reminders)pruneReminders();
                 if(target==Screen::Config){pendingLanguage=state.language;pendingPalette=state.palette;}
                 go(target);}
+        }else if(screen==Screen::TimerSelect){
+            if(k==Up)selection=(selection+2)%3;
+            if(k==Down)selection=(selection+1)%3;
+            if(k==Enter){constexpr unsigned minutes[]={5,15,30};timerRemaining=uint64_t(minutes[selection])*60000;timerLast=timerNow;timerPaused=false;go(Screen::TimerRunning);}
+        }else if(screen==Screen::TimerRunning){
+            if(k==Enter){timerPaused=!timerPaused;timerLast=timerNow;}
+        }else if(screen==Screen::TimerComplete){
+            if(k==Enter)go(Screen::TimerSelect);
         }else if(screen==Screen::Reminders){
             if(k==Up&&state.reminderCount)selection=(selection+state.reminderCount-1)%state.reminderCount;
             else if(k==Down&&state.reminderCount)selection=(selection+1)%state.reminderCount;
@@ -745,16 +766,28 @@ public:
     void render(){
         hw.setPalette(displayedPalette());hw.clear();char b[128];const Day& day=viewedDay();char date[11]{};
         if(validDate(day.date))dateText(day.date,date,sizeof date);else std::snprintf(date,sizeof date,"%s%lu",tr("D","J"),static_cast<unsigned long>(day.number));
-        std::snprintf(b,sizeof b,"LPS COMPANION v1.10.2    %s",date);line(0,b,true);
+        std::snprintf(b,sizeof b,"LPS COMPANION v1.11    %s",date);line(0,b,true);
         std::snprintf(b,sizeof b,tr("%lu XP earned","%lu XP acquis"),static_cast<unsigned long>(state.xp));line(1,b);
         if(daysBack)line(2,tr("ARCHIVED DAY - READ ONLY","JOUR ARCHIVÉ - LECTURE SEULE"));
         if(screen==Screen::Home){
             line(3,daysBack?tr("CLOSED DAY","JOUR TERMINÉ"):tr("TODAY","AUJOURD'HUI"));
             std::snprintf(b,sizeof b,tr("%u/%u activities - %lu XP %s","%u/%u activités - %lu XP %s"),count(day.flags),ActivityCount,static_cast<unsigned long>(points(day)),daysBack?tr("banked","validés"):tr("pending","à valider"));line(4,b);
-            const char* menu[]={"0  Date",tr("1  Activities","1  Activités"),tr("2  Notepad","2  Bloc notes"),tr("3  Weight tracker","3  Suivi du poids"),"4  Kanban",tr("5  Christian Rosary","5  Rosaire chrétien"),tr("6  Daily review","6  Revue journalière"),"7  Config",tr("8  Reminders","8  Rappels"),tr("9  Close the day","9  Terminer le jour")};
-            const unsigned first=daysBack?1:0, total=daysBack?3:10;
+            const char* menu[]={"0  Date",tr("1  Activities","1  Activités"),tr("2  Notepad","2  Bloc notes"),tr("3  Weight tracker","3  Suivi du poids"),"4  Kanban",tr("5  Christian Rosary","5  Rosaire chrétien"),tr("6  Daily review","6  Revue journalière"),"7  Config",tr("8  Reminders","8  Rappels"),tr("9  Timer","9  Minuteur"),tr("10 Close the day","10 Terminer le jour")};
+            const unsigned first=daysBack?1:0, total=daysBack?3:11;
             for(unsigned i=0;i<total;++i)line(6+int(i),menu[first+i],i==selection);
             line(17,tr("<- Previous day   -> Current day","<- Jour précédent   -> Jour actuel"));
+        }else if(screen==Screen::TimerSelect){
+            line(3,tr("TIMER","MINUTEUR"));
+            const char* options[]={"5 minutes","15 minutes","30 minutes"};
+            for(unsigned i=0;i<3;++i)line(6+int(i)*2,options[i],selection==i);
+        }else if(screen==Screen::TimerRunning||screen==Screen::TimerComplete){
+            line(3,tr("TIMER","MINUTEUR"));
+            const unsigned seconds=timerSeconds();std::snprintf(b,sizeof b,"%02u:%02u",seconds/60,seconds%60);
+            hw.largeText(b,seconds<60);
+            if(screen==Screen::TimerComplete)line(14,tr("TIMER FINISHED!","MINUTEUR TERMINÉ !"));
+            else if(timerPaused)line(14,tr("PAUSED","EN PAUSE"));
+            line(17,screen==Screen::TimerComplete?tr("Enter: Again   Esc: Back","Enter: Nouveau   Esc: Retour"):
+                (timerPaused?tr("Enter: Resume   Esc: Cancel","Enter: Reprendre   Esc: Annuler"):tr("Enter: Pause   Esc: Cancel","Enter: Pause   Esc: Annuler")));
         }else if(screen==Screen::ReminderPopup){
             line(3,tr("REMINDERS","RAPPELS"));
             unsigned row=6;for(unsigned i=0;i<state.reminderCount;++i)if(active(state.reminders[i])){
@@ -889,10 +922,11 @@ public:
             for(unsigned i=0;i<6;++i)if(unlocked&(1u<<i)){line(row++,tr("NEW KEEPSAKE","NOUVEAU SOUVENIR"));line(row++,tr(EnglishGifts[i],Gifts[i].name));}
             line(15,tr("Enter: start the new day","Entrée : commencer le nouveau jour"));
         }
-        const int statusRow=screen==Screen::Home?16:17;
-        if(missingStorage)hw.alert(0,statusRow*16,message.data());else line(statusRow,message.data());
+        const int statusRow=screen==Screen::Home?18:((screen==Screen::TimerRunning||screen==Screen::TimerComplete)?16:17);
+        if(missingStorage)hw.alert(0,statusRow*16,message.data());else if(message[0])line(statusRow,message.data());
         if(hw.batteryBelow20())hw.alert(0,18*16,tr("[!] Low battery!","[!] Batterie faible !"));
-        line(19,tr("Up/Down  Enter:OK  Esc:Back","Haut/Bas  Entrée:OK  Échap:Retour"),true);hw.present();
+        if(screen!=Screen::TimerRunning&&screen!=Screen::TimerComplete)line(19,tr("Up/Down  Enter:OK  Esc:Back","Haut/Bas  Entrée:OK  Échap:Retour"),true);
+        hw.present();
     }
 };
 } // namespace lps
@@ -902,6 +936,8 @@ public:
 #include <string>
 #include <iostream>
 #include <unistd.h>
+#include <chrono>
+#include <poll.h>
 class Terminal final:public lps::Platform {
     std::array<std::array<char,41>,20> cells{};
     std::array<bool,20> inverse{};
@@ -947,7 +983,11 @@ public:
     bool exportWeightCsv(const lps::Day&)override{return true;}
 };
 int main(){Terminal terminal;lps::App app(terminal);app.start();std::string s;
-    while(std::getline(std::cin,s)){
+    while(true){
+        app.tick(uint64_t(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count()));
+        pollfd input{STDIN_FILENO,POLLIN,0};
+        if(::poll(&input,1,100)<=0)continue;
+        if(!std::getline(std::cin,s))break;
         if(s=="quit")break;
         if(s.rfind("text ",0)==0){for(unsigned char c:s.substr(5))app.key(c);}
         else if(s=="up")app.key(lps::Up);else if(s=="down")app.key(lps::Down);
@@ -1011,7 +1051,7 @@ int main(){
     nav.key('1');assert(nav.data().today.flags&1);
     nav.key(Right);nav.key(Enter);assert(!(nav.data().today.flags&(1u<<10)));
     nav.key(Escape);nav.key('4');assert(nav.currentScreen()==Screen::Kanban);nav.key(Escape);
-    nav.key('9');assert(nav.currentScreen()==Screen::Finish);
+    nav.key(Escape);nav.key(Up);nav.key(Enter);assert(nav.currentScreen()==Screen::Finish);
     nav.key(Escape);nav.key('7');assert(nav.currentScreen()==Screen::Config);nav.key('2');assert(nav.currentScreen()==Screen::Colors);
     assert(pages.palette==Palette::Green);nav.key(Down);assert(pages.palette==Palette::Blue);nav.key(Escape);assert(pages.palette==Palette::Green);
     nav.key('2');nav.key('1');nav.key(Enter);assert(nav.currentScreen()==Screen::Home&&nav.data().palette==Palette::Red&&pages.palette==Palette::Red);
@@ -1027,17 +1067,17 @@ int main(){
     Blob v4;v4.size=WireV4;std::memcpy(v4.bytes.data(),legacy.bytes.data(),WireV4-4);v4.bytes[4]=4;
     auto v4crc=crc32(v4.bytes.data(),v4.size-4);for(unsigned i=0;i<4;++i)v4.bytes[v4.size-4+i]=uint8_t(v4crc>>(8*i));
     assert(decode(v4.bytes.data(),v4.size,migrated)&&migrated.taskCount==0&&migrated.palette==Palette::Green);
-    Memory missing;missing.noStorage=true;App noCard(missing);noCard.start();assert(std::strstr(missing.rows[16].data(),"Missing SD card"));
+    Memory missing;missing.noStorage=true;App noCard(missing);noCard.start();assert(std::strstr(missing.rows[18].data(),"Missing SD card"));
     Memory battery;battery.lowBattery=true;App lowPower(battery);lowPower.start();assert(battery.alerts[18]&&std::strstr(battery.rows[18].data(),"Low battery"));
     Memory mem;App a(mem);a.start();a.key('1');a.key('1');a.key('2');a.key('3');assert(points(a.data().today)==40);
     a.key('3');assert(points(a.data().today)==20);a.key('9');assert(a.data().today.flags&(1u<<8));
     State before=a.data();mem.fail=true;a.key('4');assert(a.data().today.flags==before.today.flags);mem.fail=false;
     a.key(Escape);a.key('3');for(char c:std::array<char,5>{'1','1','0',',','5'})a.key(c);a.key(Down);for(char c:std::array<char,5>{'1','1','1','.','2'})a.key(c);a.key(Enter);assert(a.data().today.expected==110500&&a.data().today.actual==111200);
     a.key('2');a.key('O');a.key('K');a.key(Enter);assert(std::strcmp(a.data().today.note.data(),"OK")==0);
-    a.key('9');a.key(Enter);assert(a.data().xp==40&&a.data().today.number==2&&a.data().today.flags==0);assert(a.data().history[0].actual==111200);a.key(Enter);assert(a.data().xp==40);
+    a.key(Up);a.key(Enter);a.key(Enter);assert(a.data().xp==40&&a.data().today.number==2&&a.data().today.flags==0);assert(a.data().history[0].actual==111200);a.key(Enter);assert(a.data().xp==40);
     App restored(mem);restored.start();assert(restored.data().xp==40&&restored.data().today.number==2);
     assert(mem.stored.size==WireSize);State decoded;assert(decode(mem.stored.bytes.data(),mem.stored.size,decoded));assert(!decode(mem.stored.bytes.data(),10,decoded));
-    for(int i=0;i<40;++i){restored.key('9');restored.key(Enter);restored.key(Enter);}assert(restored.data().count==31&&restored.data().today.number==42);
+    for(int i=0;i<40;++i){restored.key(Escape);restored.key(Up);restored.key(Enter);restored.key(Enter);restored.key(Enter);}assert(restored.data().count==31&&restored.data().today.number==42);
     mem.stored.bytes[20]^=1;App corrupt(mem);corrupt.start();auto original=mem.stored;corrupt.key('1');corrupt.key('1');assert(corrupt.data().today.flags==0);assert(mem.stored.bytes==original.bytes);
     std::puts("PASS: weights, toggles, bonus, rollback, notes, closure, restore, ring history, CRC, palette preview/persistence, corrupt-save protection and render bounds.");
 }

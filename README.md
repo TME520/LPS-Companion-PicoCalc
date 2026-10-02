@@ -1,4 +1,4 @@
-# LPS-Companion for Clockwork PicoCalc
+# LPS-Companion v1.11
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
@@ -8,7 +8,15 @@ LPS-Companion helps you record daily activities, write a short note, and compare
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries and progress are saved to the SD card.
 
-**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.10.2 adjusts key emphasis and the home screen spacing; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
+**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.11 adds the countdown timer; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
+
+## Changes in v1.11
+
+- **9 TIMER / MINUTEUR** offers 5, 15 or 30 minutes.
+- The centred countdown uses 160 × 64 pixels and turns red at **00:59**.
+- **Enter** pauses/resumes; **Esc** cancels. At zero, a completion screen remains until acknowledged.
+- **10 Close the day / Terminer le jour** is selected with the arrows and **Enter** (or **Up** from the first Home entry).
+- The timer uses elapsed monotonic time, requires no SD writes and has no history. Cancelling or restarting discards it.
 
 ## Changes in v1.10.2
 

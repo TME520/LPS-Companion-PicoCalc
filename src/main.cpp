@@ -53,6 +53,7 @@ class PicoCalc final:public lps::Platform {
     // A full year of the compact CSV is below 16 KiB.  Keeping this buffer in
     // the hardware adapter avoids a large stack allocation on the RP2040.
     std::array<char,16384> csv{};
+    std::array<char,6> largeValue{};bool largeRed=false,hadLarge=false;
     int foreground=0xe4eed5,background=0x18291c,selected=0xbad99f;
     static bool put(FIL& f,const char* text){UINT written=0;const auto n=std::strlen(text);return f_write(&f,text,n,&written)==FR_OK&&written==n;}
     static bool escaped(FIL& f,const char* text){
@@ -74,7 +75,7 @@ public:
         adc_init();adc_gpio_init(29);
         if(sd_init_driver())mounted=f_mount(&sd_get_by_num(0)->fatfs,"0:",1)==FR_OK;
     }
-    void clear()override{for(auto& row:frame)row.fill(' ');reverse.fill(false);alertRow.fill(false);for(auto& row:bold)row.fill(false);}
+    void clear()override{largeValue.fill(0);for(auto& row:frame)row.fill(' ');reverse.fill(false);alertRow.fill(false);for(auto& row:bold)row.fill(false);}
     void setPalette(lps::Palette palette)override{
         const int oldForeground=foreground,oldBackground=background,oldSelected=selected;
         switch(palette){
@@ -108,7 +109,11 @@ public:
         else if(millivolts>3550)lowBattery=false;
         return lowBattery;
     }
+    void largeText(const char* value,bool red)override{
+        std::snprintf(largeValue.data(),largeValue.size(),"%s",value);largeRed=red;
+    }
     void present()override{
+        if(hadLarge||largeValue[0])first=true;
         // Upstream font is 8x12. Pad two rows above/below to make 8x16 cells.
         // One 640-byte monochrome line buffer, not a 307,200-byte framebuffer.
         std::array<unsigned char,640> bitmap{};
@@ -140,6 +145,20 @@ public:
             const int fg=alertRow[row]?0xf05252:(reverse[row]?background:foreground),bg=reverse[row]?selected:background;
             draw_bitmap_spi(0,row*16,320,16,1,fg,bg,bitmap.data());
         }
+        if(largeValue[0]){
+            // 4x nearest-neighbour font: 160x64, centred; only 1280 bytes.
+            std::array<unsigned char,1280> largeBitmap{};
+            for(int c=0;c<5;++c)for(int y=0;y<12;++y){
+                const unsigned glyph=MainFont[4+(unsigned(largeValue[c])-32)*12+y];
+                for(int x=0;x<8;++x)if(glyph&(0x80u>>x))
+                    for(int dy=0;dy<4;++dy)for(int dx=0;dx<4;++dx){
+                        const int px=c*32+x*4+dx,py=(y+2)*4+dy;
+                        largeBitmap[py*20+px/8]|=static_cast<unsigned char>(0x80u>>(px%8));
+                    }
+            }
+            draw_bitmap_spi(80,112,160,64,1,largeRed?0xf05252:foreground,background,largeBitmap.data());
+        }
+        hadLarge=largeValue[0]!=0;
         previous=frame;oldReverse=reverse;oldAlertRow=alertRow;oldBold=bold;first=false;
     }
     lps::LoadResult load(uint8_t* bytes,size_t cap,size_t& size)override{
@@ -245,5 +264,5 @@ int main(){
     hardware.init();
     static lps::App app(hardware);
     app.start();
-    while(true){int k=keymap(read_i2c_kbd());if(k>=0)app.key(k);sleep_ms(5);}
+    while(true){app.tick(time_us_64()/1000);int k=keymap(read_i2c_kbd());if(k>=0)app.key(k);sleep_ms(5);}
 }

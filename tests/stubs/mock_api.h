@@ -36,3 +36,5 @@ inline void gpio_set_dir(int,int){}
 inline void gpio_put(int,int){}
 inline int read_i2c_kbd(){return -1;}
 inline void sleep_ms(int){}
+
+inline uint64_t time_us_64(){return 0;}
