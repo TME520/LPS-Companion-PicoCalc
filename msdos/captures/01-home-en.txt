@@ -1,0 +1,20 @@
+LPS COMPANION v1.11    2026-09-17       
+0 XP earned                             
+                                        
+TODAY                                   
+0/16 activities - 0 XP pending          
+                                        
+0  Date                                 
+1  Activities                           
+2  Notepad                              
+3  Weight tracker                       
+4  Kanban                               
+5  Christian Rosary                     
+6  Daily review                         
+7  Config                               
+8  Reminders                            
+9  Timer                                
+10 Close the day                        
+<- Previous day   -> Current day        
+                                        
+Up/Down  Enter:OK  Esc:Back             

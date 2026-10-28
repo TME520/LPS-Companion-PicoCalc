@@ -1,0 +1,20 @@
+LPS COMPANION v1.11    2026-09-17       
+0 XP earned                             
+                                        
+LANGUAGE                                
+                                        
+                                        
+1  English                              
+2  Francais                             
+                                        
+                                        
+Enter: select / Esc: back               
+Then Save in Configuration.             
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+Up/Down  Enter:OK  Esc:Back             

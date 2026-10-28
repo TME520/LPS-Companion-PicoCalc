@@ -1,0 +1,10 @@
+*.o
+*.err
+*.obj
+lpscomp-host
+tests/test_storage
+tools/capture_drive
+dosbox-drive/LPS/SAVE_*.BIN
+dosbox-drive/LPS/EXPORT/*
+dosbox-drive/LPS/WEIGHTS/*
+!dosbox-drive/LPS/EXPORT/.keep

@@ -1,0 +1,20 @@
+LPS COMPANION v1.11    2026-09-17       
+0 XP earned                             
+                                        
+KANBAN  < TODO >  (0)                   
+                                        
+                                        
+No tasks. Press N to create one.        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+                                        
+N New  Enter Edit  Del Delete           
+F1 TODO  F2 DOING  F3 DONE              
+F4 Up F5 Down  <- -> Columns            
+                                        
+                                        
+Up/Down  Enter:OK  Esc:Back             
