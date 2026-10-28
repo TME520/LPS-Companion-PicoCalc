@@ -1,20 +1,20 @@
 *LPS COMPANION v1.11    2026-09-18       
  40 XP earned                            
                                          
- TODAY                                   
- 0/16 activities - 0 XP pending          
+ CLOSE THE DAY?                          
                                          
-*0  Date                                 
- 1  Activities                           
- 2  Notepad                              
- 3  Weight tracker                       
- 4  Kanban                               
- 5  Christian Rosary                     
- 6  Daily review                         
- 7  Config                               
- 8  Reminders                            
- 9  Timer                                
- 10 Close the day                        
- <- Previous day   -> Current day        
+                                         
+ Activities: 0                           
+                                         
+ Variety bonus: 0 XP                     
+                                         
+ Total : +0 XP                           
+                                         
+                                         
+ Enter: save and advance                 
+                                         
+ An empty day has no penalty.            
+                                         
+ Saving...                               
                                          
 *Up/Down  Enter:OK  Esc:Back             

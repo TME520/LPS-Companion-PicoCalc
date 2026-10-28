@@ -1,20 +1,20 @@
 *LPS COMPANION v1.11    2026-09-17       
  0 XP earned                             
                                          
- TODAY                                   
- 3/16 activities - 40 XP pending         
+ ACTIVITIES                      1/2     
                                          
-*0  Date                                 
- 1  Activities                           
- 2  Notepad                              
- 3  Weight tracker                       
- 4  Kanban                               
- 5  Christian Rosary                     
- 6  Daily review                         
- 7  Config                               
- 8  Reminders                            
- 9  Timer                                
- 10 Close the day                        
- <- Previous day   -> Current day        
+  1  Walk                     [x]        
+  2  Diet                     [x]        
+* 3  Bible                    [x]        
+  4  Mass                     [ ]        
+  5  Work                     [ ]        
+  6  Project                  [ ]        
+  7  Nap                      [ ]        
+  8  Gurumed                  [ ]        
+  9  Illness                  [ ]        
+ 10  Day off                  [ ]        
+ Enter: toggle  1-9: keys  <- -> pages   
+                                         
+ Saving...                               
                                          
 *Up/Down  Enter:OK  Esc:Back             

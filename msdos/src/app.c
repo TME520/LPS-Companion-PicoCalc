@@ -37,6 +37,7 @@ struct App {
     unsigned rosaryDecade, rosaryStep, rosaryPage;
     lps_tick_t timerNow, timerLast, timerRemaining;
     int timerPaused;
+    int dirty; /* RAM changed; disk SAVE pending */
 };
 
 static const char *tr(const App *a, const char *en, const char *fr){
@@ -67,12 +68,31 @@ static void cell_slice(const char *text, unsigned first, unsigned count, char *o
     out[n]=0;
 }
 
+/* Apply edit in RAM only — disk writes go through flush_save (slow on 8088 HDD). */
 static int commit(App *a, const State *candidate){
     if(a->daysBack){ read_only(a); return 0; }
     if(a->blocked){ say(a, tr(a,"Unreadable save: writes blocked","Sauvegarde illisible : ecriture bloquee")); return 0; }
-    encode_state(candidate,&g_blob);
-    if(!a->hw->save(a->hw,g_blob.bytes,g_blob.size)){ say(a, tr(a,"Save failed: restart device","Echec sauvegarde : redemarrer")); return 0; }
-    a->state=*candidate; return 1;
+    a->state=*candidate;
+    a->dirty=1;
+    return 1;
+}
+
+/* Persist dirty state: one A/B slot, with visible status. */
+static int flush_save(App *a){
+    if(!a->dirty) return 1;
+    if(a->blocked){ say(a, tr(a,"Unreadable save: writes blocked","Sauvegarde illisible : ecriture bloquee")); return 0; }
+    if(a->missingStorage){ say(a, tr(a,"No storage","Pas de stockage")); return 0; }
+    say(a, tr(a,"Saving...","Sauvegarde..."));
+    app_render(a);
+    encode_state(&a->state, &g_blob);
+    if(!a->hw->save(a->hw, g_blob.bytes, g_blob.size)){
+        say(a, tr(a,"Save failed: restart device","Echec sauvegarde : redemarrer"));
+        app_render(a);
+        return 0;
+    }
+    a->dirty=0;
+    say(a, tr(a,"Saved","Enregistre"));
+    return 1;
 }
 
 static unsigned tasks_in(const App *a, int status){
@@ -237,6 +257,7 @@ void app_init(App *app, Platform *hw){
     app->editingReminder=REMINDER_CAPACITY;
     app->editedTask=TASK_CAPACITY;
     app->kanbanColumn=TASK_TODO;
+    app->dirty=0;
 }
 const State *app_state(const App *app){ return &app->state; }
 enum Screen app_screen(const App *app){ return (enum Screen)app->screen; }
@@ -253,7 +274,7 @@ void app_start(App *app){
     else if(r==LOAD_ERROR || (r==LOAD_OK && !decode_state(g_blob.bytes,n,&app->state))){
         app->blocked=1; say(app, tr(app,"Read error: save protected","Erreur lecture : sauvegarde protegee"));
     }
-    if(!app->blocked){ prune_reminders(app); if(active_reminders(app)) app->screen=SCR_REMINDER_POPUP; }
+    if(!app->blocked){ prune_reminders(app); if(app->dirty) flush_save(app); if(active_reminders(app)) app->screen=SCR_REMINDER_POPUP; }
     app_render(app);
 }
 
@@ -276,11 +297,21 @@ void app_tick(App *app, lps_tick_t ms){
 void app_key(App *a, int k){
     if(k==KEY_ESCAPE){
         int target=SCR_HOME;
+        int from=a->screen;
         if(a->screen==SCR_LANGUAGE||a->screen==SCR_COLORS) target=SCR_CONFIG;
         else if(a->screen==SCR_REMINDER_EDIT) target=SCR_REMINDERS;
         else if(a->screen==SCR_TASK_EDIT) target=SCR_KANBAN;
         else if(a->screen==SCR_ROSARY_SET) target=SCR_ROSARY_MODE;
         else if(a->screen==SCR_ROSARY_DECADE) target=SCR_ROSARY_SET;
+        /* Persist when leaving an editor back to Home (date/activities/note/...). */
+        if(target==SCR_HOME && a->dirty
+           && (from==SCR_DATE||from==SCR_ACTIVITIES||from==SCR_NOTE||from==SCR_WEIGHT
+               ||from==SCR_KANBAN||from==SCR_REMINDERS||from==SCR_CONFIG
+               ||from==SCR_COLORS||from==SCR_LANGUAGE||from==SCR_DAILY_REVIEW
+               ||from==SCR_ROSARY_MODE||from==SCR_ROSARY_COMPLETE||from==SCR_FINISH
+               ||from==SCR_REWARD||from==SCR_TIMER_SELECT)){
+            flush_save(a);
+        }
         go(a,target); app_render(a); return;
     }
     a->message[0]=0;
@@ -354,7 +385,7 @@ void app_key(App *a, int k){
         if(k==KEY_ENTER){ Date d;
             g_scratch=a->state;
             if(!parse_date(a->dateDraft,&d)) say(a,tr(a,"Invalid date: YYYY-MM-DD, 2000-2099","Date invalide : AAAA-MM-JJ, 2000-2099"));
-            else { g_scratch.today.date=d; if(commit(a,&g_scratch)) go(a,SCR_HOME); }
+            else { g_scratch.today.date=d; if(commit(a,&g_scratch)){ flush_save(a); go(a,SCR_HOME); } }
         }else {
             int dk=azerty_digit(k);
             if((dk>='0'&&dk<='9')||dk=='-'||k==KEY_BACKSPACE||k==127) edit_buf(a->dateDraft,sizeof(a->dateDraft), (k==KEY_BACKSPACE||k==127)?k:dk);
@@ -377,7 +408,7 @@ void app_key(App *a, int k){
         }
     }else if(a->screen==SCR_NOTE){
         if(a->daysBack){ if(k==KEY_ENTER) go(a,SCR_HOME); else read_only(a); }
-        else if(k==KEY_ENTER){ g_scratch=a->state; memcpy(g_scratch.today.note,a->draft,NOTE_LENGTH+1); if(commit(a,&g_scratch)) go(a,SCR_HOME); }
+        else if(k==KEY_ENTER){ g_scratch=a->state; memcpy(g_scratch.today.note,a->draft,NOTE_LENGTH+1); if(commit(a,&g_scratch)){ flush_save(a); go(a,SCR_HOME); } }
         else edit_buf(a->draft,sizeof(a->draft),k);
     }else if(a->screen==SCR_WEIGHT){
         if(a->daysBack){ if(k==KEY_ENTER) go(a,SCR_HOME); else read_only(a); }
@@ -385,7 +416,7 @@ void app_key(App *a, int k){
         else if(k==KEY_ENTER){ g_scratch=a->state;
             if(!parse_weight(a->weights[0],&g_scratch.today.expected)||!parse_weight(a->weights[1],&g_scratch.today.actual))
                 say(a,tr(a,"Invalid weight (example: 110.500)","Poids invalide (exemple : 110,500)"));
-            else if(commit(a,&g_scratch)) go(a,SCR_HOME);
+            else if(commit(a,&g_scratch)){ flush_save(a); go(a,SCR_HOME); }
         }else { int dk=azerty_digit(k); if((dk>='0'&&dk<='9')||dk=='.'||dk==','||k==KEY_BACKSPACE||k==127) edit_buf(a->weights[a->field],8,(k==KEY_BACKSPACE||k==127)?k:dk); }
     }else if(a->screen==SCR_KANBAN){
         unsigned n=tasks_in(a,a->kanbanColumn); if(n && a->selection>=n) a->selection=n-1;
@@ -433,7 +464,7 @@ void app_key(App *a, int k){
             if(a->selection==0) go(a,SCR_LANGUAGE);
             else if(a->selection==1) go(a,SCR_COLORS);
             else { g_scratch=a->state; g_scratch.language=(uint8_t)a->pendingLanguage;
-                if(commit(a,&g_scratch)){ go(a,SCR_HOME); say(a,tr(a,"Configuration saved","Configuration enregistree")); }}
+                if(commit(a,&g_scratch)){ flush_save(a); go(a,SCR_HOME); say(a,tr(a,"Configuration saved","Configuration enregistree")); }}
         }
     }else if(a->screen==SCR_LANGUAGE){
         if(k==KEY_UP||k==KEY_DOWN) a->selection=1-a->selection;
@@ -445,7 +476,7 @@ void app_key(App *a, int k){
         if(k>='1'&&k<='5') a->selection=(unsigned)(k-'1');
         a->pendingPalette=(int)a->selection;
         if(k==KEY_ENTER){ g_scratch=a->state; g_scratch.palette=(uint8_t)a->pendingPalette;
-            if(commit(a,&g_scratch)){ go(a,SCR_HOME); say(a,tr(a,"Color saved","Couleur enregistree")); }}
+            if(commit(a,&g_scratch)){ flush_save(a); go(a,SCR_HOME); say(a,tr(a,"Color saved","Couleur enregistree")); }}
     }else if(a->screen==SCR_ROSARY_MODE){
         if(k==KEY_UP) a->selection=(a->selection+3)%4;
         if(k==KEY_DOWN) a->selection=(a->selection+1)%4;
@@ -493,7 +524,7 @@ void app_key(App *a, int k){
                 if(!a->hw->export_ics(a->hw,&a->state.today,a->state.xp+gain,gain,a->state.language)){ say(a,tr(a,"ICS export failed; day remains open","Export ICS echoue ; journee reste ouverte")); app_render(a); return; }
                 g_scratch.xp+=gain; memset(&g_scratch.today,0,sizeof(Day)); g_scratch.today.number=a->state.today.number+1; g_scratch.today.date=tomorrow; g_scratch.today.expected=-1; g_scratch.today.actual=-1;
                 for(i=0;i<6;i++) if(a->state.xp<GIFT_XP[i] && g_scratch.xp>=GIFT_XP[i]) won|=(uint8_t)(1u<<i);
-                if(commit(a,&g_scratch)){ a->earned=gain; a->unlocked=won; go(a,SCR_REWARD); }
+                if(commit(a,&g_scratch) && flush_save(a)){ a->earned=gain; a->unlocked=won; go(a,SCR_REWARD); }
             }
         }
     }else if(a->screen==SCR_REWARD && k==KEY_ENTER) go(a,SCR_HOME);
@@ -710,3 +741,6 @@ void app_render(App *a){
         line(a,19,tr(a,"Up/Down  Enter:OK  Esc:Back","Haut/Bas  Entree:OK  Echap:Retour"),1);
     a->hw->present(a->hw);
 }
+
+int app_flush_save(App *app){ return flush_save(app); }
+int app_is_dirty(const App *app){ return app->dirty; }

@@ -4,7 +4,7 @@
  TODAY                                   
  3/16 activities - 40 XP pending         
                                          
- 0  Date                                 
+*0  Date                                 
  1  Activities                           
  2  Notepad                              
  3  Weight tracker                       
@@ -14,7 +14,7 @@
  7  Config                               
  8  Reminders                            
  9  Timer                                
-*10 Close the day                        
+ 10 Close the day                        
  <- Previous day   -> Current day        
                                          
 *Up/Down  Enter:OK  Esc:Back             

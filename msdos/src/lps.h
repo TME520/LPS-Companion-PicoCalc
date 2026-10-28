@@ -156,6 +156,8 @@ void app_render(App *app);
 const State *app_state(const App *app);
 enum Screen app_screen(const App *app);
 const Day *app_viewed_day(const App *app);
+int app_flush_save(App *app);
+int app_is_dirty(const App *app);
 
 /* paths helpers */
 void lps_set_data_dir(const char *dir);

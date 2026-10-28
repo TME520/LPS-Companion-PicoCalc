@@ -1,13 +1,12 @@
 /* Dual SAVE_A.BIN / SAVE_B.BIN with LPR1 magic, generation, CRC (firmware parity).
- * Large buffers live in BSS and are shared — DOS small-model DGROUP is 64K. */
+ * Large buffers in BSS. Write path: ONE slot only, no verify-read (slow on 8088 HDD). */
 #include "lps.h"
 #include <stdio.h>
 #include <string.h>
 
 static uint8_t g_rec_a[RECORD_SIZE];
 static uint8_t g_rec_b[RECORD_SIZE];
-/* decode_state uses its own BSS scratch; we only need a State* out target.
- * Pass the same scratch via a tiny wrapper that reuses app-visible decode. */
+
 static void put32(uint8_t *p, uint32_t v){ p[0]=(uint8_t)v; p[1]=(uint8_t)(v>>8); p[2]=(uint8_t)(v>>16); p[3]=(uint8_t)(v>>24); }
 static uint32_t get32(const uint8_t *p){ return (uint32_t)p[0]|((uint32_t)p[1]<<8)|((uint32_t)p[2]<<16)|((uint32_t)p[3]<<24); }
 
@@ -65,9 +64,9 @@ enum LoadResult save_load_ab(const char *lps_dir, uint8_t *payload, size_t cap, 
 
 int save_write_ab(const char *lps_dir, const uint8_t *payload, size_t size, uint32_t *generation, int *active){
     char path[200]; FILE *f; unsigned slot; size_t n;
-    size_t cs=0, ps=0; uint32_t g=0;
     if(size!=WIRE_SIZE) return 0;
     if(*generation==0xfffffffful) return 0;
+    /* Alternate ONE slot per commit (Companion parity) — never write A and B together. */
     slot = (*active==0)?1u:0u;
     memset(g_rec_a,0,sizeof(g_rec_a));
     put32(g_rec_a, SAVE_MAGIC);
@@ -78,9 +77,8 @@ int save_write_ab(const char *lps_dir, const uint8_t *payload, size_t size, uint
     lps_path_join(path,sizeof(path),lps_dir, slot? "SAVE_B.BIN":"SAVE_A.BIN");
     f=fopen(path,"wb"); if(!f) return 0;
     n=fwrite(g_rec_a,1,RECORD_SIZE,f);
+    /* fclose flushes; no verify-read (was encode+CRC + full read+decode on slow HDD). */
     if(n!=RECORD_SIZE || fclose(f)!=0){ remove(path); return 0; }
-    if(read_record(path,g_rec_b,&cs)!=1 || !record_valid(g_rec_b,cs,&ps,&g) || ps!=size || memcmp(g_rec_b,g_rec_a,RECORD_SIZE)!=0)
-        return 0;
     *active=(int)slot; (*generation)++;
     return 1;
 }

@@ -66,7 +66,11 @@ int main(int argc, char **argv){
         app_tick(app, plat_dos_millis());
         k=plat_dos_get_key();
         if(k>=0){
-            if(app_screen(app)==SCR_HOME && (k=='q'||k=='Q')) break;
+            if(app_screen(app)==SCR_HOME && (k=='q'||k=='Q')){
+                app_flush_save(app);
+                app_render(app);
+                break;
+            }
             app_key(app,k);
         }
     }

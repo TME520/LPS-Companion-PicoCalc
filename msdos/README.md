@@ -88,6 +88,15 @@ first commit. Fix: all large SAVE/decode buffers are **static BSS**, shared wher
 safe; keyboard is pure **int 16h** (no `conio`, no mouse int 33h); AZERTY
 unshifted top-row maps to digits for Date/Weight.
 
+
+### Deferred SAVE (Book 8088 HDD)
+
+Edits (date, activities, note, kanban, …) update **RAM only** and set a dirty
+flag. Disk write of one `SAVE_A`/`SAVE_B` slot (~4.6 KB) happens on:
+Esc back to Home (if dirty), confirming Date/Note/Weight/Config, Close the day,
+and Quit (`Q`). Status shows `Saving...` / `Saved`. Post-write verify-read was
+removed (too slow on 8088 + tiny HDD).
+
 ### What to try on the Book
 
 1. Copy **`HELLO.EXE`** and **`LPSCOMP.EXE`** (this build) to the HDD or a floppy.
