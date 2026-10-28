@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <dos.h>
-#include <conio.h>
 
 typedef struct {
     Platform iface;
@@ -219,17 +218,27 @@ Platform *plat_dos_create(void){
 }
 
 int plat_dos_get_key(void){
-    int ch;
-    if(!kbhit()) return -1;
-    ch=getch();
-    if(ch==0 || ch==0xE0){
-        ch=getch();
-        switch(ch){
+    /* Pure BIOS int 16h — no conio, no int 33h mouse. */
+    union REGS r;
+    unsigned ascii, scan;
+    /* Keyboard buffer empty? BIOS data area 0040:001A head, 0040:001C tail. */
+    {
+        unsigned far *head = (unsigned far *)MK_FP(0x40, 0x1A);
+        unsigned far *tail = (unsigned far *)MK_FP(0x40, 0x1C);
+        if(*head == *tail) return -1;
+    }
+    r.h.ah = 0x00; /* consume one key */
+    int86(0x16, &r, &r);
+    ascii = r.h.al;
+    scan = r.h.ah;
+    if(ascii == 0 || ascii == 0xE0){
+        switch(scan){
         case 72: return KEY_UP;
         case 80: return KEY_DOWN;
         case 75: return KEY_LEFT;
         case 77: return KEY_RIGHT;
         case 83: return KEY_DELETE;
+        case 14: return KEY_BACKSPACE; /* some BIOS */
         case 59: return KEY_F1;
         case 60: return KEY_F2;
         case 61: return KEY_F3;
@@ -238,11 +247,16 @@ int plat_dos_get_key(void){
         default: return -1;
         }
     }
-    if(ch==13) return KEY_ENTER;
-    if(ch==27) return KEY_ESCAPE;
-    if(ch==8) return KEY_BACKSPACE;
-    if(ch==9) return KEY_TAB;
-    if(ch>=32 && ch<=126) return ch;
+    if(ascii == 13) return KEY_ENTER;
+    if(ascii == 27) return KEY_ESCAPE;
+    if(ascii == 8 || ascii == 127) return KEY_BACKSPACE;
+    if(ascii == 9) return KEY_TAB;
+    /* AZERTY top-row without Shift (CP437): map to digits for Date/Weight */
+    if(ascii == 130) return '2'; /* e acute */
+    if(ascii == 138) return '7'; /* e grave */
+    if(ascii == 135) return '9'; /* c cedilla */
+    if(ascii == 133) return '0'; /* a grave */
+    if(ascii >= 32 && ascii <= 126) return (int)ascii;
     return -1;
 }
 

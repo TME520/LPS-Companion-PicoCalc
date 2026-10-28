@@ -148,6 +148,22 @@ static void go(App *a, int s){
         date_text(d,a->dateDraft,sizeof(a->dateDraft));
     }
 }
+/* AZERTY (FR) unshifted top-row → digit, so Date/Weight work without Shift. */
+static int azerty_digit(int key){
+    switch(key){
+    case '&': return '1';
+    case 130: return '2'; /* é */
+    case '"': return '3';
+    case '\'': return '4';
+    case '(': return '5';
+    /* '-' is ASCII hyphen AND AZERTY unshifted 6 — keep as '-' for ISO dates */
+    case 138: return '7'; /* è */
+    case '_': return '8';
+    case 135: return '9'; /* ç */
+    case 133: return '0'; /* à */
+    default: return key;
+    }
+}
 static void edit_buf(char *value, size_t cap, int key){
     size_t len=strlen(value);
     if(key==KEY_BACKSPACE||key==127){ if(len) value[len-1]=0; }
@@ -339,7 +355,11 @@ void app_key(App *a, int k){
             g_scratch=a->state;
             if(!parse_date(a->dateDraft,&d)) say(a,tr(a,"Invalid date: YYYY-MM-DD, 2000-2099","Date invalide : AAAA-MM-JJ, 2000-2099"));
             else { g_scratch.today.date=d; if(commit(a,&g_scratch)) go(a,SCR_HOME); }
-        }else if((k>='0'&&k<='9')||k=='-'||k==KEY_BACKSPACE||k==127) edit_buf(a->dateDraft,sizeof(a->dateDraft),k);
+        }else {
+            int dk=azerty_digit(k);
+            if((dk>='0'&&dk<='9')||dk=='-'||k==KEY_BACKSPACE||k==127) edit_buf(a->dateDraft,sizeof(a->dateDraft), (k==KEY_BACKSPACE||k==127)?k:dk);
+            /* other keys ignored — never freeze */
+        }
     }else if(a->screen==SCR_ACTIVITIES){
         unsigned remaining=ACTIVITY_COUNT-a->page*PAGE_SIZE;
         unsigned rows=remaining<PAGE_SIZE?remaining:PAGE_SIZE;
@@ -347,11 +367,13 @@ void app_key(App *a, int k){
         else if(k==KEY_UP) a->selection=(a->selection+rows-1)%rows;
         else if(k==KEY_DOWN) a->selection=(a->selection+1)%rows;
         else if(a->daysBack && (k==KEY_ENTER||(k>='1'&&k<='9'))) read_only(a);
-        else if(k==KEY_ENTER||(k>='1'&&k<='9')){
-            unsigned id=k==KEY_ENTER?a->page*PAGE_SIZE+a->selection:(unsigned)(k-'1');
-            g_scratch=a->state;
-            g_scratch.today.flags^=(uint16_t)(1u<<id);
-            if(commit(a,&g_scratch)){ a->page=id/PAGE_SIZE; a->selection=id%PAGE_SIZE; }
+        else if(k==KEY_ENTER||k==' '||(k>='1'&&k<='9')){
+            unsigned id=k==KEY_ENTER||k==' '?a->page*PAGE_SIZE+a->selection:(unsigned)(azerty_digit(k)-'1');
+            if(id<ACTIVITY_COUNT){
+                g_scratch=a->state;
+                g_scratch.today.flags^=(uint16_t)(1u<<id);
+                if(commit(a,&g_scratch)){ a->page=id/PAGE_SIZE; a->selection=id%PAGE_SIZE; }
+            }
         }
     }else if(a->screen==SCR_NOTE){
         if(a->daysBack){ if(k==KEY_ENTER) go(a,SCR_HOME); else read_only(a); }
@@ -364,7 +386,7 @@ void app_key(App *a, int k){
             if(!parse_weight(a->weights[0],&g_scratch.today.expected)||!parse_weight(a->weights[1],&g_scratch.today.actual))
                 say(a,tr(a,"Invalid weight (example: 110.500)","Poids invalide (exemple : 110,500)"));
             else if(commit(a,&g_scratch)) go(a,SCR_HOME);
-        }else if((k>='0'&&k<='9')||k=='.'||k==','||k==KEY_BACKSPACE||k==127) edit_buf(a->weights[a->field],8,k);
+        }else { int dk=azerty_digit(k); if((dk>='0'&&dk<='9')||dk=='.'||dk==','||k==KEY_BACKSPACE||k==127) edit_buf(a->weights[a->field],8,(k==KEY_BACKSPACE||k==127)?k:dk); }
     }else if(a->screen==SCR_KANBAN){
         unsigned n=tasks_in(a,a->kanbanColumn); if(n && a->selection>=n) a->selection=n-1;
         if(k==KEY_LEFT||k==KEY_RIGHT){

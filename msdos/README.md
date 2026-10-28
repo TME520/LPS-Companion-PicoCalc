@@ -78,6 +78,16 @@ Fixes in current build:
 - Soft FP (`-fpc`) — no 8087 required
 - Ship **`HELLO.EXE`**: tiny BIOS-only smoke test (prints mode / equipment)
 
+
+### Keyboard freeze on Date / Activities (fixed)
+
+Second Book 8088 bug: first save (confirm date or toggle activity) hung the UI.
+Cause: `save_write_ab` / `decode_state` put **~14 KB of locals on the stack**
+(record + verify + `State`) while DGROUP stack was only a few KB → smash on
+first commit. Fix: all large SAVE/decode buffers are **static BSS**, shared where
+safe; keyboard is pure **int 16h** (no `conio`, no mouse int 33h); AZERTY
+unshifted top-row maps to digits for Date/Weight.
+
 ### What to try on the Book
 
 1. Copy **`HELLO.EXE`** and **`LPSCOMP.EXE`** (this build) to the HDD or a floppy.
@@ -161,8 +171,9 @@ que le firmware PicoCalc et LPS Console.
 
 Premier essai Book 8088 : ecran vide + curseur. Cause : **pile DOS 2 Ko** trop
 petite pour `Blob` (~6 Ko) / `State` (~4,6 Ko) alloues sur la pile au demarrage.
-Correctifs : tampons **statiques**, pile **8 Ko**, detection video B800/B000,
-banniere BIOS, `HELLO.EXE` de diagnostic. Relancer avec le nouvel EXE.
+Correctifs pile/video/HELLO.EXE (voir ci-dessus). Deuxieme bug : gel clavier
+sur Date/Activites — tampons SAVE encore trop gros sur la pile ; tout est en
+BSS, clavier en int 16h pur. Relancer avec le nouvel EXE.
 
 ## Compilation
 

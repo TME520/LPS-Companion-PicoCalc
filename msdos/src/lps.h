@@ -22,7 +22,7 @@ typedef uint64_t lps_tick_t;
 #define TASK_CAPACITY 24
 #define REMINDER_CAPACITY 3
 #define REMINDER_TEXT_LENGTH 32
-#define BLOB_CAPACITY 6144
+#define BLOB_CAPACITY 4700
 #define ACTIVITY_COUNT 16
 #define PAGE_SIZE 10
 #define PAGE_COUNT 2
@@ -131,6 +131,7 @@ uint32_t crc32(const uint8_t *p, size_t n);
 void encode_state(const State *s, Blob *b);
 int decode_state(const uint8_t *bytes, size_t size, State *out);
 void state_init(State *s);
+extern State lps_decode_scratch;
 uint32_t day_index(Date d);
 unsigned weekday(Date d); /* 0=Sunday */
 

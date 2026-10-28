@@ -19,6 +19,9 @@ const Date FIRST_DATE = {2000,1,1};
 const Date LAST_DATE = {2099,12,31};
 const Date DEFAULT_DATE = {2026,9,17};
 
+/* DOS stack is tiny: decode into BSS then copy out on success. */
+State lps_decode_scratch; /* shared BSS; also used by save verify */
+
 int leap(uint16_t year){ return year%4==0 && (year%100!=0 || year%400==0); }
 unsigned days_in_month(uint16_t year, uint8_t month){
     static const uint8_t normal[12]={31,28,31,30,31,30,31,31,30,31,30,31};
@@ -125,7 +128,8 @@ static uint32_t get_n(const uint8_t *bytes, size_t *pos, unsigned n){
     uint32_t v=0; unsigned i; for(i=0;i<n;i++) v|=(uint32_t)bytes[(*pos)++]<<(i*8); return v;
 }
 int decode_state(const uint8_t *bytes, size_t size, State *out){
-    size_t pos; uint32_t version; State s; int valid; unsigned i,j;
+    size_t pos; uint32_t version; int valid; unsigned i,j;
+    State *s = &lps_decode_scratch;
     if(size!=WIRE_SIZE && size!=WIRE_V5 && size!=WIRE_V4 && size!=WIRE_V3 && size!=WIRE_V2 && size!=WIRE_V1) return 0;
     pos=size-4;
     if(get_n(bytes,&pos,4)!=crc32(bytes,size-4)) return 0;
@@ -133,19 +137,18 @@ int decode_state(const uint8_t *bytes, size_t size, State *out){
     version=get_n(bytes,&pos,2);
     if(!((version==1&&size==WIRE_V1)||(version==2&&size==WIRE_V2)||(version==3&&size==WIRE_V3)
         ||(version==4&&size==WIRE_V4)||(version==5&&size==WIRE_V5)||(version==6&&size==WIRE_SIZE))) return 0;
-    memset(&s,0,sizeof(s));
-    s.today.expected=s.today.actual=-1;
-    for(i=0;i<HISTORY_LENGTH;i++){ s.history[i].expected=-1; s.history[i].actual=-1; }
-    s.xp=get_n(bytes,&pos,4); s.next=(uint8_t)get_n(bytes,&pos,1); s.count=(uint8_t)get_n(bytes,&pos,1);
-    if(version>=2){ uint32_t language=get_n(bytes,&pos,1); if(language>1) return 0; s.language=(uint8_t)language; }
-    if(version>=4){ uint32_t palette=get_n(bytes,&pos,1); if(palette>4) return 0; s.palette=(uint8_t)palette; }
-    else s.palette=PAL_GREEN;
-    valid = s.next<HISTORY_LENGTH && s.count<=HISTORY_LENGTH;
+    memset(s,0,sizeof(*s));
+    s->today.expected=s->today.actual=-1;
+    for(i=0;i<HISTORY_LENGTH;i++){ s->history[i].expected=-1; s->history[i].actual=-1; }
+    s->xp=get_n(bytes,&pos,4); s->next=(uint8_t)get_n(bytes,&pos,1); s->count=(uint8_t)get_n(bytes,&pos,1);
+    if(version>=2){ uint32_t language=get_n(bytes,&pos,1); if(language>1) return 0; s->language=(uint8_t)language; }
+    if(version>=4){ uint32_t palette=get_n(bytes,&pos,1); if(palette>4) return 0; s->palette=(uint8_t)palette; }
+    else s->palette=PAL_GREEN;
+    valid = s->next<HISTORY_LENGTH && s->count<=HISTORY_LENGTH;
     {
-        /* day decoder */
         int di;
         for(di=-1; di<(int)HISTORY_LENGTH; di++){
-            Day *d = (di<0)? &s.today : &s.history[di];
+            Day *d = (di<0)? &s->today : &s->history[di];
             uint32_t wv;
             d->date.year=0; d->date.month=0; d->date.day=0;
             if(version>=3){ d->date.year=(uint16_t)get_n(bytes,&pos,2); d->date.month=(uint8_t)get_n(bytes,&pos,1); d->date.day=(uint8_t)get_n(bytes,&pos,1); }
@@ -161,27 +164,28 @@ int decode_state(const uint8_t *bytes, size_t size, State *out){
         }
     }
     if(version>=5){
-        s.taskCount=(uint8_t)get_n(bytes,&pos,1); valid=valid && s.taskCount<=TASK_CAPACITY;
+        s->taskCount=(uint8_t)get_n(bytes,&pos,1); valid=valid && s->taskCount<=TASK_CAPACITY;
         for(i=0;i<TASK_CAPACITY;i++){
-            uint32_t status=get_n(bytes,&pos,1); if(status>2) valid=0; s.tasks[i].status=(uint8_t)status;
-            for(j=0;j<=TASK_NAME_LENGTH;j++) s.tasks[i].name[j]=(char)get_n(bytes,&pos,1);
-            valid=valid && s.tasks[i].name[TASK_NAME_LENGTH]==0;
-            { int ended=0; for(j=0;j<=TASK_NAME_LENGTH;j++){ char c=s.tasks[i].name[j]; if(!c) ended=1; else if(!ended && (c<32||c>126)) valid=0; } }
-            if(i<s.taskCount && s.tasks[i].name[0]==0) valid=0;
+            uint32_t status=get_n(bytes,&pos,1); if(status>2) valid=0; s->tasks[i].status=(uint8_t)status;
+            for(j=0;j<=TASK_NAME_LENGTH;j++) s->tasks[i].name[j]=(char)get_n(bytes,&pos,1);
+            valid=valid && s->tasks[i].name[TASK_NAME_LENGTH]==0;
+            { int ended=0; for(j=0;j<=TASK_NAME_LENGTH;j++){ char c=s->tasks[i].name[j]; if(!c) ended=1; else if(!ended && (c<32||c>126)) valid=0; } }
+            if(i<s->taskCount && s->tasks[i].name[0]==0) valid=0;
         }
     }
     if(version>=6){
-        s.reminderCount=(uint8_t)get_n(bytes,&pos,1); valid=valid && s.reminderCount<=REMINDER_CAPACITY;
+        s->reminderCount=(uint8_t)get_n(bytes,&pos,1); valid=valid && s->reminderCount<=REMINDER_CAPACITY;
         for(i=0;i<REMINDER_CAPACITY;i++){
-            Reminder *r=&s.reminders[i];
+            Reminder *r=&s->reminders[i];
             r->from.year=(uint16_t)get_n(bytes,&pos,2); r->from.month=(uint8_t)get_n(bytes,&pos,1); r->from.day=(uint8_t)get_n(bytes,&pos,1);
             r->duration=(uint16_t)get_n(bytes,&pos,2);
             for(j=0;j<=REMINDER_TEXT_LENGTH;j++) r->text[j]=(char)get_n(bytes,&pos,1);
             valid=valid && r->text[REMINDER_TEXT_LENGTH]==0;
             { int ended=0; for(j=0;j<=REMINDER_TEXT_LENGTH;j++){ char c=r->text[j]; if(!c) ended=1; else if(!ended && (c<32||c>126)) valid=0; } }
-            if(i<s.reminderCount) valid=valid && valid_date(r->from) && r->duration>=1 && r->duration<=365 && r->text[0]!=0;
+            if(i<s->reminderCount) valid=valid && valid_date(r->from) && r->duration>=1 && r->duration<=365 && r->text[0]!=0;
         }
     }
     if(!valid) return 0;
-    *out=s; return 1;
+    if(out!=s) *out=*s;
+    return 1;
 }

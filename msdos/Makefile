@@ -8,8 +8,8 @@ WCC = $(WATCOM)/binl64/wcc
 WCL = $(WATCOM)/binl64/wcl
 WLINK = $(WATCOM)/binl64/wlink
 
-# -0: 8086/8088, -ms: small, -fpc: software FP (no 8087), -k8192: larger stack
-DOS_CFLAGS = -0 -bt=dos -ms -zq -ox -fpc -k8192 -dLPS_DOS -i=src
+# -0: 8086/8088, -ms: small, -fpc: software FP (no 8087), -k4096: larger stack
+DOS_CFLAGS = -0 -bt=dos -ms -zq -ox -fpc -k4096 -dLPS_DOS -i=src
 HOST_CC = gcc
 HOST_CFLAGS = -std=c89 -Wall -Wextra -Wno-unused-parameter -O2 -Isrc -DLPS_HOST
 
