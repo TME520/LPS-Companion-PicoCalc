@@ -4,6 +4,10 @@
 #include <stdio.h>
 #include <string.h>
 
+/* State (~4.6K) and Blob (~6K) must NOT live on the tiny DOS stack. */
+static State g_scratch;
+static Blob g_blob;
+
 struct App {
     Platform *hw;
     State state;
@@ -64,11 +68,10 @@ static void cell_slice(const char *text, unsigned first, unsigned count, char *o
 }
 
 static int commit(App *a, const State *candidate){
-    Blob b;
     if(a->daysBack){ read_only(a); return 0; }
     if(a->blocked){ say(a, tr(a,"Unreadable save: writes blocked","Sauvegarde illisible : ecriture bloquee")); return 0; }
-    encode_state(candidate,&b);
-    if(!a->hw->save(a->hw,b.bytes,b.size)){ say(a, tr(a,"Save failed: restart device","Echec sauvegarde : redemarrer")); return 0; }
+    encode_state(candidate,&g_blob);
+    if(!a->hw->save(a->hw,g_blob.bytes,g_blob.size)){ say(a, tr(a,"Save failed: restart device","Echec sauvegarde : redemarrer")); return 0; }
     a->state=*candidate; return 1;
 }
 
@@ -120,11 +123,12 @@ static unsigned active_reminders(const App *a){
     unsigned n=0,i; for(i=0;i<a->state.reminderCount;i++) if(rem_active(a,&a->state.reminders[i])) n++; return n;
 }
 static void prune_reminders(App *a){
-    State next=a->state; unsigned kept=0,i;
-    for(i=0;i<a->state.reminderCount;i++) if(!rem_expired(a,&a->state.reminders[i])) next.reminders[kept++]=a->state.reminders[i];
+    unsigned kept=0,i;
+    g_scratch=a->state;
+    for(i=0;i<a->state.reminderCount;i++) if(!rem_expired(a,&a->state.reminders[i])) g_scratch.reminders[kept++]=a->state.reminders[i];
     if(kept!=a->state.reminderCount){
-        for(i=kept;i<REMINDER_CAPACITY;i++){ memset(&next.reminders[i],0,sizeof(Reminder)); }
-        next.reminderCount=(uint8_t)kept; commit(a,&next);
+        for(i=kept;i<REMINDER_CAPACITY;i++){ memset(&g_scratch.reminders[i],0,sizeof(Reminder)); }
+        g_scratch.reminderCount=(uint8_t)kept; commit(a,&g_scratch);
     }
 }
 static void go(App *a, int s){
@@ -169,32 +173,32 @@ static void begin_task_edit(App *a, unsigned index){
 }
 static void move_task_to(App *a, int target){
     unsigned n=tasks_in(a,a->kanbanColumn), index=n?task_at(a,a->kanbanColumn,a->selection):TASK_CAPACITY;
-    State next; Task moved; unsigned i;
+    Task moved; unsigned i;
     if(index>=a->state.taskCount) return;
     if(a->state.tasks[index].status==target){ say(a,tr(a,"Task is already in this column","Tache deja dans cette colonne")); return; }
-    next=a->state; moved=next.tasks[index]; moved.status=(uint8_t)target;
-    for(i=index;i+1<next.taskCount;i++) next.tasks[i]=next.tasks[i+1];
-    next.tasks[next.taskCount-1]=moved;
-    if(commit(a,&next)){ a->kanbanColumn=target; a->selection=tasks_in(a,target)-1; say(a,tr(a,"Task moved","Tache deplacee")); }
+    g_scratch=a->state; moved=g_scratch.tasks[index]; moved.status=(uint8_t)target;
+    for(i=index;i+1<g_scratch.taskCount;i++) g_scratch.tasks[i]=g_scratch.tasks[i+1];
+    g_scratch.tasks[g_scratch.taskCount-1]=moved;
+    if(commit(a,&g_scratch)){ a->kanbanColumn=target; a->selection=tasks_in(a,target)-1; say(a,tr(a,"Task moved","Tache deplacee")); }
 }
 static void reorder_task(App *a, int downward){
-    unsigned n=tasks_in(a,a->kanbanColumn); unsigned indices[TASK_CAPACITY]; unsigned i; State next; unsigned destination; Task moved;
+    unsigned n=tasks_in(a,a->kanbanColumn); unsigned indices[TASK_CAPACITY]; unsigned i; unsigned destination; Task moved;
     if(n<2) return;
     for(i=0;i<n;i++) indices[i]=task_at(a,a->kanbanColumn,i);
-    next=a->state; destination=a->selection;
+    g_scratch=a->state; destination=a->selection;
     if(!downward && a->selection==0){
-        moved=next.tasks[indices[0]]; for(i=0;i+1<n;i++) next.tasks[indices[i]]=next.tasks[indices[i+1]];
-        next.tasks[indices[n-1]]=moved; destination=n-1;
+        moved=g_scratch.tasks[indices[0]]; for(i=0;i+1<n;i++) g_scratch.tasks[indices[i]]=g_scratch.tasks[indices[i+1]];
+        g_scratch.tasks[indices[n-1]]=moved; destination=n-1;
     } else if(downward && a->selection==n-1){
-        moved=next.tasks[indices[n-1]]; for(i=n-1;i>0;i--) next.tasks[indices[i]]=next.tasks[indices[i-1]];
-        next.tasks[indices[0]]=moved; destination=0;
+        moved=g_scratch.tasks[indices[n-1]]; for(i=n-1;i>0;i--) g_scratch.tasks[indices[i]]=g_scratch.tasks[indices[i-1]];
+        g_scratch.tasks[indices[0]]=moved; destination=0;
     } else {
         destination=downward?a->selection+1:a->selection-1;
-        moved=next.tasks[indices[a->selection]];
-        next.tasks[indices[a->selection]]=next.tasks[indices[destination]];
-        next.tasks[indices[destination]]=moved;
+        moved=g_scratch.tasks[indices[a->selection]];
+        g_scratch.tasks[indices[a->selection]]=g_scratch.tasks[indices[destination]];
+        g_scratch.tasks[indices[destination]]=moved;
     }
-    if(commit(a,&next)) a->selection=destination;
+    if(commit(a,&g_scratch)) a->selection=destination;
 }
 static int suggested_mysteries(const App *a){
     if(!valid_date(a->state.today.date)) return MYS_JOYFUL;
@@ -227,10 +231,10 @@ const Day *app_viewed_day(const App *app){
 }
 
 void app_start(App *app){
-    Blob b; enum LoadResult r; size_t n=0;
-    r=app->hw->load(app->hw,b.bytes,sizeof(b.bytes),&n);
+    enum LoadResult r; size_t n=0;
+    r=app->hw->load(app->hw,g_blob.bytes,sizeof(g_blob.bytes),&n);
     if(r==LOAD_NO_STORAGE){ app->blocked=1; app->missingStorage=1; say(app,"[!] Missing SD card!"); }
-    else if(r==LOAD_ERROR || (r==LOAD_OK && !decode_state(b.bytes,n,&app->state))){
+    else if(r==LOAD_ERROR || (r==LOAD_OK && !decode_state(g_blob.bytes,n,&app->state))){
         app->blocked=1; say(app, tr(app,"Read error: save protected","Erreur lecture : sauvegarde protegee"));
     }
     if(!app->blocked){ prune_reminders(app); if(active_reminders(app)) app->screen=SCR_REMINDER_POPUP; }
@@ -303,26 +307,27 @@ void app_key(App *a, int k){
             else begin_reminder_edit(a,REMINDER_CAPACITY);
         }else if(k==KEY_ENTER && a->state.reminderCount) begin_reminder_edit(a,a->selection);
         else if(k==KEY_DELETE && a->state.reminderCount){
-            State next=a->state; unsigned i;
-            for(i=a->selection;i+1<next.reminderCount;i++) next.reminders[i]=next.reminders[i+1];
-            memset(&next.reminders[--next.reminderCount],0,sizeof(Reminder));
-            if(commit(a,&next) && a->selection>=a->state.reminderCount && a->selection) a->selection--;
+            unsigned i;
+            g_scratch=a->state;
+            for(i=a->selection;i+1<g_scratch.reminderCount;i++) g_scratch.reminders[i]=g_scratch.reminders[i+1];
+            memset(&g_scratch.reminders[--g_scratch.reminderCount],0,sizeof(Reminder));
+            if(commit(a,&g_scratch) && a->selection>=a->state.reminderCount && a->selection) a->selection--;
         }
     }else if(a->screen==SCR_REMINDER_EDIT){
         if(k==KEY_UP && a->reminderField) a->reminderField--;
         else if(k==KEY_DOWN && a->reminderField<2) a->reminderField++;
         else if(k==KEY_ENTER){
-            Date from; unsigned duration=0; unsigned i; State next;
+            Date from; unsigned duration=0; unsigned i;
             for(i=0;a->reminderDuration[i];i++){ char c=a->reminderDuration[i]; if(c<'0'||c>'9'){ duration=366; break; } duration=duration*10u+(unsigned)(c-'0'); }
             if(!parse_date(a->reminderDate,&from)||duration<1||duration>365||!a->reminderText[0]) say(a,tr(a,"Check date, 1-365 days and text","Verifiez date, 1-365 jours et texte"));
             else if(day_index(from)+duration<=day_index(a->state.today.date)) say(a,tr(a,"Reminder already expired","Rappel deja expire"));
             else {
                 unsigned index=a->editingReminder<REMINDER_CAPACITY?a->editingReminder:a->state.reminderCount;
-                next=a->state;
-                next.reminders[index].from=from; next.reminders[index].duration=(uint16_t)duration;
-                memcpy(next.reminders[index].text,a->reminderText,REMINDER_TEXT_LENGTH+1);
-                if(index==next.reminderCount) next.reminderCount++;
-                if(commit(a,&next)) go(a,SCR_REMINDERS);
+                g_scratch=a->state;
+                g_scratch.reminders[index].from=from; g_scratch.reminders[index].duration=(uint16_t)duration;
+                memcpy(g_scratch.reminders[index].text,a->reminderText,REMINDER_TEXT_LENGTH+1);
+                if(index==g_scratch.reminderCount) g_scratch.reminderCount++;
+                if(commit(a,&g_scratch)) go(a,SCR_REMINDERS);
             }
         }else if(k==KEY_BACKSPACE||k==127||(k>=32&&k<=126)){
             if(a->reminderField==0){ if((k>='0'&&k<='9')||k=='-'||k==KEY_BACKSPACE||k==127) edit_buf(a->reminderDate,sizeof(a->reminderDate),k); }
@@ -330,9 +335,10 @@ void app_key(App *a, int k){
             else edit_buf(a->reminderText,sizeof(a->reminderText),k);
         }
     }else if(a->screen==SCR_DATE){
-        if(k==KEY_ENTER){ State next=a->state; Date d;
+        if(k==KEY_ENTER){ Date d;
+            g_scratch=a->state;
             if(!parse_date(a->dateDraft,&d)) say(a,tr(a,"Invalid date: YYYY-MM-DD, 2000-2099","Date invalide : AAAA-MM-JJ, 2000-2099"));
-            else { next.today.date=d; if(commit(a,&next)) go(a,SCR_HOME); }
+            else { g_scratch.today.date=d; if(commit(a,&g_scratch)) go(a,SCR_HOME); }
         }else if((k>='0'&&k<='9')||k=='-'||k==KEY_BACKSPACE||k==127) edit_buf(a->dateDraft,sizeof(a->dateDraft),k);
     }else if(a->screen==SCR_ACTIVITIES){
         unsigned remaining=ACTIVITY_COUNT-a->page*PAGE_SIZE;
@@ -342,21 +348,22 @@ void app_key(App *a, int k){
         else if(k==KEY_DOWN) a->selection=(a->selection+1)%rows;
         else if(a->daysBack && (k==KEY_ENTER||(k>='1'&&k<='9'))) read_only(a);
         else if(k==KEY_ENTER||(k>='1'&&k<='9')){
-            unsigned id=k==KEY_ENTER?a->page*PAGE_SIZE+a->selection:(unsigned)(k-'1'); State next=a->state;
-            next.today.flags^=(uint16_t)(1u<<id);
-            if(commit(a,&next)){ a->page=id/PAGE_SIZE; a->selection=id%PAGE_SIZE; }
+            unsigned id=k==KEY_ENTER?a->page*PAGE_SIZE+a->selection:(unsigned)(k-'1');
+            g_scratch=a->state;
+            g_scratch.today.flags^=(uint16_t)(1u<<id);
+            if(commit(a,&g_scratch)){ a->page=id/PAGE_SIZE; a->selection=id%PAGE_SIZE; }
         }
     }else if(a->screen==SCR_NOTE){
         if(a->daysBack){ if(k==KEY_ENTER) go(a,SCR_HOME); else read_only(a); }
-        else if(k==KEY_ENTER){ State next=a->state; memcpy(next.today.note,a->draft,NOTE_LENGTH+1); if(commit(a,&next)) go(a,SCR_HOME); }
+        else if(k==KEY_ENTER){ g_scratch=a->state; memcpy(g_scratch.today.note,a->draft,NOTE_LENGTH+1); if(commit(a,&g_scratch)) go(a,SCR_HOME); }
         else edit_buf(a->draft,sizeof(a->draft),k);
     }else if(a->screen==SCR_WEIGHT){
         if(a->daysBack){ if(k==KEY_ENTER) go(a,SCR_HOME); else read_only(a); }
         else if(k==KEY_UP||k==KEY_DOWN||k==KEY_TAB) a->field=1-a->field;
-        else if(k==KEY_ENTER){ State next=a->state;
-            if(!parse_weight(a->weights[0],&next.today.expected)||!parse_weight(a->weights[1],&next.today.actual))
+        else if(k==KEY_ENTER){ g_scratch=a->state;
+            if(!parse_weight(a->weights[0],&g_scratch.today.expected)||!parse_weight(a->weights[1],&g_scratch.today.actual))
                 say(a,tr(a,"Invalid weight (example: 110.500)","Poids invalide (exemple : 110,500)"));
-            else if(commit(a,&next)) go(a,SCR_HOME);
+            else if(commit(a,&g_scratch)) go(a,SCR_HOME);
         }else if((k>='0'&&k<='9')||k=='.'||k==','||k==KEY_BACKSPACE||k==127) edit_buf(a->weights[a->field],8,k);
     }else if(a->screen==SCR_KANBAN){
         unsigned n=tasks_in(a,a->kanbanColumn); if(n && a->selection>=n) a->selection=n-1;
@@ -369,10 +376,11 @@ void app_key(App *a, int k){
             else begin_task_edit(a,TASK_CAPACITY);
         }else if(k==KEY_ENTER && n) begin_task_edit(a,task_at(a,a->kanbanColumn,a->selection));
         else if(k==KEY_DELETE && n){
-            unsigned index=task_at(a,a->kanbanColumn,a->selection); State next=a->state; unsigned i;
-            for(i=index;i+1<next.taskCount;i++) next.tasks[i]=next.tasks[i+1];
-            memset(&next.tasks[--next.taskCount],0,sizeof(Task));
-            if(commit(a,&next) && a->selection>=tasks_in(a,a->kanbanColumn) && a->selection) a->selection--;
+            unsigned index=task_at(a,a->kanbanColumn,a->selection); unsigned i;
+            g_scratch=a->state;
+            for(i=index;i+1<g_scratch.taskCount;i++) g_scratch.tasks[i]=g_scratch.tasks[i+1];
+            memset(&g_scratch.tasks[--g_scratch.taskCount],0,sizeof(Task));
+            if(commit(a,&g_scratch) && a->selection>=tasks_in(a,a->kanbanColumn) && a->selection) a->selection--;
         }else if(k>=KEY_F1 && k<=KEY_F3 && n) move_task_to(a, k-KEY_F1);
         else if((k=='1'||k=='2'||k=='3') && n) move_task_to(a, k-'1');
         else if(k==KEY_F4 || k=='-'){ if(n) reorder_task(a,0); }
@@ -381,11 +389,12 @@ void app_key(App *a, int k){
         if(k==KEY_ENTER){
             if(!a->taskDraft[0]) say(a,tr(a,"Task name cannot be empty","Le nom ne peut pas etre vide"));
             else {
-                State next=a->state; unsigned destination=a->editedTask;
-                if(a->editedTask<TASK_CAPACITY) memcpy(next.tasks[a->editedTask].name,a->taskDraft,TASK_NAME_LENGTH+1);
-                else if(next.taskCount>=TASK_CAPACITY){ say(a,tr(a,"Kanban is full (24 tasks)","Kanban complet (24 taches)")); app_render(a); return; }
-                else { destination=next.taskCount; next.tasks[next.taskCount].status=(uint8_t)a->kanbanColumn; memcpy(next.tasks[next.taskCount].name,a->taskDraft,TASK_NAME_LENGTH+1); next.taskCount++; }
-                if(commit(a,&next)){ a->editedTask=destination; a->selection=task_position(a,a->kanbanColumn,a->editedTask); a->screen=SCR_KANBAN; a->message[0]=0; }
+                unsigned destination=a->editedTask;
+                g_scratch=a->state;
+                if(a->editedTask<TASK_CAPACITY) memcpy(g_scratch.tasks[a->editedTask].name,a->taskDraft,TASK_NAME_LENGTH+1);
+                else if(g_scratch.taskCount>=TASK_CAPACITY){ say(a,tr(a,"Kanban is full (24 tasks)","Kanban complet (24 taches)")); app_render(a); return; }
+                else { destination=g_scratch.taskCount; g_scratch.tasks[g_scratch.taskCount].status=(uint8_t)a->kanbanColumn; memcpy(g_scratch.tasks[g_scratch.taskCount].name,a->taskDraft,TASK_NAME_LENGTH+1); g_scratch.taskCount++; }
+                if(commit(a,&g_scratch)){ a->editedTask=destination; a->selection=task_position(a,a->kanbanColumn,a->editedTask); a->screen=SCR_KANBAN; a->message[0]=0; }
             }
         }else edit_buf(a->taskDraft,sizeof(a->taskDraft),k);
     }else if(a->screen==SCR_DAILY_REVIEW){
@@ -401,8 +410,8 @@ void app_key(App *a, int k){
         if(k==KEY_ENTER){
             if(a->selection==0) go(a,SCR_LANGUAGE);
             else if(a->selection==1) go(a,SCR_COLORS);
-            else { State next=a->state; next.language=(uint8_t)a->pendingLanguage;
-                if(commit(a,&next)){ go(a,SCR_HOME); say(a,tr(a,"Configuration saved","Configuration enregistree")); }}
+            else { g_scratch=a->state; g_scratch.language=(uint8_t)a->pendingLanguage;
+                if(commit(a,&g_scratch)){ go(a,SCR_HOME); say(a,tr(a,"Configuration saved","Configuration enregistree")); }}
         }
     }else if(a->screen==SCR_LANGUAGE){
         if(k==KEY_UP||k==KEY_DOWN) a->selection=1-a->selection;
@@ -413,8 +422,8 @@ void app_key(App *a, int k){
         if(k==KEY_DOWN) a->selection=(a->selection+1)%5;
         if(k>='1'&&k<='5') a->selection=(unsigned)(k-'1');
         a->pendingPalette=(int)a->selection;
-        if(k==KEY_ENTER){ State next=a->state; next.palette=(uint8_t)a->pendingPalette;
-            if(commit(a,&next)){ go(a,SCR_HOME); say(a,tr(a,"Color saved","Couleur enregistree")); }}
+        if(k==KEY_ENTER){ g_scratch=a->state; g_scratch.palette=(uint8_t)a->pendingPalette;
+            if(commit(a,&g_scratch)){ go(a,SCR_HOME); say(a,tr(a,"Color saved","Couleur enregistree")); }}
     }else if(a->screen==SCR_ROSARY_MODE){
         if(k==KEY_UP) a->selection=(a->selection+3)%4;
         if(k==KEY_DOWN) a->selection=(a->selection+1)%4;
@@ -451,17 +460,18 @@ void app_key(App *a, int k){
             if(a->state.today.number==0xfffffffful || a->state.xp>0xfffffffful-gain) say(a,tr(a,"Counter limit reached","Limite du compteur atteinte"));
             else if(!valid_date(a->state.today.date)) say(a,tr(a,"Set Date before closing the day","Renseignez Date avant de terminer le jour"));
             else {
-                State next=a->state; Date tomorrow; uint8_t won=0; unsigned i;
-                next.history[next.next]=next.today;
-                next.next=(uint8_t)((next.next+1)%HISTORY_LENGTH);
-                if(next.count<HISTORY_LENGTH) next.count++;
+                Date tomorrow; uint8_t won=0; unsigned i;
+                g_scratch=a->state;
+                g_scratch.history[g_scratch.next]=g_scratch.today;
+                g_scratch.next=(uint8_t)((g_scratch.next+1)%HISTORY_LENGTH);
+                if(g_scratch.count<HISTORY_LENGTH) g_scratch.count++;
                 tomorrow=a->state.today.date;
                 if(!next_date(&tomorrow)){ say(a,tr(a,"Calendar ends on 2099-12-31","Le calendrier s'arrete au 2099-12-31")); app_render(a); return; }
                 if(!a->hw->export_weight_csv(a->hw,&a->state.today)){ say(a,tr(a,"Weight CSV export failed; day remains open","Export CSV poids echoue ; journee reste ouverte")); app_render(a); return; }
                 if(!a->hw->export_ics(a->hw,&a->state.today,a->state.xp+gain,gain,a->state.language)){ say(a,tr(a,"ICS export failed; day remains open","Export ICS echoue ; journee reste ouverte")); app_render(a); return; }
-                next.xp+=gain; memset(&next.today,0,sizeof(Day)); next.today.number=a->state.today.number+1; next.today.date=tomorrow; next.today.expected=-1; next.today.actual=-1;
-                for(i=0;i<6;i++) if(a->state.xp<GIFT_XP[i] && next.xp>=GIFT_XP[i]) won|=(uint8_t)(1u<<i);
-                if(commit(a,&next)){ a->earned=gain; a->unlocked=won; go(a,SCR_REWARD); }
+                g_scratch.xp+=gain; memset(&g_scratch.today,0,sizeof(Day)); g_scratch.today.number=a->state.today.number+1; g_scratch.today.date=tomorrow; g_scratch.today.expected=-1; g_scratch.today.actual=-1;
+                for(i=0;i<6;i++) if(a->state.xp<GIFT_XP[i] && g_scratch.xp>=GIFT_XP[i]) won|=(uint8_t)(1u<<i);
+                if(commit(a,&g_scratch)){ a->earned=gain; a->unlocked=won; go(a,SCR_REWARD); }
             }
         }
     }else if(a->screen==SCR_REWARD && k==KEY_ENTER) go(a,SCR_HOME);

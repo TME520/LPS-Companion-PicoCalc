@@ -1,0 +1,20 @@
+*LPS COMPANION v1.11    2026-09-17       
+ 0 XP earned                             
+                                         
+ ACTIVITIES                      1/2     
+                                         
+* 1  Walk                     [ ]        
+  2  Diet                     [ ]        
+  3  Bible                    [ ]        
+  4  Mass                     [ ]        
+  5  Work                     [ ]        
+  6  Project                  [ ]        
+  7  Nap                      [ ]        
+  8  Gurumed                  [ ]        
+  9  Illness                  [ ]        
+ 10  Day off                  [ ]        
+ Enter: toggle  1-9: keys  <- -> pages   
+                                         
+                                         
+                                         
+*Up/Down  Enter:OK  Esc:Back             

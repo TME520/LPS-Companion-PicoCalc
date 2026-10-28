@@ -62,6 +62,32 @@ gcc -std=c89 -Isrc -DLPS_HOST -o tests/test_storage \
 ./tests/test_storage
 ```
 
+## Book 8088 / real hardware notes
+
+On the first Book 8088 test, `LPSCOMP.EXE` cleared the screen then hung with a
+blinking cursor. Root cause: the DOS default **stack was only 2 KB**, while
+`app_start` / `commit` put a **~6 KB `Blob` and ~4.6 KB `State` on the stack**
+→ immediate stack smash after `int 10h` mode setup (blank screen, cursor, no UI).
+
+Fixes in current build:
+- `Blob` / `State` scratch moved to **static BSS** (`g_blob`, `g_scratch`)
+- Linker stack raised to **8 KB** (`-k8192`)
+- Video: detect MDA vs CGA via BIOS equipment word + mode `0Fh`; use **B000**
+  or **B800** accordingly; only set mode `03h`/`07h` if not already text
+- Early BIOS teletype banner (`LPS COMPANION v1.11`) before dirs / UI
+- Soft FP (`-fpc`) — no 8087 required
+- Ship **`HELLO.EXE`**: tiny BIOS-only smoke test (prints mode / equipment)
+
+### What to try on the Book
+
+1. Copy **`HELLO.EXE`** and **`LPSCOMP.EXE`** (this build) to the HDD or a floppy.
+2. Run `HELLO` — you must see `LPS COMPANION - HELLO` and video info; any key quits.
+3. Run `LPSCOMP` or `LPSCOMP C:\LPS` — you should briefly see the banner, then the home screen.
+4. Quit with **Q** from Home.
+5. If the banner appears but the UI does not, note whether the machine is mono or colour and open an issue.
+
+![DOSBox 8086 home](captures/07-dosbox-8086-home.png)
+
 ## Install on a real machine / DOSBox
 
 1. Copy `LPSCOMP.EXE` to a floppy or the hard disk.
@@ -131,6 +157,13 @@ Port complet de LPS Companion v1.11 vers MS-DOS 16 bits (8088, 640 Ko),
 clavier uniquement, mode texte 80×25. Memes formats `SAVE_A/B.BIN`, ICS et CSV
 que le firmware PicoCalc et LPS Console.
 
+## Book 8088 / materiel reel
+
+Premier essai Book 8088 : ecran vide + curseur. Cause : **pile DOS 2 Ko** trop
+petite pour `Blob` (~6 Ko) / `State` (~4,6 Ko) alloues sur la pile au demarrage.
+Correctifs : tampons **statiques**, pile **8 Ko**, detection video B800/B000,
+banniere BIOS, `HELLO.EXE` de diagnostic. Relancer avec le nouvel EXE.
+
 ## Compilation
 
 Voir la section **Build** ci-dessus (Open Watcom `-0 -bt=dos -ms`).
@@ -142,7 +175,7 @@ Copier `LPSCOMP.EXE`, creer `C:\LPS`, lancer `LPSCOMP` (ou `LPSCOMP chemin`).
 
 ## Empreinte
 
-`LPSCOMP.EXE` fait environ **57–60 Ko** (mode small, 8086).
+`LPSCOMP.EXE` fait environ **57–59 Ko** (mode small, 8086, pile 8 Ko). `HELLO.EXE` ~3 Ko.
 
 ## Ecarts connus
 

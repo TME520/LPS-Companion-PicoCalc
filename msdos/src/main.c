@@ -8,6 +8,7 @@
 Platform *plat_dos_create(void);
 int plat_dos_get_key(void);
 lps_tick_t plat_dos_millis(void);
+void plat_dos_bios_puts(const char *s);
 #else
 Platform *plat_host_create(int capture);
 void plat_host_dump(Platform *p, FILE *out);
@@ -23,6 +24,10 @@ static void usage(void){
 int main(int argc, char **argv){
     Platform *hw; App *app; static unsigned char store[8192];
     const char *dir=0; char *env;
+#ifdef LPS_DOS
+    /* First visible proof of life via BIOS teletype (before dirs / mode). */
+    plat_dos_bios_puts("\r\nLPS COMPANION v" LPS_VERSION_STR "\r\n");
+#endif
     env=getenv("LPSDIR");
     if(argc>=2){
         if(strcmp(argv[1],"-h")==0||strcmp(argv[1],"--help")==0){ usage(); return 0; }
@@ -34,9 +39,17 @@ int main(int argc, char **argv){
     else dir="./LPS";
 #endif
     lps_set_data_dir(dir);
+    /* Do not hard-fail if mkdir fails — UI still starts (read-only / blocked). */
     lps_ensure_dirs();
 
-    if(app_bytes()>sizeof(store)){ puts("App too large"); return 1; }
+    if(app_bytes()>sizeof(store)){
+#ifdef LPS_DOS
+        plat_dos_bios_puts("App too large\r\n");
+#else
+        puts("App too large");
+#endif
+        return 1;
+    }
     app=(App*)store;
 
 #ifdef LPS_DOS
