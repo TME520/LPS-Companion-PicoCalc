@@ -8,7 +8,7 @@ LPS-Companion helps you record daily activities, write a short note, and compare
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries are saved to the SD card.
 
-**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.11 adds the countdown timer; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
+**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.12 refines the timer, removes gamification and the notepad, and shows the long date with ISO week; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
 
 ## Changes in v1.12
 
