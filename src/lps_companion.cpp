@@ -271,6 +271,7 @@ class App {
     uint64_t timerNow=0,timerLast=0,timerRemaining=0;
     bool timerPaused=false;
     unsigned timerSeconds()const{return unsigned((timerRemaining+999)/1000);}
+    void startTimer(unsigned option){constexpr unsigned minutes[]={5,15,30};timerRemaining=uint64_t(minutes[option])*60000;timerLast=timerNow;timerPaused=false;go(Screen::TimerRunning);}
     const char* tr(const char* en,const char* fr)const{return state.language==Language::French?fr:en;}
     Palette displayedPalette()const{return screen==Screen::Colors?pendingPalette:state.palette;}
     void say(const char* text){std::snprintf(message.data(),message.size(),"%s",text);}
@@ -604,11 +605,13 @@ public:
         }else if(screen==Screen::TimerSelect){
             if(k==Up)selection=(selection+2)%3;
             if(k==Down)selection=(selection+1)%3;
-            if(k==Enter){constexpr unsigned minutes[]={5,15,30};timerRemaining=uint64_t(minutes[selection])*60000;timerLast=timerNow;timerPaused=false;go(Screen::TimerRunning);}
+            if(k>='1'&&k<='3'){selection=unsigned(k-'1');k=Enter;}
+            if(k==Enter)startTimer(selection);
         }else if(screen==Screen::TimerRunning){
             if(k==Enter){timerPaused=!timerPaused;timerLast=timerNow;}
         }else if(screen==Screen::TimerComplete){
-            if(k==Enter)go(Screen::TimerSelect);
+            if(k>='1'&&k<='3')startTimer(unsigned(k-'1'));
+            else if(k==Enter)go(Screen::TimerSelect);
         }else if(screen==Screen::Reminders){
             if(k==Up&&state.reminderCount)selection=(selection+state.reminderCount-1)%state.reminderCount;
             else if(k==Down&&state.reminderCount)selection=(selection+1)%state.reminderCount;
@@ -778,7 +781,7 @@ public:
             line(17,tr("<- Previous day   -> Current day","<- Jour précédent   -> Jour actuel"));
         }else if(screen==Screen::TimerSelect){
             line(3,tr("TIMER","MINUTEUR"));
-            const char* options[]={"5 minutes","15 minutes","30 minutes"};
+            const char* options[]={"1  5 minutes","2  15 minutes","3  30 minutes"};
             for(unsigned i=0;i<3;++i)line(6+int(i)*2,options[i],selection==i);
         }else if(screen==Screen::TimerRunning||screen==Screen::TimerComplete){
             line(3,tr("TIMER","MINUTEUR"));
@@ -786,7 +789,7 @@ public:
             hw.largeText(b,seconds<60);
             if(screen==Screen::TimerComplete)line(14,tr("TIMER FINISHED!","MINUTEUR TERMINÉ !"));
             else if(timerPaused)line(14,tr("PAUSED","EN PAUSE"));
-            line(17,screen==Screen::TimerComplete?tr("Enter: Again   Esc: Back","Enter: Nouveau   Esc: Retour"):
+            line(17,screen==Screen::TimerComplete?tr("1-3: Restart  Enter: Menu  Esc: Back","1-3: Relancer  Enter: Menu  Esc: Retour"):
                 (timerPaused?tr("Enter: Resume   Esc: Cancel","Enter: Reprendre   Esc: Annuler"):tr("Enter: Pause   Esc: Cancel","Enter: Pause   Esc: Annuler")));
         }else if(screen==Screen::ReminderPopup){
             line(3,tr("REMINDERS","RAPPELS"));

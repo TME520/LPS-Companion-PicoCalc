@@ -10,6 +10,10 @@ It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display
 
 **Status:** v1.2 was confirmed working on the user's PicoCalc. v1.11 adds the countdown timer; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
 
+## Changes in v1.12
+
+- **TIMER / MINUTEUR**: keys **1**, **2** and **3** start a duration directly, without Enter (LPS-112-CHG01). On the completion screen they start a new countdown at once; while a countdown runs they are ignored.
+
 ## Changes in v1.11
 
 - **9 TIMER / MINUTEUR** offers 5, 15 or 30 minutes.

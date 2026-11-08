@@ -22,5 +22,15 @@ int main(){using namespace lps;
  a.key(Enter);assert(a.currentScreen()==Screen::TimerSelect);a.key(Enter);a.key(Escape);a.tick(9999999);
  assert(a.currentScreen()==Screen::Home&&d.writes==0);a.key(Up);a.key(Enter);assert(a.currentScreen()==Screen::Finish);
  }
- std::puts("PASS: timer durations, 00:59 red threshold, pause/resume, expiry, cancellation, no save writes and close-day navigation.");
+ // LPS-112-CHG01: keys 1-3 start a duration directly from the selection and completion screens; ignored while running.
+ for(unsigned option=0;option<3;++option){TimerDisplay d;App a(d);a.start();a.tick(1000);a.key('9');
+ const unsigned duration[]={300000,900000,1800000};const char* initial[]={"05:00","15:00","30:00"};
+ a.key(char('1'+option));assert(a.currentScreen()==Screen::TimerRunning&&d.value==initial[option]);
+ a.tick(31000);a.key('1'+(option+1)%3);a.tick(32000);assert(a.currentScreen()==Screen::TimerRunning);
+ a.tick(1000+duration[option]);assert(a.currentScreen()==Screen::TimerComplete);
+ const unsigned again=(option+1)%3;a.key(char('1'+again));
+ assert(a.currentScreen()==Screen::TimerRunning&&d.value==initial[again]);
+ a.key(Escape);assert(a.currentScreen()==Screen::Home&&d.writes==0);
+ }
+ std::puts("PASS: timer durations, 1-3 shortcuts, 00:59 red threshold, pause/resume, expiry, cancellation, no save writes and close-day navigation.");
 }
