@@ -1,6 +1,7 @@
 # Validation v1.12 (in progress) — 8 November 2026
 
 - LPS-112-CHG01: timer tests cover keys 1-3 starting each duration from the selection screen, restarting a new duration from the completion screen, and being ignored while a countdown runs.
+- LPS-112-CHG02: timer tests cover 5/30/60-minute durations (initial 05:00, 30:00, 60:00), normal colour at 01:00, red at 00:59, pause/resume and completion for each.
 - All nine host test suites pass with C++17 and warnings treated as errors.
 
 # Validation v1.11 — 2 October 2026

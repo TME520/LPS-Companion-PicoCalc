@@ -13,6 +13,7 @@ It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display
 ## Changes in v1.12
 
 - **TIMER / MINUTEUR**: keys **1**, **2** and **3** start a duration directly, without Enter (LPS-112-CHG01). On the completion screen they start a new countdown at once; while a countdown runs they are ignored.
+- **TIMER / MINUTEUR** now offers **5, 30 or 60 minutes** instead of 5, 15 or 30 (LPS-112-CHG02). A 60-minute countdown starts at `60:00`.
 
 ## Changes in v1.11
 

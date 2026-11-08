@@ -271,7 +271,7 @@ class App {
     uint64_t timerNow=0,timerLast=0,timerRemaining=0;
     bool timerPaused=false;
     unsigned timerSeconds()const{return unsigned((timerRemaining+999)/1000);}
-    void startTimer(unsigned option){constexpr unsigned minutes[]={5,15,30};timerRemaining=uint64_t(minutes[option])*60000;timerLast=timerNow;timerPaused=false;go(Screen::TimerRunning);}
+    void startTimer(unsigned option){constexpr unsigned minutes[]={5,30,60};timerRemaining=uint64_t(minutes[option])*60000;timerLast=timerNow;timerPaused=false;go(Screen::TimerRunning);}
     const char* tr(const char* en,const char* fr)const{return state.language==Language::French?fr:en;}
     Palette displayedPalette()const{return screen==Screen::Colors?pendingPalette:state.palette;}
     void say(const char* text){std::snprintf(message.data(),message.size(),"%s",text);}
@@ -781,7 +781,7 @@ public:
             line(17,tr("<- Previous day   -> Current day","<- Jour précédent   -> Jour actuel"));
         }else if(screen==Screen::TimerSelect){
             line(3,tr("TIMER","MINUTEUR"));
-            const char* options[]={"1  5 minutes","2  15 minutes","3  30 minutes"};
+            const char* options[]={"1  5 minutes","2  30 minutes","3  60 minutes"};
             for(unsigned i=0;i<3;++i)line(6+int(i)*2,options[i],selection==i);
         }else if(screen==Screen::TimerRunning||screen==Screen::TimerComplete){
             line(3,tr("TIMER","MINUTEUR"));
