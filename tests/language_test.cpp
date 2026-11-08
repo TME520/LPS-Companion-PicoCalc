@@ -22,6 +22,7 @@ public:
         std::snprintf(rows[y/16].data(),41,"%s",text);
     }
     void alert(int x,int y,const char* value)override{this->text(x,y,value,true);}
+    bool anyXp()const{for(const auto& row:rows)if(std::strstr(row.data(),"XP"))return true;return false;}
     bool has(int row,const char* utf8)const{
         char cells[100];displayText(utf8,cells,sizeof cells);
         return std::strstr(rows[row].data(),cells)!=nullptr;
@@ -55,6 +56,8 @@ void checkMenus(Display& d,App& a,bool fr){
     if(fr){char back[24];displayText("Retour",back,sizeof back);const char* plain=std::strstr(footer,back);assert(plain);for(unsigned i=0;i<std::strlen(back);++i)assert(!d.bold[19][unsigned(plain-footer)+i]);}
     assert(d.has(17,fr?"Jour précédent":"Previous day"));
     assert(d.has(0,"v1.11    2026-09-17"));
+    // LPS-112-CHG03: no XP anywhere; line 1 shows the long date and ISO week.
+    assert(d.has(1,fr?"Jeudi 17 Septembre 2026 (semaine 38)":"Thursday 17 September 2026 (week 38)")&&!d.anyXp());
     a.key('0');assert(d.has(3,"DATE"));assert(d.has(6,"2026-09-17"));
     assert(d.has(9,fr?"Calendrier":"Calendar"));a.key(Escape);
     a.key('1');assert(d.has(3,fr?"ACTIVITÉS":"ACTIVITIES"));assert(d.has(6,fr?"Régime":"Diet"));
@@ -99,8 +102,10 @@ int main(){
     choose(reboot,Language::English);reboot.key('3');
     assert(reboot.data().xp==0&&reboot.data().today.flags==7&&reboot.data().today.number==1);
     assert(std::strcmp(reboot.data().today.note.data(),"My French lesson")==0);
-    reboot.key('9');reboot.key(Escape);reboot.key(Up);reboot.key(Enter);reboot.key(Enter);assert(d.has(3,"DAY SAVED")&&d.has(8,"NEW KEEPSAKE"));
-    assert(d.has(9,"Pocket notebook"));reboot.key(Enter);
+    reboot.key('9');reboot.key(Escape);reboot.key(Up);reboot.key(Enter);assert(d.has(3,"CLOSE THE DAY?")&&d.has(6,"Activities: 3")&&!d.anyXp());
+    reboot.key(Enter);assert(d.has(3,"DAY SAVED")&&!d.anyXp());
+    assert(!d.has(8,"NEW KEEPSAKE")&&!d.has(9,"Pocket notebook"));reboot.key(Enter);
+    assert(d.has(1,"Friday 18 September 2026 (week 38)")&&!d.anyXp());
     choose(reboot,Language::French);reboot.key('3');
     reboot.key(Left);reboot.key('2');assert(d.has(5,"My French lesson"));reboot.key(Escape);
     auto saved=d.stored;auto writes=d.writes;
@@ -108,7 +113,8 @@ int main(){
     assert(d.writes==writes&&d.stored.bytes==saved.bytes);
     reboot.key(Right);reboot.key('1');d.fail=true;reboot.key('1');assert(d.has(17,"Échec sauvegarde"));
     d.fail=false;reboot.key('1');reboot.key('2');reboot.key('3');reboot.key(Escape);reboot.key('9');reboot.key(Escape);reboot.key(Up);reboot.key(Enter);reboot.key(Enter);
-    assert(d.has(3,"JOUR ENREGISTRÉ")&&d.has(9,"Tasse de thé"));reboot.key(Enter);
+    assert(d.has(3,"JOUR ENREGISTRÉ")&&!d.anyXp()&&!d.has(9,"Tasse de thé"));reboot.key(Enter);
+    assert(d.has(1,"Samedi 19 Septembre 2026 (semaine 38)"));
     assert(reboot.data().language==Language::French);
     // Reject an invalid language even if an attacker/error recomputed the CRC.
     auto malformed=encode(reboot.data());malformed.bytes[12]=2;

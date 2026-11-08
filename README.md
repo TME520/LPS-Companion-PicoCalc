@@ -4,9 +4,9 @@
 
 ![main](./main.png "Main screen")
 
-LPS-Companion helps you record daily activities, write a short note, and compare your expected and actual weight. Completing activities earns experience points (XP) and unlocks collectible keepsakes.
+LPS-Companion helps you record daily activities, write a short note, and compare your expected and actual weight.
 
-It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries and progress are saved to the SD card.
+It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries are saved to the SD card.
 
 **Status:** v1.2 was confirmed working on the user's PicoCalc. v1.11 adds the countdown timer; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
 
@@ -14,6 +14,7 @@ It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display
 
 - **TIMER / MINUTEUR**: keys **1**, **2** and **3** start a duration directly, without Enter (LPS-112-CHG01). On the completion screen they start a new countdown at once; while a countdown runs they are ignored.
 - **TIMER / MINUTEUR** now offers **5, 30 or 60 minutes** instead of 5, 15 or 30 (LPS-112-CHG02). A 60-minute countdown starts at `60:00`.
+- **No more gamification** (LPS-112-CHG03): XP and keepsakes no longer appear on any screen. Line 1 of every screen now shows the long date and ISO week, for example **Dimanche 8 Novembre 2026 (semaine 45)** / **Sunday 8 November 2026 (week 45)**; it stays blank for undated history. The ICS description keeps an empty `XP:` line so its structure stays compatible with earlier exports; the save format is unchanged.
 
 ## Changes in v1.11
 
@@ -77,7 +78,7 @@ The save format introduced in v1.7 was version 5. Existing version 1–4 saves i
 - The built-in Gregorian calendar covers **2000-01-01 through 2099-12-31**, including leap years. No separate calendar file is needed on the SD card: the rules are compiled into the firmware, so there is no extra file to corrupt or maintain.
 - Closing a dated day automatically gives the new day the next valid calendar date.
 - Closing a dated day also appends its weight values to `LPS/WEIGHTS/YYYY.csv` on the SD card. The columns are `date,expected_kg,measured_kg`; an unrecorded weight is left blank. Repeating a failed close does not duplicate the date.
-- Every successfully closed dated day writes `LPS/EXPORT/YYYY-MM-DD_LPS-Companion.ics` to the SD card. It is a standard all-day calendar event containing activities, day XP/total XP, recorded weights, and note.
+- Every successfully closed dated day writes `LPS/EXPORT/YYYY-MM-DD_LPS-Companion.ics` to the SD card. It is a standard all-day calendar event containing activities, an empty `XP:` line, recorded weights, and note.
 
 Closing is blocked until Date is valid. ICS export happens before the A/B snapshot is committed: a failed export leaves the day open and removes its incomplete ICS file. If the snapshot write fails after a successful export, retrying replaces that same date-named export; it never creates a duplicate event.
 
@@ -175,7 +176,7 @@ Flashing replaces the current Pico firmware, including any installed interpreter
 5. Optionally open **Kanban** to create or update persistent tasks.
 6. Optionally open **Christian Rosary / Rosaire chrétien** for a guided prayer session.
 7. At the end of the day, choose **Close the day / Terminer le jour** and press Enter to confirm. The ICS export is written automatically.
-8. Your XP is banked, any new keepsakes are unlocked, and the next day begins.
+8. The next day begins.
 
 Days advance manually. Leaving the device switched off does not automatically start a new day.
 
@@ -310,34 +311,15 @@ The displayed difference is **actual minus expected**. For example, expected `11
 
 Expected weight is entered manually. The app does not calculate a diet target or schedule. Both weight fields start empty on the next day.
 
-### XP and keepsakes
+### XP and keepsakes (removed in v1.12)
 
-The current scoring rules are:
-
-- **10 XP** for each checked activity.
-- **10 bonus XP** for checking at least three different activities.
-- No penalty for an empty day.
-
-For example, three checked activities earn **40 XP**. Pending XP becomes permanent when you close the day.
-
-New keepsakes are announced after closing a day. There is no collection browsing screen.
-
-| Total XP | English | Français |
-| --- | --- | --- |
-| 30 | Pocket notebook | Carnet de poche |
-| 70 | Cup of tea | Tasse de thé |
-| 120 | Compass | Boussole |
-| 180 | Pocket radio | Radio de poche |
-| 250 | Mini computer | Mini-ordinateur |
-| 330 | Lantern | Lanterne |
-
-Keepsakes unlock automatically; XP is not spent when unlocking them.
+Since v1.12 the Companion shows no XP or keepsakes. Earlier saves keep their XP value internally so old and new save files remain compatible, but it is never displayed.
 
 ### Finishing the day
 
-Open **Close the day / Terminer le jour** to review the day's activity count, bonus and total XP. Press **Enter** to confirm or **Esc** to return without closing the day.
+Open **Close the day / Terminer le jour** to review the day's activity count. Press **Enter** to confirm or **Esc** to return without closing the day.
 
-Confirmation saves the completed day, banks its XP, and clears the activity checkboxes, note and weight fields for the next day. The following screen announces any new keepsakes. Press Enter to continue.
+Confirmation saves the completed day and clears the activity checkboxes, note and weight fields for the next day. The following screen confirms the save. Press Enter to continue.
 
 ### ICS exports
 
@@ -349,7 +331,7 @@ LPS/EXPORT/YYYY-MM-DD_LPS-Companion.ics
 
 For example: `LPS/EXPORT/2026-09-17_LPS-Companion.ics`.
 
-Each file is an iCalendar 2.0 file with one all-day event. It can be copied from the SD card and imported into desktop calendar software. The event description records activities, XP, any weights, and your note. LPS Companion overwrites the same date's export on a retry, so it remains one event per closed day.
+Each file is an iCalendar 2.0 file with one all-day event. It can be copied from the SD card and imported into desktop calendar software. The event description records activities, an empty `XP:` line (kept for compatibility), any weights, and your note. LPS Companion overwrites the same date's export on a retry, so it remains one event per closed day.
 
 ## Saved data
 

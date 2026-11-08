@@ -84,7 +84,7 @@ int main(){
     FILE* ics=std::fopen("2028-02-29_LPS-Companion.ics","rb");assert(ics);char content[1024]{};const auto used=std::fread(content,1,sizeof(content)-1,ics);assert(std::fclose(ics)==0&&used>0);
     assert(std::strstr(content,"BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"));
     assert(std::strstr(content,"DTSTART;VALUE=DATE:20280229"));assert(std::strstr(content,"DTEND;VALUE=DATE:20280301"));
-    assert(std::strstr(content,"Activities: Walk, Diet\\NXP: +20 (total 20)"));
+    assert(std::strstr(content,"Activities: Walk, Diet\\NXP:"));
     // One yearly CSV, built by the same close-day path. A repeat is safe.
     FILE* csv=std::fopen("2028.csv","rb");assert(csv);std::memset(content,0,sizeof content);std::fread(content,1,sizeof(content)-1,csv);assert(std::fclose(csv)==0);
     assert(std::strstr(content,"date,expected_kg,measured_kg\r\n2028-02-29,,\r\n"));
@@ -106,7 +106,7 @@ int main(){
     std::strcpy(french.note.data(),"comma, semi; slash\\");
     assert(datedDisk.exportIcs(french,60,40,Language::French));
     ics=std::fopen("2028-03-02_LPS-Companion.ics","rb");assert(ics);std::memset(content,0,sizeof content);std::fread(content,1,sizeof(content)-1,ics);assert(std::fclose(ics)==0);
-    assert(std::strstr(content,"Activités: Régime, Congé\\NXP: +40 (total 60)\\NPoids attendu: 110.000 kg\\NPoids effectif: 109.500 kg\\NNote: comma\\, semi\\; slash\\\\"));
+    assert(std::strstr(content,"Activités: Régime, Congé\\NXP:\\NPoids attendu: 110.000 kg\\NPoids effectif: 109.500 kg\\NNote: comma\\, semi\\; slash\\\\"));
     std::remove("2028-02-29_LPS-Companion.ics");std::remove("2028-03-01_LPS-Companion.ics");std::remove("2028-03-02_LPS-Companion.ics");std::remove("2028.csv");std::remove("SAVE_A.BIN");std::remove("SAVE_B.BIN");
     std::puts("PASS: real A/B adapter with host files: history, date, annual CSV, ICS, retries and failure handling.");
 }
