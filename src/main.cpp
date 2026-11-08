@@ -190,7 +190,7 @@ public:
         if(check.status!=Record::Valid||check.bytes!=record){writeFault=true;return false;}
         active=int(slot);++generation;return true;
     }
-    bool exportIcs(const lps::Day& day,uint32_t totalXp,uint32_t dayXp,lps::Language language)override{
+    bool exportIcs(const lps::Day& day,uint32_t,uint32_t,lps::Language language)override{
         if(!mounted||!lps::validDate(day.date))return false;
         FRESULT r=f_mkdir("0:/LPS");if(r!=FR_OK&&r!=FR_EXIST)return false;
         r=f_mkdir("0:/LPS/EXPORT");if(r!=FR_OK&&r!=FR_EXIST)return false;
@@ -210,7 +210,8 @@ public:
         if(first)ok=ok&&put(f,"none");
         // RFC 5545 TEXT line breaks are a single backslash followed by N. Do
         // not run that escape through escaped(), or it becomes a literal \\N.
-        std::snprintf(line,sizeof line,"\\NXP: +%lu (total %lu)",static_cast<unsigned long>(dayXp),static_cast<unsigned long>(totalXp));ok=ok&&put(f,line);
+        // LPS-112-CHG03: the XP line is kept, empty, so ICS structure stays compatible.
+        ok=ok&&put(f,"\\NXP:");
         if(day.expected>=0){ok=ok&&put(f,"\\N");std::snprintf(line,sizeof line,"%s: %ld.%03ld kg",language==lps::Language::English?"Expected weight":"Poids attendu",long(day.expected/1000),long(day.expected%1000));ok=ok&&escaped(f,line);}
         if(day.actual>=0){ok=ok&&put(f,"\\N");std::snprintf(line,sizeof line,"%s: %ld.%03ld kg",language==lps::Language::English?"Actual weight":"Poids effectif",long(day.actual/1000),long(day.actual%1000));ok=ok&&escaped(f,line);}
         if(day.note[0]){ok=ok&&put(f,"\\NNote: ");ok=ok&&escaped(f,day.note.data());}

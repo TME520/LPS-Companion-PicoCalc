@@ -40,9 +40,8 @@ int main(){
             app.key(Left);checkDay(app.viewedDay(),n);
             // Attempt edits in every archived screen; no writes or XP changes.
             app.key('1');app.key('1');app.key(Enter);app.key(Right);app.key(Escape);
-            app.key('2');app.key('X');app.key(Backspace);app.key(Enter);
-            app.key('3');app.key('9');app.key(Backspace);app.key(Enter);
-            app.key('4');assert(app.currentScreen()==Screen::Home);
+            app.key('2');app.key('9');app.key(Backspace);app.key(Enter);
+            app.key('3');assert(app.currentScreen()==Screen::Home);
             checkDay(app.viewedDay(),n);assert(app.data().xp==400);
         }
         app.key(Left);checkDay(app.viewedDay(),10); // Oldest retained boundary.
@@ -80,11 +79,11 @@ int main(){
     // Replace default date using the exact Date screen, including fixed-width edit.
     dated.key('0');for(int i=0;i<10;++i)dated.key(Backspace);for(char c:std::string("2028-02-29"))dated.key(c);dated.key(Enter);
     dated.key('1');dated.key('1');dated.key('2');dated.key(Escape);
-    dated.key('9');dated.key(Escape);dated.key(Up);dated.key(Enter);dated.key(Enter);assert(dated.data().today.date.year==2028&&dated.data().today.date.month==3&&dated.data().today.date.day==1);
+    dated.key('8');dated.key(Escape);dated.key(Up);dated.key(Enter);dated.key(Enter);assert(dated.data().today.date.year==2028&&dated.data().today.date.month==3&&dated.data().today.date.day==1);
     FILE* ics=std::fopen("2028-02-29_LPS-Companion.ics","rb");assert(ics);char content[1024]{};const auto used=std::fread(content,1,sizeof(content)-1,ics);assert(std::fclose(ics)==0&&used>0);
     assert(std::strstr(content,"BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"));
     assert(std::strstr(content,"DTSTART;VALUE=DATE:20280229"));assert(std::strstr(content,"DTEND;VALUE=DATE:20280301"));
-    assert(std::strstr(content,"Activities: Walk, Diet\\NXP: +20 (total 20)"));
+    assert(std::strstr(content,"Activities: Walk, Diet\\NXP:"));
     // One yearly CSV, built by the same close-day path. A repeat is safe.
     FILE* csv=std::fopen("2028.csv","rb");assert(csv);std::memset(content,0,sizeof content);std::fread(content,1,sizeof(content)-1,csv);assert(std::fclose(csv)==0);
     assert(std::strstr(content,"date,expected_kg,measured_kg\r\n2028-02-29,,\r\n"));
@@ -96,7 +95,7 @@ int main(){
     const auto generationAfterLeap=readRecord(0).generation>readRecord(1).generation?readRecord(0).generation:readRecord(1).generation;
     // Invalid dates and export failure never advance the day or A/B generation.
     dated.key('0');for(int i=0;i<10;++i)dated.key(Backspace);for(char c:std::string("2027-02-29"))dated.key(c);dated.key(Enter);assert(dated.data().today.date.year==2028);
-    dated.key(Escape);dated.key('9');dated.key(Escape);dated.key(Up);dated.key(Enter);std::remove("2028-03-01_LPS-Companion.ics");
+    dated.key(Escape);dated.key('8');dated.key(Escape);dated.key(Up);dated.key(Enter);std::remove("2028-03-01_LPS-Companion.ics");
     mockWriteError=true;dated.key(Enter);assert(dated.data().today.date.day==1);FILE* missing=std::fopen("2028-03-01_LPS-Companion.ics","rb");assert(!missing);
     mockWriteError=false;dated.key(Enter);assert(dated.data().today.date.day==2);
     const auto generationAfterRetry=readRecord(0).generation>readRecord(1).generation?readRecord(0).generation:readRecord(1).generation;
@@ -106,7 +105,7 @@ int main(){
     std::strcpy(french.note.data(),"comma, semi; slash\\");
     assert(datedDisk.exportIcs(french,60,40,Language::French));
     ics=std::fopen("2028-03-02_LPS-Companion.ics","rb");assert(ics);std::memset(content,0,sizeof content);std::fread(content,1,sizeof(content)-1,ics);assert(std::fclose(ics)==0);
-    assert(std::strstr(content,"Activités: Régime, Congé\\NXP: +40 (total 60)\\NPoids attendu: 110.000 kg\\NPoids effectif: 109.500 kg\\NNote: comma\\, semi\\; slash\\\\"));
+    assert(std::strstr(content,"Activités: Régime, Congé\\NXP:\\NPoids attendu: 110.000 kg\\NPoids effectif: 109.500 kg\\NNote: comma\\, semi\\; slash\\\\"));
     std::remove("2028-02-29_LPS-Companion.ics");std::remove("2028-03-01_LPS-Companion.ics");std::remove("2028-03-02_LPS-Companion.ics");std::remove("2028.csv");std::remove("SAVE_A.BIN");std::remove("SAVE_B.BIN");
     std::puts("PASS: real A/B adapter with host files: history, date, annual CSV, ICS, retries and failure handling.");
 }
