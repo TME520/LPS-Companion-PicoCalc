@@ -23,13 +23,13 @@ int main(){
     s.taskCount=3;s.tasks[0].status=TaskStatus::Todo;std::snprintf(s.tasks[0].name.data(),33,"Buy supplies");
     s.tasks[1].status=TaskStatus::Doing;std::snprintf(s.tasks[1].name.data(),33,"Write notes");
     s.tasks[2].status=TaskStatus::Done;std::snprintf(s.tasks[2].name.data(),33,"Hidden done task");
-    d.stored=encode(s);App a(d);a.start();a.key('6');assert(a.currentScreen()==Screen::DailyReview);
+    d.stored=encode(s);App a(d);a.start();a.key('5');assert(a.currentScreen()==Screen::DailyReview);
     assert(d.has("2026-09-23")&&d.has("117.700 kg")&&d.has("Walk")&&d.has("Bible"));
     assert(d.has("TODO (1)")&&d.has("DOING (1)"));assert(!d.has("Hidden done task"));
     a.key(Escape);assert(a.currentScreen()==Screen::Home);
     s.language=Language::French;s.today.flags=0;s.today.actual=-1;
     s.taskCount=24;for(unsigned i=0;i<24;++i){s.tasks[i].status=i%2?TaskStatus::Doing:TaskStatus::Todo;std::snprintf(s.tasks[i].name.data(),33,"Tache %02u",i);}
-    d.stored=encode(s);App fr(d);fr.start();fr.key('6');assert(d.has("REVUE JOURNALIÈRE")&&d.has("Poids effectif : -- kg")&&d.has("Aucune sélectionnée"));
+    d.stored=encode(s);App fr(d);fr.start();fr.key('5');assert(d.has("REVUE JOURNALIÈRE")&&d.has("Poids effectif : -- kg")&&d.has("Aucune sélectionnée"));
     for(unsigned i=0;i<40;++i)fr.key(Down);
     assert(d.has("Tache 23")&&!d.has("FINI"));
     for(unsigned i=0;i<12;++i)fr.key(Up);

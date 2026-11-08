@@ -39,18 +39,20 @@ public:
     bool exportIcs(const Day&,uint32_t,uint32_t,Language)override{if(failExport)return false;++exports;return true;}
     bool exportWeightCsv(const Day&)override{if(failWeightCsv)return false;++weightExports;return true;}
 };
-void choose(App& app,Language language){app.key('7');app.key('1');app.key(language==Language::French?'2':'1');}
+void choose(App& app,Language language){app.key('6');app.key('1');app.key(language==Language::French?'2':'1');}
 void checkMenus(Display& d,App& a,bool fr){
     assert(d.has(6,"0  Date"));
     assert(d.has(7,fr?"1  Activités":"1  Activities"));
-    assert(d.has(8,fr?"2  Bloc notes":"2  Notepad"));
-    assert(d.has(9,fr?"3  Suivi du poids":"3  Weight tracker"));
-    assert(d.has(10,"4  Kanban"));
-    assert(d.has(11,fr?"5  Rosaire chrétien":"5  Christian Rosary"));
-    assert(d.has(12,fr?"6  Revue journalière":"6  Daily review"));
-    assert(d.has(13,"7  Config"));
-    assert(d.has(14,fr?"8  Rappels":"8  Reminders"));
-    assert(d.has(16,fr?"10 Terminer le jour":"10 Close the day"));
+    assert(d.has(8,fr?"2  Suivi du poids":"2  Weight tracker"));
+    assert(d.has(9,"3  Kanban"));
+    assert(d.has(10,fr?"4  Rosaire chrétien":"4  Christian Rosary"));
+    assert(d.has(11,fr?"5  Revue journalière":"5  Daily review"));
+    assert(d.has(12,"6  Config"));
+    assert(d.has(13,fr?"7  Rappels":"7  Reminders"));
+    assert(d.has(14,fr?"8  Minuteur":"8  Timer"));
+    assert(d.has(15,fr?"9  Terminer le jour":"9  Close the day"));
+    // LPS-112-CHG05: the notepad is gone from the menu in both languages.
+    for(const auto& row:d.rows){char cells[40];displayText(fr?"Bloc notes":"Notepad",cells,sizeof cells);assert(!std::strstr(row.data(),cells));}
     const char* footer=d.rows[19].data();char desired[24];displayText(fr?"Entrée":"Enter",desired,sizeof desired);const char* key=std::strstr(footer,desired);
     assert(key&&d.bold[19][unsigned(key-footer)]);
     if(fr){char back[24];displayText("Retour",back,sizeof back);const char* plain=std::strstr(footer,back);assert(plain);for(unsigned i=0;i<std::strlen(back);++i)assert(!d.bold[19][unsigned(plain-footer)+i]);}
@@ -62,15 +64,15 @@ void checkMenus(Display& d,App& a,bool fr){
     assert(d.has(9,fr?"Calendrier":"Calendar"));a.key(Escape);
     a.key('1');assert(d.has(3,fr?"ACTIVITÉS":"ACTIVITIES"));assert(d.has(6,fr?"Régime":"Diet"));
     assert(d.has(14,fr?"Congé":"Day off"));a.key(Right);assert(d.has(5,"Weekend"));assert(d.has(6,fr?"Sortie":"Outing"));assert(d.has(7,fr?"Jeu":"Gaming"));assert(d.has(8,fr?"Docteur":"Doctor"));assert(d.has(9,fr?"Lecture":"Reading"));assert(d.has(10,"Shopping"));a.key(Right);a.key(Escape);
-    a.key('2');assert(d.has(3,fr?"BLOC NOTES":"NOTEPAD"));a.key(Escape);
-    a.key('3');assert(d.has(3,fr?"SUIVI DU POIDS":"WEIGHT TRACKER"));
+    a.key('2');assert(d.has(3,fr?"SUIVI DU POIDS":"WEIGHT TRACKER"));
     assert(d.has(6,fr?"Attendu":"Expected"));assert(d.has(9,fr?"Effectif":"Actual"));
     a.key('0');a.key(Enter);assert(d.has(17,fr?"Poids invalide":"Invalid weight"));a.key(Escape);
-    a.key('4');assert(a.currentScreen()==Screen::Kanban);assert(d.has(3,fr?"À FAIRE":"TODO"));a.key(Escape);
-    a.key('9');a.key(Escape);a.key(Up);a.key(Enter);assert(d.has(3,fr?"TERMINER LE JOUR":"CLOSE THE DAY"));a.key(Escape);
-    a.key('5');assert(a.currentScreen()==Screen::RosaryMode);assert(d.has(3,fr?"MODE DU ROSAIRE":"ROSARY MODE"));
+    a.key('3');assert(a.currentScreen()==Screen::Kanban);assert(d.has(3,fr?"À FAIRE":"TODO"));a.key(Escape);
+    a.key('8');assert(a.currentScreen()==Screen::TimerSelect);a.key(Escape);a.key(Up);a.key(Enter);assert(d.has(3,fr?"TERMINER LE JOUR":"CLOSE THE DAY"));a.key(Escape);
+    a.key('9');assert(a.currentScreen()==Screen::Finish);a.key(Escape);
+    a.key('4');assert(a.currentScreen()==Screen::RosaryMode);assert(d.has(3,fr?"MODE DU ROSAIRE":"ROSARY MODE"));
     a.key(Enter);a.key(Enter);assert(a.currentScreen()==Screen::RosaryDecade);a.key(Escape);a.key(Escape);a.key(Escape);
-    a.key('7');assert(d.has(6,fr?"1  Langue":"1  Language"));assert(d.has(7,fr?"2  Couleurs":"2  Colors"));assert(d.has(8,fr?"3  Enregistrer":"3  Save"));
+    a.key('6');assert(d.has(6,fr?"1  Langue":"1  Language"));assert(d.has(7,fr?"2  Couleurs":"2  Colors"));assert(d.has(8,fr?"3  Enregistrer":"3  Save"));
     a.key('2');assert(d.has(6,fr?"1  PAL1  rouge":"1  PAL1  red"));assert(d.has(7,fr?"2  PAL2  vert":"2  PAL2  green"));assert(d.has(8,fr?"3  PAL3  bleu":"3  PAL3  blue"));
     assert(d.has(9,"4  PAL4  Orange")&&d.has(10,fr?"5  PAL5  Rose":"5  PAL5  Pink"));a.key(Escape);
     a.key('1');assert(d.has(7,"Français"));a.key(Escape);a.key(Escape);
@@ -90,29 +92,28 @@ int main(){
     d.fail=false;a.key('3');assert(a.currentScreen()==Screen::Home&&d.writes==1);
     assert(a.data().language==Language::French&&d.has(18,"Configuration enregistrée"));
     checkMenus(d,a,true);
-    a.key('7');a.key('2');a.key('4');assert(d.shown==Palette::Orange);a.key(Enter);
+    a.key('6');a.key('2');a.key('4');assert(d.shown==Palette::Orange);a.key(Enter);
     assert(a.data().palette==Palette::Orange&&a.currentScreen()==Screen::Home);
-    a.key('7');a.key('2');a.key('5');assert(d.shown==Palette::Pink);a.key(Enter);
+    a.key('6');a.key('2');a.key('5');assert(d.shown==Palette::Pink);a.key(Enter);
     assert(a.data().palette==Palette::Pink);
     App colorsReload(d);colorsReload.start();assert(colorsReload.data().palette==Palette::Pink&&d.shown==Palette::Pink);
     App reboot(d);reboot.start();assert(reboot.data().language==Language::French);checkMenus(d,reboot,true);
     // Proper names and user text are invariant; save settings never changes XP/days.
-    reboot.key('2');for(char c:std::string("My French lesson"))reboot.key(c);reboot.key(Enter);
     reboot.key('1');reboot.key('1');reboot.key('2');reboot.key('3');reboot.key(Escape);
     choose(reboot,Language::English);reboot.key('3');
     assert(reboot.data().xp==0&&reboot.data().today.flags==7&&reboot.data().today.number==1);
-    assert(std::strcmp(reboot.data().today.note.data(),"My French lesson")==0);
-    reboot.key('9');reboot.key(Escape);reboot.key(Up);reboot.key(Enter);assert(d.has(3,"CLOSE THE DAY?")&&d.has(6,"Activities: 3")&&!d.anyXp());
+    assert(!reboot.data().today.note[0]);
+    reboot.key('8');reboot.key(Escape);reboot.key(Up);reboot.key(Enter);assert(d.has(3,"CLOSE THE DAY?")&&d.has(6,"Activities: 3")&&!d.anyXp());
     reboot.key(Enter);assert(d.has(3,"DAY SAVED")&&!d.anyXp());
     assert(!d.has(8,"NEW KEEPSAKE")&&!d.has(9,"Pocket notebook"));reboot.key(Enter);
     assert(d.has(1,"Friday 18 September 2026 (week 38)")&&!d.anyXp());
     choose(reboot,Language::French);reboot.key('3');
-    reboot.key(Left);reboot.key('2');assert(d.has(5,"My French lesson"));reboot.key(Escape);
+    reboot.key(Left);assert(d.has(6,"1  Activités")&&d.has(7,"2  Suivi du poids"));reboot.key('2');assert(reboot.currentScreen()==Screen::Weight);reboot.key(Escape);
     auto saved=d.stored;auto writes=d.writes;
     reboot.key('4');assert(d.has(18,"lecture seule"));reboot.key('5');assert(reboot.currentScreen()==Screen::Home);
     assert(d.writes==writes&&d.stored.bytes==saved.bytes);
     reboot.key(Right);reboot.key('1');d.fail=true;reboot.key('1');assert(d.has(17,"Échec sauvegarde"));
-    d.fail=false;reboot.key('1');reboot.key('2');reboot.key('3');reboot.key(Escape);reboot.key('9');reboot.key(Escape);reboot.key(Up);reboot.key(Enter);reboot.key(Enter);
+    d.fail=false;reboot.key('1');reboot.key('2');reboot.key('3');reboot.key(Escape);reboot.key('8');reboot.key(Escape);reboot.key('9');reboot.key(Enter);
     assert(d.has(3,"JOUR ENREGISTRÉ")&&!d.anyXp()&&!d.has(9,"Tasse de thé"));reboot.key(Enter);
     assert(d.has(1,"Samedi 19 Septembre 2026 (semaine 38)"));
     assert(reboot.data().language==Language::French);

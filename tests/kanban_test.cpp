@@ -28,7 +28,7 @@ public:
 void add(App& app,const char* name){app.key('N');assert(app.currentScreen()==Screen::TaskEdit);for(char c:std::string(name))app.key(c);app.key(Enter);assert(app.currentScreen()==Screen::Kanban);}
 
 int main(){
-    BoardDisplay display;App app(display);app.start();app.key('4');
+    BoardDisplay display;App app(display);app.start();app.key('3');
     assert(app.currentScreen()==Screen::Kanban&&display.has(3,"TODO")&&display.has(6,"No tasks"));
     add(app,"Alpha");add(app,"Beta");add(app,"Gamma");
     assert(app.data().taskCount==3&&std::strcmp(app.data().tasks[2].name.data(),"Gamma")==0);

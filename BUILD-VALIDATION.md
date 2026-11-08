@@ -5,6 +5,7 @@
 - LPS-112-CHG01: timer tests cover keys 1-3 starting each duration from the selection screen, restarting a new duration from the completion screen, and being ignored while a countdown runs.
 - LPS-112-CHG02: timer tests cover 5/30/60-minute durations (initial 05:00, 30:00, 60:00), normal colour at 01:00, red at 00:59, pause/resume and completion for each.
 - LPS-112-CHG03: language tests assert that no screen row contains "XP" (Home, Close the day, Day saved, EN and FR), that keepsakes are no longer announced, and that line 1 shows the long date with ISO week in both languages. The ISO week computation was checked against Python's calendar for every date from 2000-01-01 to 2099-12-31 (36,525 days, no mismatch). ICS exports keep an empty `XP:` line; lps-console ignores it.
+- LPS-112-CHG05: application and language tests assert the renumbered home menu (0 Date … 8 Timer, 9 Close the day, reachable with a single key), the two-entry archived-day menu (1 Activities, 2 Weight tracker), read-only rejection of keys 0 and 3-9 on archived days, and that no row shows Notepad/Bloc notes in either language. All suites using home shortcuts were updated. The real adapter test still exports a legacy note to the ICS `Note:` line.
 - All nine host test suites pass with C++17 and warnings treated as errors.
 
 # Validation v1.11 — 2 October 2026

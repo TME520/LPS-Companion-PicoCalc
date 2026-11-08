@@ -236,7 +236,7 @@ bool decode(const uint8_t* bytes,std::size_t size,State& out) {
     if(!valid)return false;
     out=s;return true;
 }
-enum class Screen { TimerSelect, TimerRunning, TimerComplete, Home, ReminderPopup, Reminders, ReminderEdit, Date, Activities, Note, Weight, Kanban, TaskEdit, DailyReview, Finish, Reward, Config, Language, Colors,
+enum class Screen { TimerSelect, TimerRunning, TimerComplete, Home, ReminderPopup, Reminders, ReminderEdit, Date, Activities, Weight, Kanban, TaskEdit, DailyReview, Finish, Reward, Config, Language, Colors,
                     RosaryMode, RosarySet, RosaryDecade, RosaryPrayer, RosaryComplete };
 class App {
     Platform& hw;
@@ -247,7 +247,6 @@ class App {
     Language pendingLanguage=Language::English;
     Palette pendingPalette=Palette::Green;
     std::array<char,11> dateDraft{};
-    std::array<char,NoteLength+1> draft{};
     std::array<char,TaskNameLength+1> taskDraft{};
     std::array<std::array<char,8>,2> weights{};
     std::array<char,100> message{};
@@ -546,7 +545,6 @@ class App {
         if(s==Screen::DailyReview)reviewOffset=0;
         if(s==Screen::Language)selection=unsigned(pendingLanguage);
         if(s==Screen::Colors)selection=unsigned(pendingPalette);
-        if(s==Screen::Note)draft=viewedDay().note;
         if(s==Screen::Weight){field=0;for(unsigned i=0;i<2;++i){int32_t v=i?viewedDay().actual:viewedDay().expected;weights[i].fill(0);if(v>=0)weightText(v,weights[i].data(),weights[i].size());}}
         if(s==Screen::Date){dateDraft.fill(0);Date d=validDate(state.today.date)?state.today.date:DefaultDate;dateText(d,dateDraft.data(),dateDraft.size());}
     }
@@ -599,16 +597,16 @@ public:
                 else say(state.count?tr("Oldest saved day","Plus ancien jour conservé"):tr("No archived days","Aucun jour archivé"));
             }
             if(k==Right){daysBack=0;selection=0;page=0;}
-            const unsigned menuCount=daysBack?3:11;
+            const unsigned menuCount=daysBack?2:10;
             if(k==Up)selection=(selection+menuCount-1)%menuCount;
             if(k==Down)selection=(selection+1)%menuCount;
             if(!daysBack&&k=='0'){selection=0;k=Enter;}
-            else if(daysBack&&k>='1'&&k<='3'){selection=unsigned(k-'1');k=Enter;}
+            else if(daysBack&&k>='1'&&k<='2'){selection=unsigned(k-'1');k=Enter;}
             else if(!daysBack&&k>='1'&&k<='9'){selection=unsigned(k-'0');k=Enter;}
-            if((k=='0'||(k>='4'&&k<='9'))&&daysBack)readOnly();
+            if((k=='0'||(k>='3'&&k<='9'))&&daysBack)readOnly();
             if(k==Enter){
-                constexpr Screen currentScreens[]={Screen::Date,Screen::Activities,Screen::Note,Screen::Weight,Screen::Kanban,Screen::RosaryMode,Screen::DailyReview,Screen::Config,Screen::Reminders,Screen::TimerSelect,Screen::Finish};
-                constexpr Screen archiveScreens[]={Screen::Activities,Screen::Note,Screen::Weight};
+                constexpr Screen currentScreens[]={Screen::Date,Screen::Activities,Screen::Weight,Screen::Kanban,Screen::RosaryMode,Screen::DailyReview,Screen::Config,Screen::Reminders,Screen::TimerSelect,Screen::Finish};
+                constexpr Screen archiveScreens[]={Screen::Activities,Screen::Weight};
                 const Screen target=daysBack?archiveScreens[selection]:currentScreens[selection];
                 if(target==Screen::Kanban)kanbanColumn=TaskStatus::Todo;
                 if(target==Screen::Reminders)pruneReminders();
@@ -670,10 +668,6 @@ public:
                 unsigned id=k==Enter?page*PageSize+selection:unsigned(k-'1');State next=state;next.today.flags^=uint16_t(1u<<id);
                 if(commit(next)){page=id/PageSize;selection=id%PageSize;}
             }
-        }else if(screen==Screen::Note){
-            if(daysBack){if(k==Enter)go(Screen::Home);else readOnly();}
-            else if(k==Enter){State next=state;next.today.note=draft;if(commit(next))go(Screen::Home);}
-            else edit(draft,k);
         }else if(screen==Screen::Weight){
             if(daysBack){if(k==Enter)go(Screen::Home);else readOnly();}
             else if(k==Up||k==Down||k==9)field=1-field;
@@ -787,8 +781,8 @@ public:
         if(screen==Screen::Home){
             line(3,daysBack?tr("CLOSED DAY","JOUR TERMINÉ"):tr("TODAY","AUJOURD'HUI"));
             std::snprintf(b,sizeof b,tr("%u/%u activities","%u/%u activités"),count(day.flags),ActivityCount);line(4,b);
-            const char* menu[]={"0  Date",tr("1  Activities","1  Activités"),tr("2  Notepad","2  Bloc notes"),tr("3  Weight tracker","3  Suivi du poids"),"4  Kanban",tr("5  Christian Rosary","5  Rosaire chrétien"),tr("6  Daily review","6  Revue journalière"),"7  Config",tr("8  Reminders","8  Rappels"),tr("9  Timer","9  Minuteur"),tr("10 Close the day","10 Terminer le jour")};
-            const unsigned first=daysBack?1:0, total=daysBack?3:11;
+            const char* menu[]={"0  Date",tr("1  Activities","1  Activités"),tr("2  Weight tracker","2  Suivi du poids"),"3  Kanban",tr("4  Christian Rosary","4  Rosaire chrétien"),tr("5  Daily review","5  Revue journalière"),"6  Config",tr("7  Reminders","7  Rappels"),tr("8  Timer","8  Minuteur"),tr("9  Close the day","9  Terminer le jour")};
+            const unsigned first=daysBack?1:0, total=daysBack?2:10;
             for(unsigned i=0;i<total;++i)line(6+int(i),menu[first+i],i==selection);
             line(17,tr("<- Previous day   -> Current day","<- Jour précédent   -> Jour actuel"));
         }else if(screen==Screen::TimerSelect){
@@ -838,9 +832,6 @@ public:
                 hw.text(0,(5+int(i-page*PageSize))*16,b,i-page*PageSize==selection);
             }
             line(15,daysBack?tr("<- -> pages   Esc: day menu","<- -> pages   Échap : menu du jour"):tr("Enter: toggle  1-9: keys  <- -> pages","Entrée: cocher  1-9: racc.  <- -> pages"));
-        }else if(screen==Screen::Note){
-            line(3,tr("NOTEPAD","BLOC NOTES"));wrap(5,draft.data(),3);std::snprintf(b,sizeof b,tr("%zu/96 characters","%zu/96 caractères"),std::strlen(draft.data()));line(10,b);
-            line(14,daysBack?tr("Enter / Esc: day menu","Entrée / Échap : menu du jour"):tr("Enter: save / Esc: cancel","Entrée : valider / Échap : annuler"));
         }else if(screen==Screen::Weight){
             line(3,tr("WEIGHT TRACKER (kg)","SUIVI DU POIDS (kg)"));std::snprintf(b,sizeof b,tr("Expected : %s","Attendu  : %s"),weights[0].data());line(6,b,field==0);std::snprintf(b,sizeof b,tr("Actual   : %s","Effectif : %s"),weights[1].data());line(9,b,field==1);
             int32_t a=0,c=0;bool valid=parseWeight(weights[0].data(),a)&&parseWeight(weights[1].data(),c)&&a>=0&&c>=0;
@@ -1046,14 +1037,17 @@ int main(){
     historyState.next=1;historyState.count=1;history.stored=encode(historyState);history.exists=true;
     App browsing(history);browsing.start();browsing.key(Left);
     assert(browsing.viewedDay().number==1);
-    browsing.key('2');assert(std::strcmp(history.rows[5].data(),"Yesterday only")==0);
-    browsing.key(Escape);browsing.key('3');
+    // LPS-112-CHG05: the archived-day menu is 1 Activities, 2 Weight; no notepad.
+    assert(std::strstr(history.rows[6].data(),"1  Activities")&&std::strstr(history.rows[7].data(),"2  Weight tracker"));
+    for(const auto& row:history.rows)assert(!std::strstr(row.data(),"Notepad"));
+    browsing.key('3');assert(browsing.currentScreen()==Screen::Home);
+    browsing.key('2');
     assert(std::strstr(history.rows[6].data(),"110.500"));
     assert(std::strstr(history.rows[9].data(),"111.200"));
     assert(std::strstr(history.rows[12].data(),"+0.700"));
     browsing.key(Escape);browsing.key('1');browsing.key(Right);
     assert(std::strstr(history.rows[5].data(),"Weekend")&&std::strstr(history.rows[5].data(),"[x]"));
-    browsing.key(Escape);browsing.key(Right);browsing.key('3');
+    browsing.key(Escape);browsing.key(Right);browsing.key('2');
     assert(std::strstr(history.rows[6].data(),"120.000"));
     Memory pages;App nav(pages);nav.start();nav.key('1');
     for(int i=0;i<9;++i)nav.key(Down);
@@ -1064,9 +1058,9 @@ int main(){
     App reload(pages);reload.start();assert(reload.data().today.flags==nav.data().today.flags);
     nav.key('1');assert(nav.data().today.flags&1);
     nav.key(Right);nav.key(Enter);assert(!(nav.data().today.flags&(1u<<10)));
-    nav.key(Escape);nav.key('4');assert(nav.currentScreen()==Screen::Kanban);nav.key(Escape);
+    nav.key(Escape);nav.key('3');assert(nav.currentScreen()==Screen::Kanban);nav.key(Escape);
     nav.key(Escape);nav.key(Up);nav.key(Enter);assert(nav.currentScreen()==Screen::Finish);
-    nav.key(Escape);nav.key('7');assert(nav.currentScreen()==Screen::Config);nav.key('2');assert(nav.currentScreen()==Screen::Colors);
+    nav.key(Escape);nav.key('9');assert(nav.currentScreen()==Screen::Finish);nav.key(Escape);nav.key('6');assert(nav.currentScreen()==Screen::Config);nav.key('2');assert(nav.currentScreen()==Screen::Colors);
     assert(pages.palette==Palette::Green);nav.key(Down);assert(pages.palette==Palette::Blue);nav.key(Escape);assert(pages.palette==Palette::Green);
     nav.key('2');nav.key('1');nav.key(Enter);assert(nav.currentScreen()==Screen::Home&&nav.data().palette==Palette::Red&&pages.palette==Palette::Red);
     App paletteReload(pages);paletteReload.start();assert(paletteReload.data().palette==Palette::Red);
@@ -1086,13 +1080,13 @@ int main(){
     Memory mem;App a(mem);a.start();a.key('1');a.key('1');a.key('2');a.key('3');assert(points(a.data().today)==40);
     a.key('3');assert(points(a.data().today)==20);a.key('9');assert(a.data().today.flags&(1u<<8));
     State before=a.data();mem.fail=true;a.key('4');assert(a.data().today.flags==before.today.flags);mem.fail=false;
-    a.key(Escape);a.key('3');for(char c:std::array<char,5>{'1','1','0',',','5'})a.key(c);a.key(Down);for(char c:std::array<char,5>{'1','1','1','.','2'})a.key(c);a.key(Enter);assert(a.data().today.expected==110500&&a.data().today.actual==111200);
-    a.key('2');a.key('O');a.key('K');a.key(Enter);assert(std::strcmp(a.data().today.note.data(),"OK")==0);
+    a.key(Escape);a.key('2');for(char c:std::array<char,5>{'1','1','0',',','5'})a.key(c);a.key(Down);for(char c:std::array<char,5>{'1','1','1','.','2'})a.key(c);a.key(Enter);assert(a.data().today.expected==110500&&a.data().today.actual==111200);
+    for(const auto& row:mem.rows)assert(!std::strstr(row.data(),"Notepad"));assert(!a.data().today.note[0]);
     a.key(Up);a.key(Enter);a.key(Enter);assert(a.data().xp==40&&a.data().today.number==2&&a.data().today.flags==0);assert(a.data().history[0].actual==111200);a.key(Enter);assert(a.data().xp==40);
     App restored(mem);restored.start();assert(restored.data().xp==40&&restored.data().today.number==2);
     assert(mem.stored.size==WireSize);State decoded;assert(decode(mem.stored.bytes.data(),mem.stored.size,decoded));assert(!decode(mem.stored.bytes.data(),10,decoded));
     for(int i=0;i<40;++i){restored.key(Escape);restored.key(Up);restored.key(Enter);restored.key(Enter);restored.key(Enter);}assert(restored.data().count==31&&restored.data().today.number==42);
     mem.stored.bytes[20]^=1;App corrupt(mem);corrupt.start();auto original=mem.stored;corrupt.key('1');corrupt.key('1');assert(corrupt.data().today.flags==0);assert(mem.stored.bytes==original.bytes);
-    std::puts("PASS: weights, toggles, bonus, rollback, notes, closure, restore, ring history, CRC, palette preview/persistence, corrupt-save protection and render bounds.");
+    std::puts("PASS: weights, toggles, bonus, rollback, no notepad, renumbered menu, closure, restore, ring history, CRC, palette preview/persistence, corrupt-save protection and render bounds.");
 }
 #endif

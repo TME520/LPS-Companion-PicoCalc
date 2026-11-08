@@ -4,7 +4,7 @@
 
 ![main](./main.png "Main screen")
 
-LPS-Companion helps you record daily activities, write a short note, and compare your expected and actual weight.
+LPS-Companion helps you record daily activities and compare your expected and actual weight.
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries are saved to the SD card.
 
@@ -15,6 +15,7 @@ It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display
 - **TIMER / MINUTEUR**: keys **1**, **2** and **3** start a duration directly, without Enter (LPS-112-CHG01). On the completion screen they start a new countdown at once; while a countdown runs they are ignored.
 - **TIMER / MINUTEUR** now offers **5, 30 or 60 minutes** instead of 5, 15 or 30 (LPS-112-CHG02). A 60-minute countdown starts at `60:00`.
 - **No more gamification** (LPS-112-CHG03): XP and keepsakes no longer appear on any screen. Line 1 of every screen now shows the long date and ISO week, for example **Dimanche 8 Novembre 2026 (semaine 45)** / **Sunday 8 November 2026 (week 45)**; it stays blank for undated history. The ICS description keeps an empty `XP:` line so its structure stays compatible with earlier exports; the save format is unchanged.
+- **Notepad removed** (LPS-112-CHG05): Kanban and Reminders cover its use. The home menu is renumbered so every entry has a single-key shortcut: **0 Date, 1 Activities, 2 Weight tracker, 3 Kanban, 4 Christian Rosary, 5 Daily review, 6 Config, 7 Reminders, 8 Timer, 9 Close the day**. The archived-day menu becomes **1 Activities, 2 Weight tracker**. A note already present in a save (typed before v1.12) is no longer shown but is still exported to the ICS when its day is closed; the save format is unchanged.
 
 ## Changes in v1.11
 
@@ -100,7 +101,7 @@ Closing is blocked until Date is valid. ICS export happens before the A/B snapsh
 
 - On the home screen, **Left** steps back one saved day. Press again to go further back, up to the 31 retained completed days.
 - On the home screen, **Right** returns directly to the current day.
-- Past days are marked **JOUR ARCHIVE - LECTURE SEULE**. Open Activities, Note or Weight to inspect that day's entries. Historical entries cannot be edited or closed again.
+- Past days are marked **JOUR ARCHIVE - LECTURE SEULE**. Open Activities or Weight to inspect that day's entries. Historical entries cannot be edited or closed again.
 - **Esc** returns to the selected day's menu. In Activities, Left/Right still switches activity pages; return to the menu before navigating days.
 - The existing save format is unchanged: v1.0/v1.1 history loads automatically. Browsing never writes either save file or awards XP.
 
@@ -171,30 +172,29 @@ Flashing replaces the current Pico firmware, including any installed interpreter
 
 1. Open **0 Date**, check or enter the current date, then press Enter.
 2. Open **Activities / Activités** and check the activities you have completed.
-3. Open **Notepad / Bloc notes**, type a short note, and press Enter to save it.
-4. Open **Weight tracker / Suivi du poids** to enter your expected and actual weight.
-5. Optionally open **Kanban** to create or update persistent tasks.
-6. Optionally open **Christian Rosary / Rosaire chrétien** for a guided prayer session.
-7. At the end of the day, choose **Close the day / Terminer le jour** and press Enter to confirm. The ICS export is written automatically.
-8. The next day begins.
+3. Open **Weight tracker / Suivi du poids** to enter your expected and actual weight.
+4. Optionally open **Kanban** to create or update persistent tasks.
+5. Optionally open **Christian Rosary / Rosaire chrétien** for a guided prayer session.
+6. At the end of the day, choose **9 Close the day / Terminer le jour** and press Enter to confirm. The ICS export is written automatically.
+7. The next day begins.
 
 Days advance manually. Leaving the device switched off does not automatically start a new day.
 
 ### Main menu
 
-Select the language from Config on today's home screen. Accented French labels are supported; note entry remains ASCII-only.
+Select the language from Config on today's home screen. Accented French labels are supported.
 
 | Key | English | Français | Purpose |
 | --- | --- | --- | --- |
 | `0` | Date | Date | Set or correct today's `YYYY-MM-DD` date. |
 | `1` | Activities | Activités | Check or uncheck today's activities. |
-| `2` | Notepad | Bloc notes | Write a short daily note. |
-| `3` | Weight tracker | Suivi du poids | Enter expected and actual weight. |
-| `4` | Kanban | Kanban | Manage persistent user-defined tasks. |
-| `5` | Christian Rosary | Rosaire chrétien | Start a guided Rosary session. |
-| `6` | Daily review | Revue journalière | Show today’s date, selected activities, actual weight, and TODO/DOING tasks. |
-| `7` | Config | Config | Choose language or colour palette. |
-| `8` | Reminders | Rappels | Create, edit, and delete up to three reminders. |
+| `2` | Weight tracker | Suivi du poids | Enter expected and actual weight. |
+| `3` | Kanban | Kanban | Manage persistent user-defined tasks. |
+| `4` | Christian Rosary | Rosaire chrétien | Start a guided Rosary session. |
+| `5` | Daily review | Revue journalière | Show today’s date, selected activities, actual weight, and TODO/DOING tasks. |
+| `6` | Config | Config | Choose language or colour palette. |
+| `7` | Reminders | Rappels | Create, edit, and delete up to three reminders. |
+| `8` | Timer | Minuteur | Start a 5, 30 or 60-minute countdown. |
 | `9` | Close the day | Terminer le jour | Save and close today, then advance. |
 
 Use **Up/Down** to select an item, **Enter** to open it, and **Esc** to return to the main menu.
@@ -287,14 +287,9 @@ Kanban always opens on **TODO / À FAIRE**. The screen shows the active column, 
 
 New names and every Kanban operation are saved immediately. If a save fails, the previous board remains intact.
 
-### Daily note
+### Daily note (removed in v1.12)
 
-Type up to **96 printable ASCII characters**. Use Backspace to delete characters.
-
-- **Enter:** save the note.
-- **Esc:** cancel the edit and return home.
-
-Accented characters are not supported by the current text-entry implementation.
+The notepad was removed in v1.12; use Kanban or Reminders instead. Notes typed with earlier versions stay in the save file and are still exported to the ICS when their day is closed.
 
 ### Weight tracking
 
@@ -319,7 +314,7 @@ Since v1.12 the Companion shows no XP or keepsakes. Earlier saves keep their XP 
 
 Open **Close the day / Terminer le jour** to review the day's activity count. Press **Enter** to confirm or **Esc** to return without closing the day.
 
-Confirmation saves the completed day and clears the activity checkboxes, note and weight fields for the next day. The following screen confirms the save. Press Enter to continue.
+Confirmation saves the completed day and clears the activity checkboxes and weight fields for the next day. The following screen confirms the save. Press Enter to continue.
 
 ### ICS exports
 
