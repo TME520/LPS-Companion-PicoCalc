@@ -1,4 +1,4 @@
-# LPS-Companion v1.12
+# LPS-Companion v1.13
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
@@ -8,12 +8,11 @@ LPS-Companion helps you record daily activities and compare your expected and ac
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries are saved to the SD card.
 
-**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.12 refines the timer, removes gamification and the notepad, and shows the long date with ISO week; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
+**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.13 moves the saves to JSON and makes the activity list user-defined (22 by default, up to 30); it needs device testing. See `BUILD-VALIDATION.md` for host checks and physical-test limits.
 
-**v1.13 in progress** (branch `susucre-lpsc-113`): the save files become JSON and the activity list grows to 22. The title bar still reads v1.12 until the version is bumped.
+## Changes in v1.13
 
-## Changes in v1.13 (in progress)
-
+- **Title** (LPS-113-CHG09): the title bar reads `LPS COMPANION v1.13`.
 - **JSON save files** (LPS-113-CHG06): the save is now `LPS/SAVE_A.JSN` and `LPS/SAVE_B.JSN`, still written alternately with a generation number and a CRC-32 check, so a damaged or half-written file falls back to the other one exactly as before. The app writes and reads them as a stream with a small hand-written parser (no library, no dynamic memory). The files are managed only by the app; do not edit them by hand.
   - **Migration**: on first start, if there is no `.JSN` save yet, v1.13 reads your existing `SAVE_A.BIN`/`SAVE_B.BIN` (any format from v1.0 to v1.12) and writes `SAVE_A.JSN` at the first save. The `.BIN` files are never modified or deleted and stay on the card as a backup. A save written by v1.13 cannot be read by v1.12.
   - Each day stores its ticked activities **by name** (`"activities":["Marche","Messe"]`, French names) rather than as bit positions, ready for user-defined activities.

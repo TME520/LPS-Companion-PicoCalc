@@ -1,4 +1,6 @@
-# Validation v1.13 — in progress, 9 November 2026
+# Validation v1.13 — 9 November 2026
+
+- LPS-113-CHG09: title bar `LPS COMPANION v1.13`; header comment v1.13; language_test asserts the new title.
 
 - LPS-113-CHG06: JSON save files `SAVE_A.JSN`/`SAVE_B.JSN`.
   - New `tests/json_save_test.cpp`: round trip of a fully populated state (French, pink palette, every activity, 31-day wrapped history, 24 tasks, 3 reminders, undated day, missing weights) with read chunks of 1, 7, 256 and 4096 bytes. History reloads oldest first. Typical full save 7.9 KB; worst case (every text field full of characters needing escapes) 16.6 KB, under the 64 KB parser limit.
