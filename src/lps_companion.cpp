@@ -31,7 +31,8 @@
  - Current day autosaves on checkbox changes and explicit form validation.
  - Closing a day advances it; XP is still banked in the save for compatibility but never shown (v1.12).
  - The last 31 closed days are retained in a ring buffer, browsable read-only from Home.
- - Persistent format: versioned little-endian bytes + CRC32, no raw struct dumps.
+ - Persistent format (v1.13, LPS-113-CHG06): JSON SAVE_A.JSN/SAVE_B.JSN, streamed with
+   a hand-written token parser and CRC-32; older binary saves are read once to migrate.
  - Missing storage starts a new profile. Corruption/I/O errors block writes;
    they never silently overwrite a damaged existing save.
  - Failed saves roll back RAM state; UI reports it. A late SD error can leave
@@ -41,7 +42,8 @@
 
  Desktop commands are line-based: enter/up/down/left/right/esc/back, digits 1-9,
  text YOUR TEXT, quit. To edit a field, use back, or enter an empty field as-is.
- Desktop save is lps_companion.sav in the current working directory.
+ Desktop save is lps_companion.jsn in the current working directory
+ (an older lps_companion.sav is read once and left untouched).
 */
 #include <array>
 #include <cstdint>
@@ -72,6 +74,7 @@ constexpr std::size_t NoteLength=96, HistoryLength=31, TaskNameLength=32, TaskCa
 enum Key { Enter=13, Backspace=8, Escape=27, Up=1000, Down, Left, Right, DeleteKey, F1, F2, F3, F4, F5 };
 enum class LoadResult { Missing, Ok, NoStorage, Error };
 struct Day;
+struct State;
 struct Platform {
     virtual ~Platform() = default;
     virtual void clear()=0;
@@ -88,13 +91,14 @@ struct Platform {
     virtual void present()=0;
     // Apply the selected theme before drawing. The desktop implementation may ignore it.
     virtual void setPalette(Palette)=0;
-    // Return Error for truncated/oversized/inaccessible saves, Missing only if absent.
-    virtual LoadResult load(uint8_t* bytes,std::size_t capacity,std::size_t& size)=0;
+    // Fill state from the newest valid save. Return Error for damaged, unsupported
+    // or inaccessible saves (state may then hold partial data), Missing only if absent.
+    virtual LoadResult load(State& state)=0;
     // On false, RAM is rolled back; an ambiguous late commit MUST block further
     // writes until restart. The prior valid record must be retained. On true, replacement must be
     // recoverable after restart. FatFs: use validated A/B slots with generations,
     // f_sync and startup recovery, or an equivalent transactional scheme.
-    virtual bool save(const uint8_t* bytes,std::size_t size)=0;
+    virtual bool save(const State& state)=0;
     // Export first, then save the A/B state. Retrying replaces the same named
     // export if the snapshot write later fails; no duplicate calendar event.
     virtual bool exportIcs(const Day& day,uint32_t totalXp,uint32_t dayXp,Language language)=0;
@@ -172,27 +176,23 @@ void weightText(int32_t grams,char* out,std::size_t n) {
     if(grams<0)std::snprintf(out,n,"--");
     else std::snprintf(out,n,"%ld.%03ld",long(grams/1000),long(grams%1000));
 }
+uint32_t crc32Update(uint32_t c,uint8_t byte) {
+    c^=byte;for(int i=0;i<8;++i)c=(c>>1)^(0xedb88320u&uint32_t(-int32_t(c&1)));
+    return c;
+}
 uint32_t crc32(const uint8_t* p,std::size_t n) {
     uint32_t c=0xffffffffu;
-    while(n--){c^=*p++;for(int i=0;i<8;++i)c=(c>>1)^(0xedb88320u&uint32_t(-int32_t(c&1)));}
+    while(n--)c=crc32Update(c,*p++);
     return ~c;
 }
 struct Blob { std::array<uint8_t,BlobCapacity> bytes{};std::size_t size=0; };
+// Legacy binary saves (SAVE_A/B.BIN, up to v1.12) are only READ now, to
+// migrate them to JSON (LPS-113-CHG06); nothing writes this format any more.
 // Format 1: v1 base. Format 2: adds language. Format 3: adds dates.
 // Format 4: palette. Format 5: Kanban. Format 6: three dated reminders.
 constexpr std::size_t WireV1=3568, WireV2=WireV1+1, WireV3=WireV2+32*4, WireV4=WireV3+1;
 constexpr std::size_t WireV5=WireV4+1+TaskCapacity*(1+TaskNameLength+1);
 constexpr std::size_t WireSize=WireV5+1+ReminderCapacity*(2+1+1+2+ReminderTextLength+1);
-Blob encode(const State& s) {
-    Blob b;
-    auto put=[&](uint32_t v,unsigned n){while(n--){b.bytes[b.size++]=uint8_t(v);v>>=8;}};
-    put(0x3153504c,4);put(6,2);put(s.xp,4);put(s.next,1);put(s.count,1);put(uint8_t(s.language),1);put(uint8_t(s.palette),1);
-    auto day=[&](const Day& d){put(d.date.year,2);put(d.date.month,1);put(d.date.day,1);put(d.number,4);put(d.flags,2);put(d.expected<0?0xffffffffu:uint32_t(d.expected),4);put(d.actual<0?0xffffffffu:uint32_t(d.actual),4);for(char c:d.note)put(uint8_t(c),1);};
-    day(s.today);for(const Day& d:s.history)day(d);
-    put(s.taskCount,1);for(const Task& task:s.tasks){put(uint8_t(task.status),1);for(char c:task.name)put(uint8_t(c),1);}
-    put(s.reminderCount,1);for(const Reminder& r:s.reminders){put(r.from.year,2);put(r.from.month,1);put(r.from.day,1);put(r.duration,2);for(char c:r.text)put(uint8_t(c),1);}
-    const auto crc=crc32(b.bytes.data(),b.size);put(crc,4);return b;
-}
 bool decode(const uint8_t* bytes,std::size_t size,State& out) {
     if(size!=WireSize&&size!=WireV5&&size!=WireV4&&size!=WireV3&&size!=WireV2&&size!=WireV1)return false;
     std::size_t pos=size-4;
@@ -235,6 +235,416 @@ bool decode(const uint8_t* bytes,std::size_t size,State& out) {
     }
     if(!valid)return false;
     out=s;return true;
+}
+// ---------------------------------------------------------------------------
+// LPS-113-CHG06: JSON save files (SAVE_A.JSN / SAVE_B.JSN).
+// The save is one JSON object, written and read as a stream: no object tree,
+// no dynamic allocation, only small fixed buffers, so the same code can move
+// to a 640 KB MS-DOS machine. Schema 1:
+//   {"format":"lps-companion","version":1,"generation":N,
+//    "state":{"language":"en","palette":"green","xp":0,"today":{DAY},
+//             "history":[DAY,...],"kanban":[TASK,...],"reminders":[REMINDER,...]},
+//    "crc32":"xxxxxxxx"}
+//   DAY      {"date":"YYYY-MM-DD"|null,"number":N,"activities":["Marche",...],
+//             "expected":grams|null,"actual":grams|null,"note":"..."}
+//   TASK     {"status":"todo"|"doing"|"done","name":"..."}
+//   REMINDER {"from":"YYYY-MM-DD","days":N,"text":"..."}
+// "crc32" is the CRC-32 (IEEE, lowercase hex) of every byte before the
+// "crc32" key and must be the last member. History is stored oldest first.
+// Activities are stored by their French canonical name; unknown names are
+// ignored on load. Unknown keys are skipped; a newer schema version is refused.
+constexpr uint32_t SaveSchemaVersion=1;
+constexpr std::size_t SaveTextCapacity=128, SaveIoBuffer=256, SaveMaxBytes=65536;
+struct SaveSink { virtual ~SaveSink()=default; virtual bool write(const char* data,std::size_t size)=0; };
+// read() returns the number of bytes read, 0 at the end, or a negative value on an I/O error.
+struct SaveSource { virtual ~SaveSource()=default; virtual long read(char* data,std::size_t capacity)=0; };
+enum class SaveCheck { Valid, Damaged, Unsupported, IOError };
+struct SaveInfo { uint32_t generation=0, checksum=0; };
+constexpr const char* PaletteNames[]={"red","green","blue","orange","pink"};
+constexpr const char* StatusNames[]={"todo","doing","done"};
+constexpr const char* LanguageNames[]={"en","fr"};
+class JsonWriter {
+    SaveSink& sink;
+    std::array<char,SaveIoBuffer> buffer{};
+    std::size_t used=0;
+    uint32_t crc=0xffffffffu;
+    bool ok=true;
+public:
+    explicit JsonWriter(SaveSink& s):sink(s){}
+    void raw(const char* p,std::size_t n){
+        while(n--){const char c=*p++;crc=crc32Update(crc,uint8_t(c));buffer[used++]=c;if(used==buffer.size())flush();}
+    }
+    void raw(const char* s){raw(s,std::strlen(s));}
+    void flush(){if(used&&ok)ok=sink.write(buffer.data(),used);used=0;}
+    // UTF-8 passes through; quotes, backslashes and control characters are escaped.
+    void text(const char* s){
+        raw("\"",1);
+        for(;*s;++s){
+            const unsigned char c=static_cast<unsigned char>(*s);
+            if(c=='"')raw("\\\"");else if(c=='\\')raw("\\\\");
+            else if(c=='\n')raw("\\n");else if(c=='\r')raw("\\r");else if(c=='\t')raw("\\t");
+            else if(c<0x20){char e[8];std::snprintf(e,sizeof e,"\\u%04x",unsigned(c));raw(e);}
+            else raw(s,1);
+        }
+        raw("\"",1);
+    }
+    void key(const char* k){text(k);raw(":",1);}
+    void number(uint32_t v){char b[12];std::snprintf(b,sizeof b,"%lu",static_cast<unsigned long>(v));raw(b);}
+    void weight(int32_t grams){if(grams<0)raw("null");else number(uint32_t(grams));}
+    void date(Date d){if(d.year==0){raw("null");return;}char b[16];dateText(d,b,sizeof b);text(b);}
+    uint32_t checksum()const{return ~crc;}
+    bool good()const{return ok;}
+};
+void writeDay(JsonWriter& w,const Day& d){
+    w.raw("{");w.key("date");w.date(d.date);w.raw(",");w.key("number");w.number(d.number);
+    w.raw(",");w.key("activities");w.raw("[");
+    bool first=true;
+    for(unsigned i=0;i<ActivityCount;++i)if(d.flags&(1u<<i)){if(!first)w.raw(",");w.text(Activities[i]);first=false;}
+    w.raw("],");w.key("expected");w.weight(d.expected);w.raw(",");w.key("actual");w.weight(d.actual);
+    w.raw(",");w.key("note");w.text(d.note.data());w.raw("}");
+}
+// Streams the whole save to sink through one small buffer. checksum receives
+// the CRC-32 written in the file, so the adapter can verify its read-back.
+bool writeSave(const State& s,uint32_t generation,SaveSink& sink,uint32_t& checksum){
+    JsonWriter w(sink);
+    w.raw("{");w.key("format");w.text("lps-companion");w.raw(",");w.key("version");w.number(SaveSchemaVersion);
+    w.raw(",");w.key("generation");w.number(generation);w.raw(",\n");
+    w.key("state");w.raw("{");w.key("language");w.text(LanguageNames[unsigned(s.language)]);
+    w.raw(",");w.key("palette");w.text(PaletteNames[unsigned(s.palette)]);w.raw(",");w.key("xp");w.number(s.xp);
+    w.raw(",\n");w.key("today");writeDay(w,s.today);
+    w.raw(",\n");w.key("history");w.raw("[");
+    for(unsigned i=0;i<s.count;++i){
+        if(i)w.raw(",");
+        w.raw("\n");writeDay(w,s.history[(s.next+HistoryLength-s.count+i)%HistoryLength]);
+    }
+    w.raw("],\n");w.key("kanban");w.raw("[");
+    for(unsigned i=0;i<s.taskCount;++i){
+        if(i)w.raw(",");
+        w.raw("\n{");w.key("status");w.text(StatusNames[unsigned(s.tasks[i].status)]);
+        w.raw(",");w.key("name");w.text(s.tasks[i].name.data());w.raw("}");
+    }
+    w.raw("],\n");w.key("reminders");w.raw("[");
+    for(unsigned i=0;i<s.reminderCount;++i){
+        const Reminder& r=s.reminders[i];
+        if(i)w.raw(",");
+        w.raw("\n{");w.key("from");w.date(r.from);w.raw(",");w.key("days");w.number(r.duration);
+        w.raw(",");w.key("text");w.text(r.text.data());w.raw("}");
+    }
+    w.raw("]},\n");
+    checksum=w.checksum();
+    char hex[12];std::snprintf(hex,sizeof hex,"%08lx",static_cast<unsigned long>(checksum));
+    w.key("crc32");w.text(hex);w.raw("}\n");w.flush();
+    return w.good();
+}
+enum class Token : uint8_t { End, Error, ObjectBegin, ObjectEnd, ArrayBegin, ArrayEnd, Colon, Comma, String, Number, True, False, Null };
+// Pull tokenizer: each next() reads just enough bytes for one token from a
+// 256-byte buffer. Strings land in a fixed 128-byte buffer (longer ones set
+// overflow, which only matters if the value is needed). A running CRC-32
+// covers every byte consumed.
+class JsonReader {
+    SaveSource& source;
+    std::array<char,SaveIoBuffer> buffer{};
+    std::size_t position=0, length=0, consumed=0;
+    bool finished=false;
+    uint32_t crc=0xffffffffu;
+    int peek(){
+        if(position==length){
+            if(finished)return -1;
+            const long n=source.read(buffer.data(),buffer.size());
+            if(n<0)ioError=true;
+            if(n<=0||std::size_t(n)>buffer.size()){finished=true;return -1;}
+            length=std::size_t(n);position=0;
+        }
+        return static_cast<unsigned char>(buffer[position]);
+    }
+    int get(){
+        const int c=peek();
+        if(c>=0){++position;crc=crc32Update(crc,uint8_t(c));if(++consumed>SaveMaxBytes)tooLong=true;}
+        return c;
+    }
+    void append(uint32_t c){if(textLength<SaveTextCapacity)text[textLength++]=char(c);else overflow=true;}
+    void appendUtf8(uint32_t cp){
+        if(cp<0x80)append(cp);
+        else if(cp<0x800){append(0xc0|(cp>>6));append(0x80|(cp&0x3f));}
+        else if(cp<0x10000){append(0xe0|(cp>>12));append(0x80|((cp>>6)&0x3f));append(0x80|(cp&0x3f));}
+        else {append(0xf0|(cp>>18));append(0x80|((cp>>12)&0x3f));append(0x80|((cp>>6)&0x3f));append(0x80|(cp&0x3f));}
+    }
+    bool hex4(uint32_t& v){
+        v=0;
+        for(int i=0;i<4;++i){
+            const int c=get();v<<=4;
+            if(c>='0'&&c<='9')v|=uint32_t(c-'0');else if(c>='a'&&c<='f')v|=uint32_t(c-'a'+10);
+            else if(c>='A'&&c<='F')v|=uint32_t(c-'A'+10);else return false;
+        }
+        return true;
+    }
+    Token string(){
+        textLength=0;overflow=false;
+        for(;;){
+            int c=get();
+            if(c<0x20){text[textLength]=0;return Token::Error;} // end of data or raw control character
+            if(c=='"'){text[textLength]=0;return Token::String;}
+            if(c!='\\'){append(uint32_t(c));continue;}
+            c=get();
+            switch(c){
+            case '"':case '\\':case '/':append(uint32_t(c));break;
+            case 'b':append(8);break;case 'f':append(12);break;case 'n':append(10);break;
+            case 'r':append(13);break;case 't':append(9);break;
+            case 'u':{
+                uint32_t cp=0;if(!hex4(cp))return Token::Error;
+                if(cp>=0xd800&&cp<=0xdbff){
+                    uint32_t low=0;
+                    if(get()!='\\'||get()!='u'||!hex4(low)||low<0xdc00||low>0xdfff)return Token::Error;
+                    cp=0x10000+((cp-0xd800)<<10)+(low-0xdc00);
+                }else if((cp>=0xdc00&&cp<=0xdfff)||cp==0)return Token::Error;
+                appendUtf8(cp);break;
+            }
+            default:return Token::Error;
+            }
+        }
+    }
+    bool digit(int c)const{return c>='0'&&c<='9';}
+    Token numberToken(int c){
+        number=0;integer=true;
+        const bool negative=c=='-';
+        if(negative){if(!digit(peek()))return Token::Error;c=get();}
+        for(;;){
+            if(number<100000000000000)number=number*10+(c-'0');else integer=false;
+            if(!digit(peek()))break;
+            c=get();
+        }
+        if(peek()=='.'){get();integer=false;if(!digit(peek()))return Token::Error;while(digit(peek()))get();}
+        if(peek()=='e'||peek()=='E'){
+            get();integer=false;if(peek()=='+'||peek()=='-')get();
+            if(!digit(peek()))return Token::Error;
+            while(digit(peek()))get();
+        }
+        if(negative)number=-number;
+        return Token::Number;
+    }
+    Token literal(const char* rest,Token token){for(;*rest;++rest)if(get()!=*rest)return Token::Error;return token;}
+public:
+    bool ioError=false, tooLong=false;
+    std::array<char,SaveTextCapacity+1> text{};
+    std::size_t textLength=0;
+    bool overflow=false;
+    int64_t number=0;
+    bool integer=false;
+    // CRC state before the current token, and before the last object key.
+    uint32_t tokenCrc=0, keyCrc=0;
+    explicit JsonReader(SaveSource& s):source(s){}
+    Token next(){
+        int c;
+        do{tokenCrc=crc;c=get();}while(c==' '||c=='\t'||c=='\n'||c=='\r');
+        if(tooLong)return Token::Error;
+        switch(c){
+        case -1:return ioError?Token::Error:Token::End;
+        case '{':return Token::ObjectBegin;case '}':return Token::ObjectEnd;
+        case '[':return Token::ArrayBegin;case ']':return Token::ArrayEnd;
+        case ':':return Token::Colon;case ',':return Token::Comma;
+        case '"':return string();
+        case 't':return literal("rue",Token::True);
+        case 'f':return literal("alse",Token::False);
+        case 'n':return literal("ull",Token::Null);
+        default:return c=='-'||digit(c)?numberToken(c):Token::Error;
+        }
+    }
+    // Skip one whole value (unknown key). Nesting is checked up to 32 levels.
+    bool skip(Token first){
+        if(first==Token::String||first==Token::Number||first==Token::True||first==Token::False||first==Token::Null)return true;
+        if(first!=Token::ObjectBegin&&first!=Token::ArrayBegin)return false;
+        uint32_t objects=first==Token::ObjectBegin?1u:0u;unsigned depth=1;
+        while(depth){
+            const Token t=next();
+            if(t==Token::Error||t==Token::End)return false;
+            if(t==Token::ObjectBegin||t==Token::ArrayBegin){
+                if(depth==32)return false;
+                objects=(objects<<1)|(t==Token::ObjectBegin?1u:0u);++depth;
+            }else if(t==Token::ObjectEnd||t==Token::ArrayEnd){
+                if(((objects&1u)!=0)!=(t==Token::ObjectEnd))return false;
+                objects>>=1;--depth;
+            }
+        }
+        return true;
+    }
+};
+// Calls member(key) for each member of an object whose '{' was just read.
+// member must consume exactly one value. Keys longer than 23 bytes read as "".
+template<class F> bool members(JsonReader& r,F&& member){
+    Token t=r.next();
+    if(t==Token::ObjectEnd)return true;
+    for(;;){
+        if(t!=Token::String)return false;
+        char key[24]{};
+        if(!r.overflow&&r.textLength<sizeof key)std::memcpy(key,r.text.data(),r.textLength);
+        r.keyCrc=r.tokenCrc;
+        if(r.next()!=Token::Colon||!member(static_cast<const char*>(key)))return false;
+        t=r.next();
+        if(t==Token::ObjectEnd)return true;
+        if(t!=Token::Comma)return false;
+        t=r.next();
+    }
+}
+// Calls element(firstToken) for each element of an array whose '[' was just read.
+template<class F> bool elements(JsonReader& r,F&& element){
+    Token t=r.next();
+    if(t==Token::ArrayEnd)return true;
+    for(;;){
+        if(!element(t))return false;
+        t=r.next();
+        if(t==Token::ArrayEnd)return true;
+        if(t!=Token::Comma)return false;
+        t=r.next();
+    }
+}
+bool readNumber(JsonReader& r,int64_t min,int64_t max,int64_t& v){
+    if(r.next()!=Token::Number||!r.integer||r.number<min||r.number>max)return false;
+    v=r.number;return true;
+}
+// Stored text: no control characters; UTF-8 bytes are kept as they are.
+template<std::size_t N> bool readText(JsonReader& r,std::array<char,N>& out,bool required){
+    if(r.next()!=Token::String||r.overflow||r.textLength>=N||(required&&!r.textLength))return false;
+    for(std::size_t i=0;i<r.textLength;++i){const unsigned char c=static_cast<unsigned char>(r.text[i]);if(c<32||c==127)return false;}
+    out.fill(0);std::memcpy(out.data(),r.text.data(),r.textLength);return true;
+}
+bool readDate(JsonReader& r,Date& d,bool allowNull){
+    const Token t=r.next();
+    if(t==Token::Null&&allowNull){d={};return true;}
+    return t==Token::String&&!r.overflow&&parseDate(r.text.data(),d);
+}
+bool readWeight(JsonReader& r,int32_t& grams){
+    const Token t=r.next();
+    if(t==Token::Null){grams=-1;return true;}
+    if(t!=Token::Number||!r.integer||r.number<1||r.number>999999)return false;
+    grams=int32_t(r.number);return true;
+}
+bool readChoice(JsonReader& r,const char* const* names,unsigned count,unsigned& out){
+    if(r.next()!=Token::String||r.overflow)return false;
+    for(unsigned i=0;i<count;++i)if(!std::strcmp(r.text.data(),names[i])){out=i;return true;}
+    return false;
+}
+bool readDay(JsonReader& r,Token first,Day& d){
+    if(first!=Token::ObjectBegin)return false;
+    d=Day{};d.date={};
+    return members(r,[&](const char* key){
+        if(!std::strcmp(key,"date"))return readDate(r,d.date,true);
+        if(!std::strcmp(key,"number")){int64_t v=0;if(!readNumber(r,1,UINT32_MAX,v))return false;d.number=uint32_t(v);return true;}
+        if(!std::strcmp(key,"activities")){
+            if(r.next()!=Token::ArrayBegin)return false;
+            d.flags=0;
+            return elements(r,[&](Token t){
+                if(t!=Token::String)return false;
+                for(unsigned i=0;i<ActivityCount;++i)if(!r.overflow&&!std::strcmp(r.text.data(),Activities[i]))d.flags|=uint16_t(1u<<i);
+                return true; // Unknown activity names are ignored.
+            });
+        }
+        if(!std::strcmp(key,"expected"))return readWeight(r,d.expected);
+        if(!std::strcmp(key,"actual"))return readWeight(r,d.actual);
+        if(!std::strcmp(key,"note"))return readText(r,d.note,false);
+        return r.skip(r.next());
+    });
+}
+void resetState(State& s){
+    s.language=Language::English;s.palette=Palette::Green;s.xp=0;s.today=Day{};
+    for(Day& d:s.history)d=Day{};
+    s.next=0;s.count=0;s.taskCount=0;
+    for(Task& t:s.tasks)t=Task{};
+    s.reminderCount=0;
+    for(Reminder& r:s.reminders)r=Reminder{};
+}
+bool readState(JsonReader& r,State& s){
+    if(r.next()!=Token::ObjectBegin)return false;
+    return members(r,[&](const char* key){
+        unsigned choice=0;
+        if(!std::strcmp(key,"language")){if(!readChoice(r,LanguageNames,2,choice))return false;s.language=Language(choice);return true;}
+        if(!std::strcmp(key,"palette")){if(!readChoice(r,PaletteNames,5,choice))return false;s.palette=Palette(choice);return true;}
+        if(!std::strcmp(key,"xp")){int64_t v=0;if(!readNumber(r,0,UINT32_MAX,v))return false;s.xp=uint32_t(v);return true;}
+        if(!std::strcmp(key,"today"))return readDay(r,r.next(),s.today);
+        if(!std::strcmp(key,"history")){
+            if(r.next()!=Token::ArrayBegin)return false;
+            s.count=0;
+            const bool ok=elements(r,[&](Token t){
+                if(s.count>=HistoryLength||!readDay(r,t,s.history[s.count]))return false;
+                ++s.count;return true;
+            });
+            s.next=uint8_t(s.count%HistoryLength);return ok;
+        }
+        if(!std::strcmp(key,"kanban")){
+            if(r.next()!=Token::ArrayBegin)return false;
+            s.taskCount=0;
+            return elements(r,[&](Token t){
+                if(t!=Token::ObjectBegin||s.taskCount>=TaskCapacity)return false;
+                Task& task=s.tasks[s.taskCount];task=Task{};bool named=false;
+                const bool ok=members(r,[&](const char* field){
+                    unsigned status=0;
+                    if(!std::strcmp(field,"status")){if(!readChoice(r,StatusNames,3,status))return false;task.status=TaskStatus(status);return true;}
+                    if(!std::strcmp(field,"name"))return named=readText(r,task.name,true);
+                    return r.skip(r.next());
+                });
+                if(!ok||!named)return false;
+                ++s.taskCount;return true;
+            });
+        }
+        if(!std::strcmp(key,"reminders")){
+            if(r.next()!=Token::ArrayBegin)return false;
+            s.reminderCount=0;
+            return elements(r,[&](Token t){
+                if(t!=Token::ObjectBegin||s.reminderCount>=ReminderCapacity)return false;
+                Reminder& reminder=s.reminders[s.reminderCount];reminder=Reminder{};bool dated=false,texted=false;
+                const bool ok=members(r,[&](const char* field){
+                    if(!std::strcmp(field,"from"))return dated=readDate(r,reminder.from,false);
+                    if(!std::strcmp(field,"days")){int64_t v=0;if(!readNumber(r,1,365,v))return false;reminder.duration=uint16_t(v);return true;}
+                    if(!std::strcmp(field,"text"))return texted=readText(r,reminder.text,true);
+                    return r.skip(r.next());
+                });
+                if(!ok||!dated||!texted)return false;
+                ++s.reminderCount;return true;
+            });
+        }
+        return r.skip(r.next());
+    });
+}
+// Streams one save file into out (reset first; partial data on failure).
+SaveCheck readSave(SaveSource& source,State& out,SaveInfo& info){
+    resetState(out);info=SaveInfo{};
+    JsonReader r(source);
+    bool formatOk=false,versionSeen=false,unsupported=false,generationSeen=false,stateSeen=false,crcSeen=false;
+    uint32_t stored=0,computed=0;
+    const bool parsed=r.next()==Token::ObjectBegin&&members(r,[&](const char* key){
+        if(crcSeen)return false; // crc32 must be the last member: nothing after it is unchecked.
+        int64_t v=0;
+        if(!std::strcmp(key,"format")){
+            if(r.next()!=Token::String)return false;
+            formatOk=!r.overflow&&!std::strcmp(r.text.data(),"lps-companion");return formatOk;
+        }
+        if(!std::strcmp(key,"version")){
+            if(!readNumber(r,1,UINT32_MAX,v))return false;
+            versionSeen=true;unsupported=uint64_t(v)>SaveSchemaVersion;return true;
+        }
+        if(!std::strcmp(key,"generation")){
+            if(!readNumber(r,0,UINT32_MAX,v))return false;
+            generationSeen=true;info.generation=uint32_t(v);return true;
+        }
+        if(!std::strcmp(key,"state")){
+            if(!formatOk||!versionSeen||stateSeen)return false;
+            stateSeen=true;
+            return unsupported?r.skip(r.next()):readState(r,out);
+        }
+        if(!std::strcmp(key,"crc32")){
+            computed=~r.keyCrc;
+            if(r.next()!=Token::String||r.textLength!=8)return false;
+            for(unsigned i=0;i<8;++i){
+                const char c=r.text[i];stored<<=4;
+                if(c>='0'&&c<='9')stored|=uint32_t(c-'0');else if(c>='a'&&c<='f')stored|=uint32_t(c-'a'+10);else return false;
+            }
+            crcSeen=true;return true;
+        }
+        return r.skip(r.next());
+    })&&r.next()==Token::End;
+    if(r.ioError)return SaveCheck::IOError;
+    if(!parsed||!crcSeen||stored!=computed||!formatOk||!versionSeen||!generationSeen||!stateSeen)return SaveCheck::Damaged;
+    info.checksum=stored;
+    return unsupported?SaveCheck::Unsupported:SaveCheck::Valid;
 }
 enum class Screen { TimerSelect, TimerRunning, TimerComplete, Home, ReminderPopup, Reminders, ReminderEdit, Date, Activities, Weight, Kanban, TaskEdit, DailyReview, Finish, Reward, Config, Language, Colors,
                     RosaryMode, RosarySet, RosaryDecade, RosaryPrayer, RosaryComplete };
@@ -449,8 +859,7 @@ class App {
     bool commit(const State& candidate){
         if(daysBack){readOnly();return false;}
         if(blocked){say(tr("Unreadable save: writes blocked","Sauvegarde illisible : écriture bloquée"));return false;}
-        Blob b=encode(candidate);
-        if(!hw.save(b.bytes.data(),b.size)){say(tr("Save failed: restart device","Échec sauvegarde : redémarrer"));return false;}
+        if(!hw.save(candidate)){say(tr("Save failed: restart device","Échec sauvegarde : redémarrer"));return false;}
         state=candidate;return true;
     }
     unsigned tasksIn(TaskStatus status)const{
@@ -571,11 +980,12 @@ public:
         // day number: physical slots wrap every 31 closures.
         return daysBack?state.history[(state.next+HistoryLength-daysBack)%HistoryLength]:state.today;
     }
-    void start(){Blob b;auto r=hw.load(b.bytes.data(),b.bytes.size(),b.size);
+    void start(){const auto r=hw.load(state);
+        if(r!=LoadResult::Ok)resetState(state); // Never show a half-read save.
         // The language preference is on the SD card too, so a cold start with no
         // card deliberately uses the English default rather than guessing.
         if(r==LoadResult::NoStorage){blocked=true;missingStorage=true;say("[!] Missing SD card!");}
-        else if(r==LoadResult::Error||(r==LoadResult::Ok&&!decode(b.bytes.data(),b.size,state))){blocked=true;say(tr("Read error: save protected","Erreur lecture : sauvegarde protégée"));}
+        else if(r==LoadResult::Error){blocked=true;say(tr("Read error: save protected","Erreur lecture : sauvegarde protégée"));}
         if(!blocked){pruneReminders();if(activeReminders())screen=Screen::ReminderPopup;}
         render();
     }
@@ -943,9 +1353,18 @@ public:
 #include <unistd.h>
 #include <chrono>
 #include <poll.h>
+struct StdioSink final:lps::SaveSink {
+    FILE* file;explicit StdioSink(FILE* f):file(f){}
+    bool write(const char* data,std::size_t size)override{return std::fwrite(data,1,size,file)==size;}
+};
+struct StdioSource final:lps::SaveSource {
+    FILE* file;explicit StdioSource(FILE* f):file(f){}
+    long read(char* data,std::size_t capacity)override{const auto n=std::fread(data,1,capacity,file);return std::ferror(file)?-1:long(n);}
+};
 class Terminal final:public lps::Platform {
     std::array<std::array<char,41>,20> cells{};
     std::array<bool,20> inverse{};
+    uint32_t generation=0;
 public:
     void setPalette(lps::Palette)override{}
     void alert(int x,int y,const char* s)override{text(x,y,s,true);}
@@ -962,18 +1381,31 @@ public:
         }
         std::printf("\nCommands: 1-9, up/down/left/right, enter, esc, back,\ntext YOUR TEXT, quit\n> ");std::fflush(stdout);
     }
-    lps::LoadResult load(uint8_t* b,std::size_t cap,std::size_t& n)override{
-        FILE* f=std::fopen("lps_companion.sav","rb");if(!f)return errno==ENOENT?lps::LoadResult::Missing:lps::LoadResult::Error;
-        n=std::fread(b,1,cap,f);int extra=std::fgetc(f);bool ok=!std::ferror(f)&&extra==EOF;std::fclose(f);return ok?lps::LoadResult::Ok:lps::LoadResult::Error;
+    lps::LoadResult load(lps::State& state)override{
+        FILE* f=std::fopen("lps_companion.jsn","rb");
+        if(f){
+            StdioSource source(f);lps::SaveInfo info;
+            const bool ok=lps::readSave(source,state,info)==lps::SaveCheck::Valid;std::fclose(f);
+            if(!ok)return lps::LoadResult::Error;
+            generation=info.generation;return lps::LoadResult::Ok;
+        }
+        if(errno!=ENOENT)return lps::LoadResult::Error;
+        // LPS-113-CHG06 migration: read the older binary save once, never modify it.
+        f=std::fopen("lps_companion.sav","rb");if(!f)return errno==ENOENT?lps::LoadResult::Missing:lps::LoadResult::Error;
+        lps::Blob b;b.size=std::fread(b.bytes.data(),1,b.bytes.size(),f);int extra=std::fgetc(f);bool ok=!std::ferror(f)&&extra==EOF;std::fclose(f);
+        return ok&&lps::decode(b.bytes.data(),b.size,state)?lps::LoadResult::Ok:lps::LoadResult::Error;
     }
-    bool save(const uint8_t* b,std::size_t n)override{
-        FILE* f=std::fopen("lps_companion.sav.tmp","wb");if(!f)return false;
-        bool ok=std::fwrite(b,1,n,f)==n;
+    bool save(const lps::State& state)override{
+        if(generation==UINT32_MAX)return false;
+        FILE* f=std::fopen("lps_companion.jsn.tmp","wb");if(!f)return false;
+        StdioSink sink(f);uint32_t checksum=0;
+        bool ok=lps::writeSave(state,generation+1,sink,checksum);
         if(std::fflush(f)!=0)ok=false;
         if(::fsync(::fileno(f))!=0)ok=false;
         if(std::fclose(f)!=0)ok=false;
-        if(!ok){std::remove("lps_companion.sav.tmp");return false;}
-        return std::rename("lps_companion.sav.tmp","lps_companion.sav")==0;
+        if(!ok){std::remove("lps_companion.jsn.tmp");return false;}
+        if(std::rename("lps_companion.jsn.tmp","lps_companion.jsn")!=0)return false;
+        ++generation;return true;
     }
     bool exportIcs(const lps::Day& day,uint32_t,uint32_t,lps::Language)override{
         // Oversized date buffers keep strict host builds independent of range inference.
@@ -1004,9 +1436,10 @@ int main(){Terminal terminal;lps::App app(terminal);app.start();std::string s;
 }
 #elif defined(LPS_TEST)
 #include <cassert>
+#include "../tests/save_helpers.h"
 class Memory final:public lps::Platform {
 public:
-    lps::Blob stored{};bool exists=false,fail=false,failExport=false,failWeightCsv=false,noStorage=false,lowBattery=false;unsigned exports=0,weightExports=0;
+    std::array<char,lps_test::MemoryCapacity> stored{};std::size_t size=0;uint32_t generation=0;bool exists=false,fail=false,failExport=false,failWeightCsv=false,noStorage=false,lowBattery=false;unsigned exports=0,weightExports=0;
     std::array<std::array<char,41>,20> rows{};
     std::array<bool,20> alerts{};
     lps::Palette palette=lps::Palette::Green;
@@ -1016,8 +1449,20 @@ public:
     void clear()override{}
     void text(int x,int y,const char* text,bool)override{assert(x>=0&&x<320&&y>=0&&y+16<=320);std::snprintf(rows[y/16].data(),41,"%s",text);}
     void present()override{}
-    lps::LoadResult load(uint8_t* b,std::size_t cap,std::size_t& n)override{if(noStorage)return lps::LoadResult::NoStorage;if(!exists)return lps::LoadResult::Missing;if(stored.size>cap)return lps::LoadResult::Error;n=stored.size;std::memcpy(b,stored.bytes.data(),n);return lps::LoadResult::Ok;}
-    bool save(const uint8_t* b,std::size_t n)override{if(fail)return false;stored.size=n;std::memcpy(stored.bytes.data(),b,n);exists=true;return true;}
+    lps::LoadResult load(lps::State& state)override{
+        if(noStorage)return lps::LoadResult::NoStorage;if(!exists)return lps::LoadResult::Missing;
+        lps_test::MemorySource source(stored.data(),size);lps::SaveInfo info;
+        if(lps::readSave(source,state,info)!=lps::SaveCheck::Valid)return lps::LoadResult::Error;
+        generation=info.generation;return lps::LoadResult::Ok;
+    }
+    bool save(const lps::State& state)override{
+        if(fail)return false;
+        static std::array<char,lps_test::MemoryCapacity> scratch{};std::size_t n=0;
+        lps_test::MemorySink sink(scratch,n);uint32_t checksum=0;
+        if(!lps::writeSave(state,generation+1,sink,checksum))return false;
+        stored=scratch;size=n;++generation;exists=true;return true;
+    }
+    void put(const lps::State& state){assert(save(state));}
     bool exportIcs(const lps::Day&,uint32_t,uint32_t,lps::Language)override{if(failExport)return false;++exports;return true;}
     bool exportWeightCsv(const lps::Day&)override{if(failWeightCsv)return false;++weightExports;return true;}
 };
@@ -1034,7 +1479,7 @@ int main(){
     historyState.history[0].flags=1024;historyState.history[0].expected=110500;
     historyState.history[0].actual=111200;
     std::strcpy(historyState.history[0].note.data(),"Yesterday only");
-    historyState.next=1;historyState.count=1;history.stored=encode(historyState);history.exists=true;
+    historyState.next=1;historyState.count=1;history.put(historyState);
     App browsing(history);browsing.start();browsing.key(Left);
     assert(browsing.viewedDay().number==1);
     // LPS-112-CHG05: the archived-day menu is 1 Activities, 2 Weight; no notepad.
@@ -1065,7 +1510,7 @@ int main(){
     nav.key('2');nav.key('1');nav.key(Enter);assert(nav.currentScreen()==Screen::Home&&nav.data().palette==Palette::Red&&pages.palette==Palette::Red);
     App paletteReload(pages);paletteReload.start();assert(paletteReload.data().palette==Palette::Red);
     State old;old.today.flags=0x1ff;old.today.expected=110500;old.xp=70;
-    Blob legacy=encode(old);State migrated;assert(decode(legacy.bytes.data(),legacy.size,migrated));
+    Blob legacy=lps_test::encodeLegacyV6(old);State migrated;assert(decode(legacy.bytes.data(),legacy.size,migrated));
     assert(migrated.today.flags==0x1ff&&migrated.today.expected==110500&&migrated.xp==70);
     // A real v1.4 payload has language then dates but no palette byte.
     Blob v3;v3.size=WireV3;std::memcpy(v3.bytes.data(),legacy.bytes.data(),13);v3.bytes[4]=3;
@@ -1084,9 +1529,12 @@ int main(){
     for(const auto& row:mem.rows)assert(!std::strstr(row.data(),"Notepad"));assert(!a.data().today.note[0]);
     a.key(Up);a.key(Enter);a.key(Enter);assert(a.data().xp==40&&a.data().today.number==2&&a.data().today.flags==0);assert(a.data().history[0].actual==111200);a.key(Enter);assert(a.data().xp==40);
     App restored(mem);restored.start();assert(restored.data().xp==40&&restored.data().today.number==2);
-    assert(mem.stored.size==WireSize);State decoded;assert(decode(mem.stored.bytes.data(),mem.stored.size,decoded));assert(!decode(mem.stored.bytes.data(),10,decoded));
+    // LPS-113-CHG06: the stored save is JSON; a cut-off copy is rejected.
+    {constexpr char head[]="{\"format\":\"lps-companion\",\"version\":1,";assert(std::memcmp(mem.stored.data(),head,sizeof head-1)==0);}
+    {State decoded;SaveInfo info;lps_test::MemorySource whole(mem.stored.data(),mem.size);assert(readSave(whole,decoded,info)==SaveCheck::Valid&&decoded.xp==40&&decoded.today.number==2);
+     lps_test::MemorySource cut(mem.stored.data(),10);assert(readSave(cut,decoded,info)==SaveCheck::Damaged);}
     for(int i=0;i<40;++i){restored.key(Escape);restored.key(Up);restored.key(Enter);restored.key(Enter);restored.key(Enter);}assert(restored.data().count==31&&restored.data().today.number==42);
-    mem.stored.bytes[20]^=1;App corrupt(mem);corrupt.start();auto original=mem.stored;corrupt.key('1');corrupt.key('1');assert(corrupt.data().today.flags==0);assert(mem.stored.bytes==original.bytes);
+    mem.stored[60]^=1;App corrupt(mem);corrupt.start();auto original=mem.stored;corrupt.key('1');corrupt.key('1');assert(corrupt.data().today.flags==0);assert(mem.stored==original);
     std::puts("PASS: weights, toggles, bonus, rollback, no notepad, renumbered menu, closure, restore, ring history, CRC, palette preview/persistence, corrupt-save protection and render bounds.");
 }
 #endif

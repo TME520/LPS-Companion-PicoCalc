@@ -1,3 +1,17 @@
+# Validation v1.13 — in progress, 9 November 2026
+
+- LPS-113-CHG06: JSON save files `SAVE_A.JSN`/`SAVE_B.JSN`.
+  - New `tests/json_save_test.cpp`: round trip of a fully populated state (French, pink palette, every activity, 31-day wrapped history, 24 tasks, 3 reminders, undated day, missing weights) with read chunks of 1, 7, 256 and 4096 bytes. History reloads oldest first. Typical full save 7.9 KB; worst case (every text field full of characters needing escapes) 16.6 KB, under the 64 KB parser limit.
+  - Every truncation of the file and every single-bit flip is rejected. A wrong `crc32`, a missing `crc32`, a member after it and trailing bytes are rejected. Unknown keys at every level (nested objects/arrays, a 300-byte value, a key longer than the key buffer) are skipped once the crc32 is recomputed. Unknown activity names are ignored.
+  - Escaping: quotes, backslashes and control characters are escaped; UTF-8 (é, «», 😀) passes through; `\u00e9` and surrogate pairs decode to UTF-8; lone surrogates, `\u0000` and bad escapes are refused. Field limits match the binary loader (97-char note, day number 0, invalid date, weight 0, unknown palette, 32 history days, unnamed task, 366-day reminder).
+  - A newer schema with a valid crc32 is reported as unsupported; an I/O error part-way is reported as an I/O error.
+  - `storage_test` (real `src/main.cpp` adapter on host files): 40 alternating A/B saves, newest generation loaded, archived-day browsing leaves both `.JSN` files byte-for-byte unchanged, damaged or missing newest slot falls back, both damaged or read errors block writes. ICS and CSV assertions are unchanged.
+  - `migration_test`: the authentic v1.2 fixture (format 1) in either `.BIN` slot and a full v1.12 (format 6) save both migrate to JSON with every field kept. The first save writes `SAVE_A.JSN` with the next generation. The `.BIN` files stay byte-for-byte identical. An interrupted first JSON write falls back to the `.BIN`. Once JSON exists, two damaged `.JSN` files block writes rather than falling back to the stale `.BIN`. The newest JSON generation wins in both slot orders. A newer-schema `.JSN` blocks writes.
+  - The application, language, Kanban, daily review, reminders, Rosary and timer suites now go through the JSON save. The binary encoder survives only in `tests/save_helpers.h`, to build legacy files.
+  - The CRC-32 written by the desktop build was checked against Python's `zlib.crc32`.
+  - All ten host test suites pass with C++17 and warnings treated as errors. Code also compiles warning-free for 32-bit ARM (`-Wshorten-64-to-32`), but no UF2 was built: no Arm GNU toolchain on the build box.
+- Pending on device: first start with an existing v1.12 card (migration), then a reboot (loads `.JSN`), save speed on the SD card, and power loss during a save.
+
 # Validation v1.12 — 8 November 2026
 
 - LPS-112-CHG04: the title bar reads `LPS COMPANION v1.12`, asserted in both languages.

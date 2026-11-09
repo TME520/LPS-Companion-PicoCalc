@@ -1,4 +1,5 @@
 #include "../src/lps_companion.cpp"
+#include "save_helpers.h"
 #include <cassert>
 #include <string>
 using namespace lps;
@@ -9,7 +10,7 @@ public:
     void setPalette(Palette palette)override{shown=palette;}
     void emphasize(int x,int y,int n)override{for(int i=0;i<n;++i)if(x/8+i<40)bold[y/16][x/8+i]=true;}
     std::array<std::array<char,41>,20> rows{};
-    Blob stored{};bool exists=false,fail=false,failExport=false,failWeightCsv=false;unsigned writes=0,exports=0,weightExports=0;
+    lps_test::JsonStore stored{};bool exists=false,fail=false,failExport=false,failWeightCsv=false;unsigned writes=0,exports=0,weightExports=0;
     void clear()override{for(auto& row:rows)row.fill(0);for(auto& row:bold)row.fill(false);}
     void text(int x,int y,const char* text,bool)override{
         assert(x==0&&y>=0&&y%16==0&&y+16<=320);
@@ -28,13 +29,13 @@ public:
         return std::strstr(rows[row].data(),cells)!=nullptr;
     }
     void present()override{}
-    LoadResult load(uint8_t* b,std::size_t cap,std::size_t& n)override{
+    LoadResult load(State& state)override{
         if(!exists)return LoadResult::Missing;
-        assert(stored.size<=cap);n=stored.size;std::memcpy(b,stored.bytes.data(),n);return LoadResult::Ok;
+        return stored.read(state);
     }
-    bool save(const uint8_t* b,std::size_t n)override{
-        if(fail)return false;
-        ++writes;exists=true;stored.size=n;std::memcpy(stored.bytes.data(),b,n);return true;
+    bool save(const State& state)override{
+        if(fail||!stored.write(state))return false;
+        ++writes;exists=true;return true;
     }
     bool exportIcs(const Day&,uint32_t,uint32_t,Language)override{if(failExport)return false;++exports;return true;}
     bool exportWeightCsv(const Day&)override{if(failWeightCsv)return false;++weightExports;return true;}
@@ -118,10 +119,15 @@ int main(){
     assert(d.has(1,"Samedi 19 Septembre 2026 (semaine 38)"));
     assert(reboot.data().language==Language::French);
     // Reject an invalid language even if an attacker/error recomputed the CRC.
-    auto malformed=encode(reboot.data());malformed.bytes[12]=2;
-    auto crc=crc32(malformed.bytes.data(),malformed.size-4);
-    for(unsigned i=0;i<4;++i)malformed.bytes[malformed.size-4+i]=uint8_t(crc>>(8*i));
-    State decoded;assert(!decode(malformed.bytes.data(),malformed.size,decoded));
+    // LPS-113-CHG06: same check on the JSON save, with a recomputed crc32.
+    auto malformed=lps_test::encodeJson(reboot.data());std::string json=malformed.text();
+    const auto at=json.find("\"language\":\"fr\"");assert(at!=std::string::npos);json.replace(at,15,"\"language\":\"xx\"");
+    malformed.assign(json);
+    State decoded;assert(malformed.check(decoded)==SaveCheck::Damaged);
+    auto legacy=lps_test::encodeLegacyV6(reboot.data());legacy.bytes[12]=2;
+    auto crc=crc32(legacy.bytes.data(),legacy.size-4);
+    for(unsigned i=0;i<4;++i)legacy.bytes[legacy.size-4+i]=uint8_t(crc>>(8*i));
+    assert(!decode(legacy.bytes.data(),legacy.size,decoded));
     d.stored=malformed;App corrupt(d);corrupt.start();assert(d.has(18,"Read error"));
     choose(corrupt,Language::French);corrupt.key('3');assert(d.has(17,"writes blocked"));
     std::puts("PASS: EN/FR menus, all screen widths, accents, save/cancel/failure, reboot, unchanged user data, history, rewards and invalid-language protection.");

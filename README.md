@@ -10,6 +10,15 @@ It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display
 
 **Status:** v1.2 was confirmed working on the user's PicoCalc. v1.12 refines the timer, removes gamification and the notepad, and shows the long date with ISO week; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
 
+**v1.13 in progress** (branch `susucre-lpsc-113`): the save files become JSON. The title bar still reads v1.12 until the version is bumped.
+
+## Changes in v1.13 (in progress)
+
+- **JSON save files** (LPS-113-CHG06): the save is now `LPS/SAVE_A.JSN` and `LPS/SAVE_B.JSN`, still written alternately with a generation number and a CRC-32 check, so a damaged or half-written file falls back to the other one exactly as before. The app writes and reads them as a stream with a small hand-written parser (no library, no dynamic memory). The files are managed only by the app; do not edit them by hand.
+  - **Migration**: on first start, if there is no `.JSN` save yet, v1.13 reads your existing `SAVE_A.BIN`/`SAVE_B.BIN` (any format from v1.0 to v1.12) and writes `SAVE_A.JSN` at the first save. The `.BIN` files are never modified or deleted and stay on the card as a backup. A save written by v1.13 cannot be read by v1.12.
+  - Each day stores its ticked activities **by name** (`"activities":["Marche","Messe"]`, French names) rather than as bit positions, ready for user-defined activities.
+  - ICS and CSV exports are unchanged.
+
 ## Changes in v1.12
 
 - **TIMER / MINUTEUR**: keys **1**, **2** and **3** start a duration directly, without Enter (LPS-112-CHG01). On the completion screen they start a new countdown at once; while a countdown runs they are ignored.
@@ -332,10 +341,26 @@ Each file is an iCalendar 2.0 file with one all-day event. It can be copied from
 
 LPS-Companion stores data in the SD card's `LPS` directory:
 
-- `SAVE_A.BIN`
-- `SAVE_B.BIN`
+- `SAVE_A.JSN`
+- `SAVE_B.JSN`
+- `SAVE_A.BIN`, `SAVE_B.BIN`: saves from v1.12 and earlier. Since v1.13 they are only read once, to migrate to JSON, and are left untouched as a backup.
 
-Each file is a complete snapshot of the current day, total XP, retained history, configuration and global Kanban; the two files are not assigned to different days. The app alternates writes between them. At startup it checks both records and loads the highest-generation valid snapshot. If the newest is missing or fails validation, it uses the older intact snapshot, which may lack the latest change. If loading fails due to an I/O error or neither existing record is valid, writes are blocked.
+Each file is a complete snapshot of the current day, total XP, retained history, configuration and global Kanban; the two files are not assigned to different days. The app alternates writes between them. At startup it checks both records and loads the highest-generation valid snapshot. If the newest is missing or fails validation, it uses the older intact snapshot, which may lack the latest change. If loading fails due to an I/O error or neither existing record is valid, writes are blocked. A JSON save written by a newer version of the app (a higher `version`) also blocks writes, so it is never overwritten.
+
+Since v1.13 each file is a single JSON object (schema `version` 1):
+
+```json
+{"format":"lps-companion","version":1,"generation":3,
+"state":{"language":"en","palette":"green","xp":0,
+"today":{"date":"2026-09-17","number":1,"activities":["Marche","Bible"],"expected":null,"actual":null,"note":""},
+"history":[],
+"kanban":[
+{"status":"todo","name":"Write \"JSON\" doc"}],
+"reminders":[]},
+"crc32":"825db3bc"}
+```
+
+`generation` increases with every save; the higher valid one wins. `crc32` is the standard CRC-32 (the same as Python's `zlib.crc32`) of every byte before `"crc32"`, and must be the last member. History is stored oldest first. Weights are integer grams, or `null` when not recorded. Unknown keys are ignored, so later versions can add fields.
 
 Day navigation uses the history from that loaded snapshot in RAM. It indexes backwards from the history ring's next-write position, so the correct day is selected even after the 31 slots wrap. It does not reload the card at every arrow press, switch between A and B to change days, or write while browsing. Back up the **whole `LPS` directory** to preserve your data.
 
@@ -363,6 +388,8 @@ If saving fails, restart with a working SD card before continuing. A missing, un
 | `CMakeLists.txt` | Firmware build and memory layout. |
 | `build.sh` | Dependency download and compilation. |
 | `test.sh` | Application tests and A/B storage integration tests with host files. |
+| `tests/json_save_test.cpp` | JSON save writer/parser: round trip, truncation, CRC, unknown keys, escaping and limits. |
+| `tests/migration_test.cpp` | Migration of v1.2 and v1.12 binary saves to JSON through the real adapter. |
 | `tests/kanban_test.cpp` | Kanban navigation, editing, movement, ordering, rollback and persistence tests. |
 | `tests/` | Hardware/FatFs stand-ins used only for host tests of the actual firmware adapter. |
 | `verify_uf2.py` | UF2 format, target and address checks. |

@@ -14,6 +14,8 @@ g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/daily_review_test.cpp -o b
 ./build-host/daily_review_test
 g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/reminders_test.cpp -o build-host/reminders_test
 ./build-host/reminders_test
+g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/json_save_test.cpp -o build-host/json_save_test
+./build-host/json_save_test
 g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror -Itests/stubs tests/storage_test.cpp -o build-host/storage_test
 g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror -Itests/stubs tests/migration_test.cpp -o build-host/migration_test
 storage_test_path="$PWD/build-host/storage_test"

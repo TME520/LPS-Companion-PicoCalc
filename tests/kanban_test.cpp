@@ -1,24 +1,25 @@
 #include "../src/lps_companion.cpp"
+#include "save_helpers.h"
 #include <cassert>
 #include <string>
 using namespace lps;
 
 class BoardDisplay final:public Platform {
 public:
-    Blob stored{};bool exists=false,fail=false;unsigned writes=0;
+    lps_test::JsonStore stored{};bool exists=false,fail=false;unsigned writes=0;
     std::array<std::array<char,41>,20> rows{};
     void clear()override{for(auto& row:rows)row.fill(0);}
     void text(int x,int y,const char* value,bool)override{assert(x==0&&y%16==0);std::snprintf(rows[y/16].data(),41,"%s",value);}
     void alert(int x,int y,const char* value)override{text(x,y,value,true);}
     void present()override{}
     void setPalette(Palette)override{}
-    LoadResult load(uint8_t* bytes,std::size_t capacity,std::size_t& size)override{
+    LoadResult load(State& state)override{
         if(!exists)return LoadResult::Missing;
-        assert(stored.size<=capacity);size=stored.size;std::memcpy(bytes,stored.bytes.data(),size);return LoadResult::Ok;
+        return stored.read(state);
     }
-    bool save(const uint8_t* bytes,std::size_t size)override{
-        if(fail)return false;
-        ++writes;exists=true;stored.size=size;std::memcpy(stored.bytes.data(),bytes,size);return true;
+    bool save(const State& state)override{
+        if(fail||!stored.write(state))return false;
+        ++writes;exists=true;return true;
     }
     bool exportIcs(const Day&,uint32_t,uint32_t,Language)override{return true;}
     bool exportWeightCsv(const Day&)override{return true;}
@@ -49,6 +50,6 @@ int main(){
     app.key(DeleteKey);assert(app.data().taskCount==2);app.key(Escape);
     App reboot(display);reboot.start();assert(reboot.data().taskCount==2);
     assert(reboot.data().tasks[1].status==TaskStatus::Done&&std::strcmp(reboot.data().tasks[1].name.data(),"Alpha")==0);
-    State legacy;Blob old=encode(legacy);State decoded;assert(decode(old.bytes.data(),old.size,decoded)&&decoded.taskCount==0);
+    State legacy;Blob old=lps_test::encodeLegacyV6(legacy);State decoded;assert(decode(old.bytes.data(),old.size,decoded)&&decoded.taskCount==0);
     std::puts("PASS: Kanban create/edit/delete, circular navigation/reordering, state moves, rollback and persistence.");
 }
