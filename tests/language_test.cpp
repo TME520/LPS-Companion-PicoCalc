@@ -109,6 +109,31 @@ int main(){
       again.key('1');again.key(Right);again.key(Right);assert(dd.has(6,fr?"22  Méditation":"22  Meditation")&&dd.has(6,"[x]"));
       again.key(Enter);assert(again.data().history[0].flags==app.data().today.flags); // Read-only.
     }
+    // LPS-113-CHG08b: Activities always opens on page 1, first row; 1-9 and 0 act on the current page.
+    for(bool fr:{false,true}){
+      Display dd;App app(dd);app.start();
+      if(fr)choose(app,Language::French),app.key('3');
+      app.key('1');assert(dd.has(3,"1/3")&&dd.has(5,fr?" 1  Marche":" 1  Walk"));
+      app.key('2'); // Tick Régime/Diet (row 2 of page 1).
+      assert(app.data().today.flags==(1u<<1)&&dd.has(6,"[x]")&&dd.has(3,"1/3"));
+      app.key(Right);app.key(Right);assert(dd.has(3,"3/3"));
+      app.key('1');assert(app.data().today.flags==((1u<<1)|(ActivityFlags(1u)<<20))); // Amis / Friends.
+      app.key('2');assert(app.data().today.flags==((1u<<1)|(ActivityFlags(1u)<<20)|(ActivityFlags(1u)<<21)));
+      app.key('3');app.key('9');app.key('0'); // Past the last row of the short page: ignored.
+      assert(app.data().today.flags==((1u<<1)|(ActivityFlags(1u)<<20)|(ActivityFlags(1u)<<21))&&dd.has(3,"3/3"));
+      app.key(Escape);app.key('1'); // Re-enter from Home: page 1, first row, leftover page forgotten.
+      assert(dd.has(3,"1/3")&&dd.has(5,fr?" 1  Marche":" 1  Walk")&&dd.has(5,"[ ]"));
+      app.key(Enter);assert(app.data().today.flags&1u); // Cursor was on row 1 (Marche/Walk).
+      app.key(Right);assert(dd.has(3,"2/3")&&dd.has(5,"11  Weekend"));
+      app.key('1');assert(app.data().today.flags&(1u<<10)); // 1 on page 2 = Weekend (11), not Marche.
+      app.key('0');assert(app.data().today.flags&(ActivityFlags(1u)<<19)); // 0 on page 2 = Famille / Family (20).
+      app.key(Escape);app.key('9');app.key(Enter);app.key(Enter); // Close the day with those ticks.
+      app.key(Left);app.key('1');assert(dd.has(3,"1/3")); // Archive view also opens on page 1.
+      app.key(Right);app.key(Right);assert(dd.has(3,"3/3")&&dd.has(5,"[x]")&&dd.has(6,"[x]"));
+      const auto before=app.data().history[0].flags;
+      app.key('1');app.key('2');app.key('0');app.key(Enter); // Read-only: number keys and Enter do not change the archived day.
+      assert(app.data().history[0].flags==before);
+    }
     Display d;App a(d);a.start();assert(a.data().language==Language::English);checkMenus(d,a,false);
     a.key(Up);a.key(Up);a.key(Up);a.key(Up);a.key(Enter);assert(a.currentScreen()==Screen::Config);
     a.key(Enter);a.key(Down);a.key(Escape);assert(d.has(6,"English"));

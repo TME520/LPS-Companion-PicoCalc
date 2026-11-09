@@ -18,7 +18,7 @@ It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display
   - **Migration**: on first start, if there is no `.JSN` save yet, v1.13 reads your existing `SAVE_A.BIN`/`SAVE_B.BIN` (any format from v1.0 to v1.12) and writes `SAVE_A.JSN` at the first save. The `.BIN` files are never modified or deleted and stay on the card as a backup. A save written by v1.13 cannot be read by v1.12.
   - Each day stores its ticked activities **by name** (`"activities":["Marche","Messe"]`, French names) rather than as bit positions, ready for user-defined activities.
   - ICS and CSV exports are unchanged.
-- **22 activities** (LPS-113-CHG08): six activities are added after the existing 16: **Sport / Sport, Cooking / Cuisine, Chores / Ménage, Family / Famille, Friends / Amis, Meditation / Méditation**. The Activities screen now has three pages (10 + 10 + 2), and the home counter reads `x/22`. The first 16 keep their order, so days from v1.12 saves migrate unchanged. When ticked, the new activities appear by name in the ICS export, with the same format as before. The list is still fixed; editing it is planned next (CHG07).
+- **22 activities** (LPS-113-CHG08): six activities are added after the existing 16: **Sport / Sport, Cooking / Cuisine, Chores / Ménage, Family / Famille, Friends / Amis, Meditation / Méditation**. The Activities screen now has three pages (10 + 10 + 2), and the home counter reads `x/22`. The first 16 keep their order, so days from v1.12 saves migrate unchanged. When ticked, the new activities appear by name in the ICS export, with the same format as before. The list is still fixed; editing it is planned next (CHG07). The Activities screen always opens on page 1 (CHG08b). Number keys 1–9 and 0 now act on the current page rather than on the whole list.
 
 ## Changes in v1.12
 
@@ -269,7 +269,7 @@ After closing a day, the next date is set automatically, including month/year bo
 | Arrows + Enter | Friends (21) | Amis (21) |
 | Arrows + Enter | Meditation (22) | Méditation (22) |
 
-Activities are displayed across three pages (10 + 10 + 2, since v1.13). **Left/Right** changes page and wraps around; **Up/Down** selects an activity; **Enter** toggles its checkbox. Keys **1–9** toggle the corresponding activity from any page. Select activities 10–22 with Up/Down, then press Enter.
+Activities are displayed across three pages (10 + 10 + 2, since v1.13). Opening the screen from Home or from an archived day always starts on page 1, with the cursor on the first row. **Left/Right** changes page and wraps around; **Up/Down** selects an activity; **Enter** toggles its checkbox. Keys **1–9** toggle rows 1–9 of the page you are on, and **0** toggles row 10 when the page has one. On the last page (2 rows) keys that point past the last row are ignored.
 
 Each checkbox can be counted once per day. Checking or unchecking an activity saves immediately.
 

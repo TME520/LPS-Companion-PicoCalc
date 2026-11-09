@@ -18,6 +18,7 @@
   - `storage_test` (real adapter): ICS with `Activities: Walk, Sport, Meditation` and `Activités: Cuisine, Ménage, Famille, Amis`; the existing first-16 ICS and CSV assertions are unchanged.
   - `migration_test`: v1.2 and v1.12 BIN days keep their 16 activities.
   - All ten host test suites pass; also compiles warning-free for 32-bit ARM. No UF2 built.
+  - LPS-113-CHG08b: `language_test`, in English and French: after leaving Activities on page 3, opening it again from Home shows page `1/3` with the cursor on Walk/Marche (Enter ticks it). From page 1, key 2 ticks Diet/Régime and stays on page 1. From page 3, keys 1 and 2 tick Friends/Amis and Meditation/Méditation; keys 3, 9 and 0 are ignored. From page 2, key 1 ticks Weekend (activity 11, not Walk) and key 0 ticks Family/Famille (activity 20). Opening Activities from an archived day also starts on page 1; on that archived day, keys 1, 2, 0 and Enter do not change the saved flags.
 
 # Validation v1.12 — 8 November 2026
 

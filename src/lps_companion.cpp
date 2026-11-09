@@ -966,6 +966,7 @@ class App {
         if(s==Screen::Colors)selection=unsigned(pendingPalette);
         if(s==Screen::Weight){field=0;for(unsigned i=0;i<2;++i){int32_t v=i?viewedDay().actual:viewedDay().expected;weights[i].fill(0);if(v>=0)weightText(v,weights[i].data(),weights[i].size());}}
         if(s==Screen::Date){dateDraft.fill(0);Date d=validDate(state.today.date)?state.today.date:DefaultDate;dateText(d,dateDraft.data(),dateDraft.size());}
+        if(s==Screen::Activities)page=0; // LPS-113-CHG08b: always open on page 1, first row.
     }
     template<std::size_t N> void edit(std::array<char,N>& value,int key){
         std::size_t len=std::strlen(value.data());
@@ -1083,10 +1084,13 @@ public:
             if(k==Left||k==Right){page=(page+(k==Right?1:PageCount-1))%PageCount;selection=0;}
             else if(k==Up)selection=(selection+rows-1)%rows;
             else if(k==Down)selection=(selection+1)%rows;
-            else if(daysBack&&(k==Enter||(k>='1'&&k<='9')))readOnly();
-            else if(k==Enter||(k>='1'&&k<='9')){
-                unsigned id=k==Enter?page*PageSize+selection:unsigned(k-'1');State next=state;next.today.flags^=ActivityFlags(1u)<<id;
-                if(commit(next)){page=id/PageSize;selection=id%PageSize;}
+            // LPS-113-CHG08b: 1-9 toggle rows 1-9 of this page; 0 toggles row 10 if it exists.
+            else if(daysBack&&(k==Enter||k=='0'||(k>='1'&&k<='9')))readOnly();
+            else if(k==Enter||k=='0'||(k>='1'&&k<='9')){
+                unsigned row=k==Enter?selection:(k=='0'?9:unsigned(k-'1'));
+                if(row>=rows)return; // Past the last row of a short page: ignore.
+                unsigned id=page*PageSize+row;State next=state;next.today.flags^=ActivityFlags(1u)<<id;
+                if(commit(next))selection=row;
             }
         }else if(screen==Screen::Weight){
             if(daysBack){if(k==Enter)go(Screen::Home);else readOnly();}
@@ -1511,6 +1515,8 @@ int main(){
     nav.key(Right);nav.key(Enter);
     assert(nav.data().today.flags==((1u<<9)|(1u<<10)));
     App reload(pages);reload.start();assert(reload.data().today.flags==nav.data().today.flags);
+    // LPS-113-CHG08b: leftover page is forgotten on re-entry; key 1 then means Walk again.
+    nav.key(Escape);nav.key('1');
     nav.key('1');assert(nav.data().today.flags&1);
     nav.key(Right);nav.key(Enter);assert(!(nav.data().today.flags&(1u<<10)));
     nav.key(Escape);nav.key('3');assert(nav.currentScreen()==Screen::Kanban);nav.key(Escape);
