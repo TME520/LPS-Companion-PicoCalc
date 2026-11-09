@@ -1250,10 +1250,14 @@ public:
             std::snprintf(b,sizeof b,tr("ACTIVITIES                      %u/%u","ACTIVITÉS                       %u/%u"),page+1,PageCount);line(3,b);
             unsigned end=(page+1)*PageSize;if(end>ActivityCount)end=ActivityCount;
             for(unsigned i=page*PageSize;i<end;++i){
-                // Pad by display cells, not UTF-8 bytes, to align checkboxes.
+                // Label is the page-relative key (1-9, 0 for row 10), same "1  Name"
+                // spacing as the home menu. Pad the name by display cells, not UTF-8
+                // bytes, so the checkboxes line up (LPS-113-CHG08c).
                 char label[32];displayText(tr(EnglishActivities[i],Activities[i]),label,sizeof label);
-                std::snprintf(b,sizeof b,"%2u  %-24s [%c]",i+1,label,day.flags&(ActivityFlags(1u)<<i)?'x':' ');
-                hw.text(0,(5+int(i-page*PageSize))*16,b,i-page*PageSize==selection);
+                const unsigned row=i-page*PageSize;
+                const char key=row==9?'0':char('1'+row);
+                std::snprintf(b,sizeof b,"%c  %-24s [%c]",key,label,day.flags&(ActivityFlags(1u)<<i)?'x':' ');
+                hw.text(0,(5+int(row))*16,b,row==selection);
             }
             line(15,daysBack?tr("<- -> pages   Esc: day menu","<- -> pages   Échap : menu du jour"):tr("Enter: toggle  1-9: keys  <- -> pages","Entrée: cocher  1-9: racc.  <- -> pages"));
         }else if(screen==Screen::Weight){

@@ -64,7 +64,7 @@ void checkMenus(Display& d,App& a,bool fr){
     a.key('0');assert(d.has(3,"DATE"));assert(d.has(6,"2026-09-17"));
     assert(d.has(9,fr?"Calendrier":"Calendar"));a.key(Escape);
     a.key('1');assert(d.has(3,fr?"ACTIVITÉS":"ACTIVITIES"));assert(d.has(6,fr?"Régime":"Diet"));
-    assert(d.has(14,fr?"Congé":"Day off"));a.key(Right);assert(d.has(5,"Weekend"));assert(d.has(6,fr?"Sortie":"Outing"));assert(d.has(7,fr?"Jeu":"Gaming"));assert(d.has(8,fr?"Docteur":"Doctor"));assert(d.has(9,fr?"Lecture":"Reading"));assert(d.has(10,"Shopping"));a.key(Right);assert(d.has(6,fr?"22  Méditation":"22  Meditation"));a.key(Right);a.key(Escape);
+    assert(d.has(14,fr?"Congé":"Day off"));a.key(Right);assert(d.has(5,"Weekend"));assert(d.has(6,fr?"Sortie":"Outing"));assert(d.has(7,fr?"Jeu":"Gaming"));assert(d.has(8,fr?"Docteur":"Doctor"));assert(d.has(9,fr?"Lecture":"Reading"));assert(d.has(10,"Shopping"));a.key(Right);assert(d.has(6,fr?"2  Méditation":"2  Meditation"));a.key(Right);a.key(Escape);
     a.key('2');assert(d.has(3,fr?"SUIVI DU POIDS":"WEIGHT TRACKER"));
     assert(d.has(6,fr?"Attendu":"Expected"));assert(d.has(9,fr?"Effectif":"Actual"));
     a.key('0');a.key(Enter);assert(d.has(17,fr?"Poids invalide":"Invalid weight"));a.key(Escape);
@@ -87,10 +87,14 @@ int main(){
       Display dd;App app(dd);app.start();
       if(fr)choose(app,Language::French),app.key('3');
       assert(dd.has(4,fr?"0/22 activités":"0/22 activities"));
-      app.key('1');assert(dd.has(3,"1/3"));
-      app.key(Right);assert(dd.has(3,"2/3")&&dd.has(5,"11  Weekend")&&dd.has(6,fr?"12  Sortie":"12  Outing")&&dd.has(11,fr?"17  Sport":"17  Sport"));
-      assert(dd.has(12,fr?"18  Cuisine":"18  Cooking")&&dd.has(13,fr?"19  Ménage":"19  Chores")&&dd.has(14,fr?"20  Famille":"20  Family"));
-      app.key(Right);assert(dd.has(3,"3/3")&&dd.has(5,fr?"21  Amis":"21  Friends")&&dd.has(6,fr?"22  Méditation":"22  Meditation"));
+      app.key('1');assert(dd.has(3,"1/3")&&dd.has(5,fr?"1  Marche":"1  Walk")&&dd.has(14,fr?"0  Congé":"0  Day off"));
+      // Same "1  Name" spacing as the home menu; every checkbox sits in the same column.
+      {const char* row=dd.rows[5].data();assert(row[0]=='1'&&row[1]==' '&&row[2]==' ');
+       const char* box=std::strchr(row,'[');assert(box&&box-row==28);
+       for(int r=6;r<=14;++r)assert(dd.rows[r][28]=='[');}
+      app.key(Right);assert(dd.has(3,"2/3")&&dd.has(5,"1  Weekend")&&dd.has(6,fr?"2  Sortie":"2  Outing")&&dd.has(11,fr?"7  Sport":"7  Sport"));
+      assert(dd.has(12,fr?"8  Cuisine":"8  Cooking")&&dd.has(13,fr?"9  Ménage":"9  Chores")&&dd.has(14,fr?"0  Famille":"0  Family"));
+      app.key(Right);assert(dd.has(3,"3/3")&&dd.has(5,fr?"1  Amis":"1  Friends")&&dd.has(6,fr?"2  Méditation":"2  Meditation"));
       for(int row=7;row<=14;++row)assert(dd.rows[row][0]==0); // Short last page: no stale rows.
       assert(dd.has(6,"[ ]"));
       app.key(Down);app.key(Down);app.key(Down);app.key(Enter); // Down wraps within the two rows: Méditation.
@@ -106,14 +110,14 @@ int main(){
       again.key('9');assert(dd.has(6,fr?"Activités : 2":"Activities: 2"));again.key(Enter);again.key(Enter);
       assert(again.data().today.flags==0&&again.data().history[0].flags==app.data().today.flags);
       again.key(Left);assert(dd.has(4,fr?"2/22 activités":"2/22 activities"));
-      again.key('1');again.key(Right);again.key(Right);assert(dd.has(6,fr?"22  Méditation":"22  Meditation")&&dd.has(6,"[x]"));
+      again.key('1');again.key(Right);again.key(Right);assert(dd.has(6,fr?"2  Méditation":"2  Meditation")&&dd.has(6,"[x]"));
       again.key(Enter);assert(again.data().history[0].flags==app.data().today.flags); // Read-only.
     }
     // LPS-113-CHG08b: Activities always opens on page 1, first row; 1-9 and 0 act on the current page.
     for(bool fr:{false,true}){
       Display dd;App app(dd);app.start();
       if(fr)choose(app,Language::French),app.key('3');
-      app.key('1');assert(dd.has(3,"1/3")&&dd.has(5,fr?" 1  Marche":" 1  Walk"));
+      app.key('1');assert(dd.has(3,"1/3")&&dd.has(5,fr?"1  Marche":"1  Walk"));
       app.key('2'); // Tick Régime/Diet (row 2 of page 1).
       assert(app.data().today.flags==(1u<<1)&&dd.has(6,"[x]")&&dd.has(3,"1/3"));
       app.key(Right);app.key(Right);assert(dd.has(3,"3/3"));
@@ -122,9 +126,9 @@ int main(){
       app.key('3');app.key('9');app.key('0'); // Past the last row of the short page: ignored.
       assert(app.data().today.flags==((1u<<1)|(ActivityFlags(1u)<<20)|(ActivityFlags(1u)<<21))&&dd.has(3,"3/3"));
       app.key(Escape);app.key('1'); // Re-enter from Home: page 1, first row, leftover page forgotten.
-      assert(dd.has(3,"1/3")&&dd.has(5,fr?" 1  Marche":" 1  Walk")&&dd.has(5,"[ ]"));
+      assert(dd.has(3,"1/3")&&dd.has(5,fr?"1  Marche":"1  Walk")&&dd.has(5,"[ ]"));
       app.key(Enter);assert(app.data().today.flags&1u); // Cursor was on row 1 (Marche/Walk).
-      app.key(Right);assert(dd.has(3,"2/3")&&dd.has(5,"11  Weekend"));
+      app.key(Right);assert(dd.has(3,"2/3")&&dd.has(5,"1  Weekend"));
       app.key('1');assert(app.data().today.flags&(1u<<10)); // 1 on page 2 = Weekend (11), not Marche.
       app.key('0');assert(app.data().today.flags&(ActivityFlags(1u)<<19)); // 0 on page 2 = Famille / Family (20).
       app.key(Escape);app.key('9');app.key(Enter);app.key(Enter); // Close the day with those ticks.

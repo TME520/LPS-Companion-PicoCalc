@@ -19,6 +19,7 @@
   - `migration_test`: v1.2 and v1.12 BIN days keep their 16 activities.
   - All ten host test suites pass; also compiles warning-free for 32-bit ARM. No UF2 built.
   - LPS-113-CHG08b: `language_test`, in English and French: after leaving Activities on page 3, opening it again from Home shows page `1/3` with the cursor on Walk/Marche (Enter ticks it). From page 1, key 2 ticks Diet/Régime and stays on page 1. From page 3, keys 1 and 2 tick Friends/Amis and Meditation/Méditation; keys 3, 9 and 0 are ignored. From page 2, key 1 ticks Weekend (activity 11, not Walk) and key 0 ticks Family/Famille (activity 20). Opening Activities from an archived day also starts on page 1; on that archived day, keys 1, 2, 0 and Enter do not change the saved flags.
+  - LPS-113-CHG08c: `language_test`, in English and French: page 1 shows `1  Walk`/`1  Marche` through `0  Day off`/`0  Congé`; page 2 shows `1  Weekend`, `2  Outing`/`2  Sortie`, `7  Sport`, `8  Cooking`/`8  Cuisine`, `9  Chores`/`9  Ménage` and `0  Family`/`0  Famille`; page 3 shows `1  Friends`/`1  Amis` and `2  Meditation`/`2  Méditation` (also when the archived day is viewed). The prefix matches the home menu (`digit`, two spaces, name). Every checkbox on page 1 sits in column 28.
 
 # Validation v1.12 — 8 November 2026
 
