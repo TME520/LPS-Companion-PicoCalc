@@ -1,4 +1,4 @@
-# LPS-Companion v1.11
+# LPS-Companion v1.12
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
