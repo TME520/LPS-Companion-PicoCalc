@@ -12,7 +12,7 @@ public:
  void alert(int,int,const char*)override{}void present()override{}void setPalette(Palette)override{}
  LoadResult load(State& state)override{if(!exists)return LoadResult::Missing;return stored.read(state);}
  bool save(const State& state)override{if(fail||!stored.write(state))return false;exists=true;++writes;return true;}
- bool exportIcs(const Day&,uint32_t,uint32_t,Language)override{return true;}bool exportWeightCsv(const Day&)override{return true;}
+ bool exportIcs(const Day&,uint32_t,uint32_t,Language,const State&)override{return true;}bool exportWeightCsv(const Day&)override{return true;}
  bool has(const char* s)const{char cell[100];displayText(s,cell,sizeof cell);for(const auto& r:rows)if(std::strstr(r.data(),cell))return true;return false;}
 };
 static void create(App& a,const char* message){a.key('7');a.key('n');a.key(Down);a.key(Down);for(const char* c=message;*c;++c)a.key(*c);a.key(Enter);assert(a.currentScreen()==Screen::Reminders);a.key(Escape);}

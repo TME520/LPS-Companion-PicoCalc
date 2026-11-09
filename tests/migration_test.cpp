@@ -105,7 +105,7 @@ int main(int argc,char** argv){
          x.key('1');x.key('1');assert(slot(1).generation==10&&slot(0).generation==9);} // Next write goes to the older slot.
         // A newer schema in either slot blocks writes instead of being overwritten.
         std::string future=fileBytes(jsns[0]);
-        lps_test::JsonStore j;const auto at=future.find("\"version\":1");future.replace(at,11,"\"version\":2");j.assign(future);
+        lps_test::JsonStore j;const auto at=future.find("\"version\":2");future.replace(at,11,"\"version\":3");j.assign(future);
         f=std::fopen(jsns[0],"wb");std::fwrite(j.bytes.data(),1,j.size,f);std::fclose(f);
         {State s;assert(j.check(s)==SaveCheck::Unsupported);
          const auto writes=mockWrites;PicoCalc reboot;reboot.init();App x(reboot);x.start();x.key('1');x.key('1');assert(mockWrites==writes);}

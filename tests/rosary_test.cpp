@@ -17,7 +17,7 @@ public:
     void setPalette(Palette)override{}
     LoadResult load(State&)override{return LoadResult::Missing;}
     bool save(const State&)override{return true;}
-    bool exportIcs(const Day&,uint32_t,uint32_t,Language)override{return true;}
+    bool exportIcs(const Day&,uint32_t,uint32_t,Language,const State&)override{return true;}
     bool exportWeightCsv(const Day&)override{return true;}
     bool has(const char* utf8)const{
         char cells[256];displayText(utf8,cells,sizeof cells);

@@ -69,6 +69,15 @@ void displayText(const char* utf8,char* out,std::size_t capacity){
     }
     out[n]=0;
 }
+unsigned displayWidth(const char* utf8){
+    unsigned n=0;
+    while(*utf8){
+        unsigned c=static_cast<unsigned char>(*utf8++);
+        if((c==0xc2||c==0xc3)&&*utf8)++utf8;
+        ++n;
+    }
+    return n;
+}
 constexpr int Width=320, Height=320, Columns=40, Rows=20;
 constexpr std::size_t NoteLength=96, HistoryLength=31, TaskNameLength=32, TaskCapacity=24, ReminderCapacity=3, ReminderTextLength=32, BlobCapacity=6144;
 enum Key { Enter=13, Backspace=8, Escape=27, Up=1000, Down, Left, Right, DeleteKey, F1, F2, F3, F4, F5 };
@@ -101,7 +110,7 @@ struct Platform {
     virtual bool save(const State& state)=0;
     // Export first, then save the A/B state. Retrying replaces the same named
     // export if the snapshot write later fails; no duplicate calendar event.
-    virtual bool exportIcs(const Day& day,uint32_t totalXp,uint32_t dayXp,Language language)=0;
+    virtual bool exportIcs(const Day& day,uint32_t totalXp,uint32_t dayXp,Language language,const State& state)=0;
     // The yearly weight journal is exported before the state commit as well.
     // Implementations must treat a repeated date as already exported.
     virtual bool exportWeightCsv(const Day& day)=0;
@@ -112,16 +121,24 @@ constexpr const char* Activities[]={"Marche","Régime","Bible","Messe","Travail"
                                     "Sport","Cuisine","Ménage","Famille","Amis","Méditation"};
 constexpr const char* EnglishActivities[]={"Walk","Diet","Bible","Mass","Work","Project","Nap","Gurumed","Illness","Day off","Weekend","Outing","Gaming","Doctor","Reading","Shopping",
                                            "Sport","Cooking","Chores","Family","Friends","Meditation"};
-constexpr unsigned ActivityCount=sizeof Activities/sizeof Activities[0];
-static_assert(ActivityCount==sizeof EnglishActivities/sizeof EnglishActivities[0],"Every activity needs an English name");
-// Day flags hold one bit per activity; 30 is the design capacity (3 pages of 10).
+constexpr unsigned DefaultActivityCount=sizeof Activities/sizeof Activities[0];
+static_assert(DefaultActivityCount==sizeof EnglishActivities/sizeof EnglishActivities[0],"Every activity needs an English name");
+// Day flags hold one bit per current-list index; 30 is the design capacity (3 pages of 10).
+// LPS-113-CHG07: the list itself is user-defined and stored in the JSON save.
 using ActivityFlags=uint32_t;
 constexpr unsigned ActivityCapacity=30;
-static_assert(ActivityCount<=ActivityCapacity&&ActivityCapacity<=32,"Activity flags are 32 bits");
-constexpr unsigned PageSize=10, PageCount=(ActivityCount+PageSize-1)/PageSize;
-constexpr ActivityFlags ActivityMask=ActivityFlags((uint64_t(1)<<ActivityCount)-1);
+constexpr unsigned ActivityNameLength=24; // display cells and stored UTF-8 bytes
+static_assert(DefaultActivityCount<=ActivityCapacity&&ActivityCapacity<=32,"Activity flags are 32 bits");
+constexpr unsigned PageSize=10;
+constexpr ActivityFlags ActivityMask=ActivityFlags((uint64_t(1)<<DefaultActivityCount)-1);
 constexpr unsigned LegacyActivityCount=16; // Binary saves (formats 1-6) hold 16 bits.
-static_assert(LegacyActivityCount<=ActivityCount,"Legacy bits must keep their activity");
+static_assert(LegacyActivityCount<=DefaultActivityCount,"Legacy bits must keep their activity");
+struct Activity {
+    uint16_t id=0;
+    std::array<char,ActivityNameLength+1> french{};
+    std::array<char,ActivityNameLength+1> english{};
+};
+unsigned activityPages(unsigned n){return n?(n+PageSize-1)/PageSize:1;}
 struct Date { uint16_t year=0;uint8_t month=0,day=0; };
 constexpr Date FirstCalendarDate{2000,1,1}, LastCalendarDate{2099,12,31}, DefaultDate{2026,9,17};
 bool leap(uint16_t year){return year%4==0&&(year%100!=0||year%400==0);}
@@ -148,6 +165,10 @@ struct Day {
     ActivityFlags flags=0;
     int32_t expected=-1, actual=-1; // grams; -1 is missing
     std::array<char,NoteLength+1> note{};
+    // Frozen ticked names (French identity name, or the only language if the other is empty).
+    // History keeps these when the list is later renamed or deleted (LPS-113-CHG07).
+    uint8_t namedCount=0;
+    std::array<std::array<char,ActivityNameLength+1>,ActivityCapacity> names{};
 };
 enum class TaskStatus : uint8_t { Todo, Doing, Done };
 struct Task {
@@ -166,7 +187,107 @@ struct State {
     std::array<Task,TaskCapacity> tasks{};
     uint8_t reminderCount=0;
     std::array<Reminder,ReminderCapacity> reminders{};
+    uint8_t activityCount=0;
+    uint16_t nextActivityId=1;
+    std::array<Activity,ActivityCapacity> activities{};
+    State();
 };
+const char* storedName(const Activity& a){return a.french[0]?a.french.data():a.english.data();}
+const char* displayName(const Activity& a,Language language){
+    if(language==Language::French)return a.french[0]?a.french.data():a.english.data();
+    return a.english[0]?a.english.data():a.french.data();
+}
+const char* languageName(const Activity& a,Language language){
+    return language==Language::French?a.french.data():a.english.data();
+}
+unsigned indexByStoredName(const State& s,const char* name){
+    if(!name||!*name)return ActivityCapacity;
+    for(unsigned i=0;i<s.activityCount;++i)if(!std::strcmp(storedName(s.activities[i]),name))return i;
+    return ActivityCapacity;
+}
+void copyActivityName(std::array<char,ActivityNameLength+1>& dest,const char* src){
+    dest.fill(0);if(src)std::snprintf(dest.data(),dest.size(),"%s",src);
+}
+void fillDefaultActivities(State& s){
+    s.activityCount=uint8_t(DefaultActivityCount);s.nextActivityId=uint16_t(DefaultActivityCount+1);
+    for(Activity& a:s.activities)a=Activity{};
+    for(unsigned i=0;i<DefaultActivityCount;++i){
+        s.activities[i].id=uint16_t(i+1);
+        copyActivityName(s.activities[i].french,Activities[i]);
+        copyActivityName(s.activities[i].english,EnglishActivities[i]);
+    }
+}
+State::State(){fillDefaultActivities(*this);}
+void resolveDayFlags(State& s,Day& d){
+    if(!d.namedCount)return;
+    d.flags=0;
+    for(unsigned i=0;i<d.namedCount;++i){
+        const unsigned idx=indexByStoredName(s,d.names[i].data());
+        if(idx<s.activityCount)d.flags|=ActivityFlags(1u)<<idx;
+    }
+}
+void resolveAllDayFlags(State& s){
+    resolveDayFlags(s,s.today);
+    for(unsigned i=0;i<s.count;++i)resolveDayFlags(s,s.history[i]);
+}
+void freezeDayNames(const State& s,Day& d){
+    d.namedCount=0;
+    for(unsigned i=0;i<s.activityCount&&d.namedCount<ActivityCapacity;++i)if(d.flags&(ActivityFlags(1u)<<i)){
+        copyActivityName(d.names[d.namedCount],storedName(s.activities[i]));++d.namedCount;
+    }
+    for(unsigned i=d.namedCount;i<ActivityCapacity;++i)d.names[i].fill(0);
+}
+void refreshActivityFlags(State& s){
+    // Today's ticks follow the live flags; freeze them under the new names
+    // first so a French rename or a session-only tick is not lost when
+    // history is rematched from its own frozen names.
+    freezeDayNames(s,s.today);
+    resolveAllDayFlags(s);
+}
+void swapActivities(State& s,unsigned a,unsigned b){
+    if(a>=s.activityCount||b>=s.activityCount||a==b)return;
+    const Activity keep=s.activities[a];s.activities[a]=s.activities[b];s.activities[b]=keep;
+    const ActivityFlags bitA=ActivityFlags(1u)<<a,bitB=ActivityFlags(1u)<<b;
+    const bool hadA=s.today.flags&bitA,hadB=s.today.flags&bitB;
+    s.today.flags&=~(bitA|bitB);
+    if(hadA)s.today.flags|=bitB;if(hadB)s.today.flags|=bitA;
+}
+void trimName(char* text){
+    char* start=text;while(*start==' ')++start;
+    std::size_t n=std::strlen(start);while(n&&start[n-1]==' ')--n;
+    start[n]=0;if(start!=text)std::memmove(text,start,n+1);
+}
+bool namesEqualIgnoreCase(const char* a,const char* b){
+    auto ascii=[](unsigned char c){return c>='A'&&c<='Z'?char(c+32):char(c);};
+    auto c3=[](unsigned char c){return c>=0x80&&c<=0x9e&&c!=0x97?char(c+0x20):char(c);};
+    while(*a&&*b){
+        unsigned char ca=static_cast<unsigned char>(*a++),cb=static_cast<unsigned char>(*b++);
+        if(ca==0xc3&&cb==0xc3&&*a&&*b){if(c3(static_cast<unsigned char>(*a++))!=c3(static_cast<unsigned char>(*b++)))return false;}
+        else if(ascii(ca)!=ascii(cb))return false;
+    }
+    return!*a&&!*b;
+}
+bool duplicateActivityName(const State& s,const char* name,unsigned except,Language language){
+    for(unsigned i=0;i<s.activityCount;++i)
+        if(i!=except&&namesEqualIgnoreCase(displayName(s.activities[i],language),name))return true;
+    return false;
+}
+bool validActivityName(const char* name){
+    if(!name||!*name||std::strlen(name)>ActivityNameLength||displayWidth(name)>ActivityNameLength)return false;
+    for(const char* p=name;*p;++p){const unsigned char c=static_cast<unsigned char>(*p);if(c<32||c==127)return false;}
+    return true;
+}
+template<class F> void eachExportedActivity(const State& s,const Day& d,Language language,F&& fn){
+    if(d.namedCount){
+        for(unsigned i=0;i<d.namedCount;++i){
+            const unsigned idx=indexByStoredName(s,d.names[i].data());
+            fn(idx<s.activityCount?displayName(s.activities[idx],language):d.names[i].data());
+        }
+    }else{
+        for(unsigned i=0;i<s.activityCount;++i)if(d.flags&(ActivityFlags(1u)<<i))fn(displayName(s.activities[i],language));
+    }
+}
+
 unsigned count(ActivityFlags flags) { unsigned n=0;for(;flags;flags>>=1)n+=flags&1;return n; }
 uint32_t points(const Day& d) { unsigned n=count(d.flags);return n*10+(n>=3?10:0); }
 bool parseWeight(const char* s,int32_t& grams) {
@@ -250,10 +371,12 @@ bool decode(const uint8_t* bytes,std::size_t size,State& out) {
 // LPS-113-CHG06: JSON save files (SAVE_A.JSN / SAVE_B.JSN).
 // The save is one JSON object, written and read as a stream: no object tree,
 // no dynamic allocation, only small fixed buffers, so the same code can move
-// to a 640 KB MS-DOS machine. Schema 1:
-//   {"format":"lps-companion","version":1,"generation":N,
-//    "state":{"language":"en","palette":"green","xp":0,"today":{DAY},
-//             "history":[DAY,...],"kanban":[TASK,...],"reminders":[REMINDER,...]},
+// to a 640 KB MS-DOS machine. Schema 2 (CHG07) adds the editable catalog;
+// schema 1 files still load:
+//   {"format":"lps-companion","version":2,"generation":N,
+//    "state":{"language":"en","palette":"green","xp":0,
+//             "activities":[{"id":1,"fr":"Marche","en":"Walk"},...],
+//             "today":{DAY},"history":[DAY,...],"kanban":[TASK,...],"reminders":[REMINDER,...]},
 //    "crc32":"xxxxxxxx"}
 //   DAY      {"date":"YYYY-MM-DD"|null,"number":N,"activities":["Marche",...],
 //             "expected":grams|null,"actual":grams|null,"note":"..."}
@@ -261,9 +384,11 @@ bool decode(const uint8_t* bytes,std::size_t size,State& out) {
 //   REMINDER {"from":"YYYY-MM-DD","days":N,"text":"..."}
 // "crc32" is the CRC-32 (IEEE, lowercase hex) of every byte before the
 // "crc32" key and must be the last member. History is stored oldest first.
-// Activities are stored by their French canonical name; unknown names are
-// ignored on load. Unknown keys are skipped; a newer schema version is refused.
-constexpr uint32_t SaveSchemaVersion=1;
+// Each day stores ticked identity names (French if set, otherwise English).
+// Names that no longer match the catalog are kept as frozen extras.
+// A v1 file with no catalog receives the default list of 22. Unknown keys
+// are skipped; a newer schema version is refused and blocks writes.
+constexpr uint32_t SaveSchemaVersion=2;
 constexpr std::size_t SaveTextCapacity=128, SaveIoBuffer=256, SaveMaxBytes=65536;
 struct SaveSink { virtual ~SaveSink()=default; virtual bool write(const char* data,std::size_t size)=0; };
 // read() returns the number of bytes read, 0 at the end, or a negative value on an I/O error.
@@ -305,11 +430,13 @@ public:
     uint32_t checksum()const{return ~crc;}
     bool good()const{return ok;}
 };
-void writeDay(JsonWriter& w,const Day& d){
+void writeDay(JsonWriter& w,const State& s,const Day& d){
     w.raw("{");w.key("date");w.date(d.date);w.raw(",");w.key("number");w.number(d.number);
     w.raw(",");w.key("activities");w.raw("[");
     bool first=true;
-    for(unsigned i=0;i<ActivityCount;++i)if(d.flags&(ActivityFlags(1u)<<i)){if(!first)w.raw(",");w.text(Activities[i]);first=false;}
+    auto emit=[&](const char* name){if(!first)w.raw(",");w.text(name);first=false;};
+    for(unsigned i=0;i<s.activityCount;++i)if(d.flags&(ActivityFlags(1u)<<i))emit(storedName(s.activities[i]));
+    for(unsigned i=0;i<d.namedCount;++i)if(indexByStoredName(s,d.names[i].data())>=s.activityCount)emit(d.names[i].data());
     w.raw("],");w.key("expected");w.weight(d.expected);w.raw(",");w.key("actual");w.weight(d.actual);
     w.raw(",");w.key("note");w.text(d.note.data());w.raw("}");
 }
@@ -321,11 +448,18 @@ bool writeSave(const State& s,uint32_t generation,SaveSink& sink,uint32_t& check
     w.raw(",");w.key("generation");w.number(generation);w.raw(",\n");
     w.key("state");w.raw("{");w.key("language");w.text(LanguageNames[unsigned(s.language)]);
     w.raw(",");w.key("palette");w.text(PaletteNames[unsigned(s.palette)]);w.raw(",");w.key("xp");w.number(s.xp);
-    w.raw(",\n");w.key("today");writeDay(w,s.today);
+    w.raw(",\n");w.key("activities");w.raw("[");
+    for(unsigned i=0;i<s.activityCount;++i){
+        if(i)w.raw(",");
+        w.raw("\n{");w.key("id");w.number(s.activities[i].id);
+        w.raw(",");w.key("fr");w.text(s.activities[i].french.data());
+        w.raw(",");w.key("en");w.text(s.activities[i].english.data());w.raw("}");
+    }
+    w.raw("],\n");w.key("today");writeDay(w,s,s.today);
     w.raw(",\n");w.key("history");w.raw("[");
     for(unsigned i=0;i<s.count;++i){
         if(i)w.raw(",");
-        w.raw("\n");writeDay(w,s.history[(s.next+HistoryLength-s.count+i)%HistoryLength]);
+        w.raw("\n");writeDay(w,s,s.history[(s.next+HistoryLength-s.count+i)%HistoryLength]);
     }
     w.raw("],\n");w.key("kanban");w.raw("[");
     for(unsigned i=0;i<s.taskCount;++i){
@@ -541,11 +675,10 @@ bool readDay(JsonReader& r,Token first,Day& d){
         if(!std::strcmp(key,"number")){int64_t v=0;if(!readNumber(r,1,UINT32_MAX,v))return false;d.number=uint32_t(v);return true;}
         if(!std::strcmp(key,"activities")){
             if(r.next()!=Token::ArrayBegin)return false;
-            d.flags=0;
+            d.flags=0;d.namedCount=0;
             return elements(r,[&](Token t){
-                if(t!=Token::String)return false;
-                for(unsigned i=0;i<ActivityCount;++i)if(!r.overflow&&!std::strcmp(r.text.data(),Activities[i]))d.flags|=ActivityFlags(1u)<<i;
-                return true; // Unknown activity names are ignored.
+                if(t!=Token::String||r.overflow||r.textLength>ActivityNameLength||d.namedCount>=ActivityCapacity)return false;
+                copyActivityName(d.names[d.namedCount],r.text.data());++d.namedCount;return true;
             });
         }
         if(!std::strcmp(key,"expected"))return readWeight(r,d.expected);
@@ -561,14 +694,37 @@ void resetState(State& s){
     for(Task& t:s.tasks)t=Task{};
     s.reminderCount=0;
     for(Reminder& r:s.reminders)r=Reminder{};
+    fillDefaultActivities(s);
 }
 bool readState(JsonReader& r,State& s){
     if(r.next()!=Token::ObjectBegin)return false;
-    return members(r,[&](const char* key){
+    if(!members(r,[&](const char* key){
         unsigned choice=0;
         if(!std::strcmp(key,"language")){if(!readChoice(r,LanguageNames,2,choice))return false;s.language=Language(choice);return true;}
         if(!std::strcmp(key,"palette")){if(!readChoice(r,PaletteNames,5,choice))return false;s.palette=Palette(choice);return true;}
         if(!std::strcmp(key,"xp")){int64_t v=0;if(!readNumber(r,0,UINT32_MAX,v))return false;s.xp=uint32_t(v);return true;}
+        if(!std::strcmp(key,"activities")){
+            if(r.next()!=Token::ArrayBegin)return false;
+            for(Activity& a:s.activities)a=Activity{};
+            s.activityCount=0;s.nextActivityId=1;
+            return elements(r,[&](Token t){
+                if(t!=Token::ObjectBegin||s.activityCount>=ActivityCapacity)return false;
+                Activity& activity=s.activities[s.activityCount];activity=Activity{};
+                const bool ok=members(r,[&](const char* field){
+                    int64_t v=0;
+                    if(!std::strcmp(field,"id")){if(!readNumber(r,1,65535,v))return false;activity.id=uint16_t(v);return true;}
+                    if(!std::strcmp(field,"fr"))return readText(r,activity.french,false);
+                    if(!std::strcmp(field,"en"))return readText(r,activity.english,false);
+                    return r.skip(r.next());
+                });
+                if(!ok||(!activity.french[0]&&!activity.english[0]))return false;
+                if(displayWidth(activity.french.data())>ActivityNameLength||displayWidth(activity.english.data())>ActivityNameLength)return false;
+                if(!activity.id)activity.id=s.nextActivityId;
+                for(unsigned i=0;i<s.activityCount;++i)if(s.activities[i].id==activity.id)return false;
+                if(activity.id>=s.nextActivityId)s.nextActivityId=uint16_t(activity.id+1);
+                ++s.activityCount;return true;
+            });
+        }
         if(!std::strcmp(key,"today"))return readDay(r,r.next(),s.today);
         if(!std::strcmp(key,"history")){
             if(r.next()!=Token::ArrayBegin)return false;
@@ -612,7 +768,8 @@ bool readState(JsonReader& r,State& s){
             });
         }
         return r.skip(r.next());
-    });
+    }))return false;
+    resolveAllDayFlags(s);return true;
 }
 // Streams one save file into out (reset first; partial data on failure).
 SaveCheck readSave(SaveSource& source,State& out,SaveInfo& info){
@@ -656,7 +813,7 @@ SaveCheck readSave(SaveSource& source,State& out,SaveInfo& info){
     info.checksum=stored;
     return unsupported?SaveCheck::Unsupported:SaveCheck::Valid;
 }
-enum class Screen { TimerSelect, TimerRunning, TimerComplete, Home, ReminderPopup, Reminders, ReminderEdit, Date, Activities, Weight, Kanban, TaskEdit, DailyReview, Finish, Reward, Config, Language, Colors,
+enum class Screen { TimerSelect, TimerRunning, TimerComplete, Home, ReminderPopup, Reminders, ReminderEdit, Date, Activities, ActivityEdit, Weight, Kanban, TaskEdit, DailyReview, Finish, Reward, Config, Language, Colors,
                     RosaryMode, RosarySet, RosaryDecade, RosaryPrayer, RosaryComplete };
 class App {
     Platform& hw;
@@ -679,6 +836,9 @@ class App {
     std::array<char,4> reminderDuration{};
     std::array<char,ReminderTextLength+1> reminderText{};
     unsigned editedTask=TaskCapacity;
+    unsigned editingActivity=ActivityCapacity;
+    std::array<char,ActivityNameLength+1> activityDraft{};
+    bool confirmingDelete=false;
     RosaryMode rosaryMode=RosaryMode::Decade;
     MysterySet rosarySet=MysterySet::Joyful;
     unsigned rosaryDecade=0,rosaryStep=0,rosaryPage=0;
@@ -686,6 +846,33 @@ class App {
     bool timerPaused=false;
     unsigned timerSeconds()const{return unsigned((timerRemaining+999)/1000);}
     void startTimer(unsigned option){constexpr unsigned minutes[]={5,30,60};timerRemaining=uint64_t(minutes[option])*60000;timerLast=timerNow;timerPaused=false;go(Screen::TimerRunning);}
+    unsigned extraCount(const Day& d)const{
+        if(!daysBack)return 0;
+        unsigned n=0;for(unsigned i=0;i<d.namedCount;++i)if(indexByStoredName(state,d.names[i].data())>=state.activityCount)++n;
+        return n;
+    }
+    unsigned visibleActivities()const{return state.activityCount+extraCount(viewedDay());}
+    unsigned currentPages()const{return activityPages(visibleActivities());}
+    const char* extraLabel(const Day& d,unsigned extraIndex)const{
+        unsigned seen=0;
+        for(unsigned i=0;i<d.namedCount;++i)if(indexByStoredName(state,d.names[i].data())>=state.activityCount){
+            if(seen==extraIndex)return d.names[i].data();++seen;
+        }
+        return "";
+    }
+    void beginActivityEdit(unsigned index){
+        editingActivity=index;activityDraft.fill(0);
+        if(index<state.activityCount)copyActivityName(activityDraft,displayName(state.activities[index],state.language));
+        screen=Screen::ActivityEdit;message.fill(0);
+    }
+    void clampActivityCursor(){
+        const unsigned n=visibleActivities(),pages=currentPages();
+        if(page>=pages)page=pages-1;
+        const unsigned remaining=n>page*PageSize?n-page*PageSize:0;
+        const unsigned rows=remaining<PageSize?remaining:PageSize;
+        if(rows&&selection>=rows)selection=rows-1;
+        if(!rows)selection=0;
+    }
     const char* tr(const char* en,const char* fr)const{return state.language==Language::French?fr:en;}
     Palette displayedPalette()const{return screen==Screen::Colors?pendingPalette:state.palette;}
     void say(const char* text){std::snprintf(message.data(),message.size(),"%s",text);}
@@ -851,7 +1038,7 @@ class App {
     void line(int row,const char* text,bool reverse=false){
         char cells[100];displayText(text,cells,sizeof cells);hw.text(0,row*16,cells,reverse);
         constexpr const char* keys[]={"Enter","Esc","Delete","Del","Backspace","Up","Down","Left","Right",
-            "Entrée","Échap","Suppr","Haut","Bas","F1","F2","F3","F4","F5","N","<-","->","1-9"};
+            "Entrée","Échap","Suppr","Haut","Bas","F1","F2","F3","F4","F5","N","E","<-","->","1-9","1-9,0"};
         for(unsigned col=0;cells[col]&&col<40;){
             bool matched=false;
             for(const char* key:keys){char latin[24];displayText(key,latin,sizeof latin);const unsigned len=unsigned(std::strlen(latin));
@@ -894,8 +1081,8 @@ class App {
         const unsigned activities=count(state.today.flags);
         if(index==0){std::snprintf(out,size,tr("ACTIVITIES (%u)","ACTIVITÉS (%u)"),activities);return;}
         --index;
-        for(unsigned i=0;i<ActivityCount;++i)if(state.today.flags&(ActivityFlags(1u)<<i)){
-            if(index--==0){std::snprintf(out,size,"  %s",tr(EnglishActivities[i],Activities[i]));return;}
+        for(unsigned i=0;i<state.activityCount;++i)if(state.today.flags&(ActivityFlags(1u)<<i)){
+            if(index--==0){std::snprintf(out,size,"  %s",displayName(state.activities[i],state.language));return;}
         }
         if(!activities){if(index--==0){std::snprintf(out,size,"  %s",tr("None selected","Aucune sélectionnée"));return;}}
         for(TaskStatus status:{TaskStatus::Todo,TaskStatus::Doing}){
@@ -967,6 +1154,7 @@ class App {
         if(s==Screen::Weight){field=0;for(unsigned i=0;i<2;++i){int32_t v=i?viewedDay().actual:viewedDay().expected;weights[i].fill(0);if(v>=0)weightText(v,weights[i].data(),weights[i].size());}}
         if(s==Screen::Date){dateDraft.fill(0);Date d=validDate(state.today.date)?state.today.date:DefaultDate;dateText(d,dateDraft.data(),dateDraft.size());}
         if(s==Screen::Activities)page=0; // LPS-113-CHG08b: always open on page 1, first row.
+        confirmingDelete=false;
     }
     template<std::size_t N> void edit(std::array<char,N>& value,int key){
         std::size_t len=std::strlen(value.data());
@@ -1002,6 +1190,8 @@ public:
     }
     void key(int k){
         if(k==Escape){
+            if(screen==Screen::Activities&&confirmingDelete){confirmingDelete=false;message.fill(0);render();return;}
+            if(screen==Screen::ActivityEdit){screen=Screen::Activities;activityDraft.fill(0);message.fill(0);render();return;}
             Screen target=Screen::Home;
             if(screen==Screen::Language||screen==Screen::Colors)target=Screen::Config;
             else if(screen==Screen::ReminderEdit)target=Screen::Reminders;
@@ -1079,19 +1269,66 @@ public:
                 else {next.today.date=d;if(commit(next))go(Screen::Home);}
             }else if((k>='0'&&k<='9')||k=='-'||k==Backspace||k==127)edit(dateDraft,k);
         }else if(screen==Screen::Activities){
-            unsigned remaining=ActivityCount-page*PageSize;
+            const unsigned total=visibleActivities();
+            unsigned remaining=total>page*PageSize?total-page*PageSize:0;
             unsigned rows=remaining<PageSize?remaining:PageSize;
-            if(k==Left||k==Right){page=(page+(k==Right?1:PageCount-1))%PageCount;selection=0;}
-            else if(k==Up)selection=(selection+rows-1)%rows;
-            else if(k==Down)selection=(selection+1)%rows;
-            // LPS-113-CHG08b: 1-9 toggle rows 1-9 of this page; 0 toggles row 10 if it exists.
-            else if(daysBack&&(k==Enter||k=='0'||(k>='1'&&k<='9')))readOnly();
+            const unsigned pages=currentPages();
+            if(confirmingDelete){
+                if(k==Enter){
+                    const unsigned id=page*PageSize+selection;
+                    if(id<state.activityCount){
+                        State next=state;ActivityFlags flags=0;
+                        for(unsigned i=0;i<next.activityCount;++i)if(i!=id&&(next.today.flags&(ActivityFlags(1u)<<i)))
+                            flags|=ActivityFlags(1u)<<(i<id?i:i-1);
+                        next.today.flags=flags;
+                        for(unsigned i=id;i+1<next.activityCount;++i)next.activities[i]=next.activities[i+1];
+                        next.activities[--next.activityCount]=Activity{};
+                        refreshActivityFlags(next);
+                        if(commit(next)){confirmingDelete=false;clampActivityCursor();}
+                    }
+                }
+            }else if(k==Left||k==Right){page=(page+(k==Right?1:pages-1))%pages;selection=0;}
+            else if(rows&&k==Up)selection=(selection+rows-1)%rows;
+            else if(rows&&k==Down)selection=(selection+1)%rows;
+            else if(daysBack&&(k==Enter||k=='0'||(k>='1'&&k<='9')||k=='e'||k=='E'||k=='n'||k=='N'||k==DeleteKey||k==F4||k==F5))readOnly();
             else if(k==Enter||k=='0'||(k>='1'&&k<='9')){
                 unsigned row=k==Enter?selection:(k=='0'?9:unsigned(k-'1'));
-                if(row>=rows)return; // Past the last row of a short page: ignore.
-                unsigned id=page*PageSize+row;State next=state;next.today.flags^=ActivityFlags(1u)<<id;
+                if(row>=rows)return;
+                unsigned id=page*PageSize+row;
+                if(id>=state.activityCount)return; // Orphan archive rows are display-only.
+                State next=state;next.today.flags^=ActivityFlags(1u)<<id;
                 if(commit(next))selection=row;
+            }else if((k=='n'||k=='N')){
+                if(state.activityCount>=ActivityCapacity)say(tr("Limit: 30 activities","Limite : 30 activités"));
+                else beginActivityEdit(ActivityCapacity);
+            }else if((k=='e'||k=='E')&&rows&&page*PageSize+selection<state.activityCount)beginActivityEdit(page*PageSize+selection);
+            else if(k==DeleteKey&&rows&&page*PageSize+selection<state.activityCount)confirmingDelete=true;
+            else if((k==F4||k==F5)&&rows){
+                const unsigned id=page*PageSize+selection;
+                if(id<state.activityCount){
+                    const unsigned other=k==F4?(id?id-1:id):(id+1<state.activityCount?id+1:id);
+                    if(other!=id){State next=state;swapActivities(next,id,other);refreshActivityFlags(next);
+                        if(commit(next)){selection=other%PageSize;page=other/PageSize;}}
+                }
             }
+        }else if(screen==Screen::ActivityEdit){
+            if(k==Enter){
+                trimName(activityDraft.data());
+                if(!activityDraft[0]){screen=Screen::Activities;activityDraft.fill(0);} // Empty = cancel.
+                else if(!validActivityName(activityDraft.data()))say(tr("Name is too long","Nom trop long"));
+                else if(duplicateActivityName(state,activityDraft.data(),editingActivity,state.language))say(tr("That name already exists","Ce nom existe déjà"));
+                else {State next=state;unsigned destination=editingActivity;
+                    if(editingActivity>=ActivityCapacity){
+                        if(next.activityCount>=ActivityCapacity){say(tr("Limit: 30 activities","Limite : 30 activités"));render();return;}
+                        destination=next.activityCount;next.activities[destination].id=next.nextActivityId++;
+                        ++next.activityCount;
+                    }
+                    if(next.language==Language::French)copyActivityName(next.activities[destination].french,activityDraft.data());
+                    else copyActivityName(next.activities[destination].english,activityDraft.data());
+                    refreshActivityFlags(next);
+                    if(commit(next)){editingActivity=destination;page=destination/PageSize;selection=destination%PageSize;screen=Screen::Activities;activityDraft.fill(0);message.fill(0);}
+                }
+            }else edit(activityDraft,k);
         }else if(screen==Screen::Weight){
             if(daysBack){if(k==Enter)go(Screen::Home);else readOnly();}
             else if(k==Up||k==Down||k==9)field=1-field;
@@ -1182,12 +1419,13 @@ public:
             if(k==Enter){uint32_t gain=points(state.today);
                 if(state.today.number==std::numeric_limits<uint32_t>::max()||state.xp>std::numeric_limits<uint32_t>::max()-gain)say(tr("Counter limit reached","Limite du compteur atteinte"));
                 else if(!validDate(state.today.date))say(tr("Set Date before closing the day","Renseignez Date avant de terminer le jour"));
-                else {State next=state;next.history[next.next]=next.today;next.next=uint8_t((next.next+1)%HistoryLength);if(next.count<HistoryLength)++next.count;
+                else {State next=state;const unsigned slot=next.next;next.history[slot]=next.today;freezeDayNames(next,next.history[slot]);
+                    next.next=uint8_t((next.next+1)%HistoryLength);if(next.count<HistoryLength)++next.count;
                     Date tomorrow=state.today.date;if(!nextDate(tomorrow)) {say(tr("Calendar ends on 2099-12-31","Le calendrier s'arrête au 2099-12-31"));render();return;}
                     // The export is deliberately written before the A/B commit.
                     // A retry overwrites the same dated file if the snapshot fails.
                     if(!hw.exportWeightCsv(state.today)){say(tr("Weight CSV export failed; day remains open","Export CSV poids échoué ; journée reste ouverte"));render();return;}
-                    if(!hw.exportIcs(state.today,state.xp+gain,gain,state.language)){say(tr("ICS export failed; day remains open","Export ICS échoué ; journée reste ouverte"));render();return;}
+                    if(!hw.exportIcs(next.history[slot],state.xp+gain,gain,state.language,next)){say(tr("ICS export failed; day remains open","Export ICS échoué ; journée reste ouverte"));render();return;}
                     next.xp+=gain;next.today=Day{};next.today.number=state.today.number+1;next.today.date=tomorrow;
                     // LPS-112-CHG03: XP is still banked in the save for format compatibility, never shown.
                     if(commit(next))go(Screen::Reward);
@@ -1204,7 +1442,8 @@ public:
         if(daysBack)line(2,tr("ARCHIVED DAY - READ ONLY","JOUR ARCHIVÉ - LECTURE SEULE"));
         if(screen==Screen::Home){
             line(3,daysBack?tr("CLOSED DAY","JOUR TERMINÉ"):tr("TODAY","AUJOURD'HUI"));
-            std::snprintf(b,sizeof b,tr("%u/%u activities","%u/%u activités"),count(day.flags),ActivityCount);line(4,b);
+            const unsigned marked=daysBack&&day.namedCount?day.namedCount:count(day.flags);
+            std::snprintf(b,sizeof b,tr("%u/%u activities","%u/%u activités"),marked,state.activityCount);line(4,b);
             const char* menu[]={"0  Date",tr("1  Activities","1  Activités"),tr("2  Weight tracker","2  Suivi du poids"),"3  Kanban",tr("4  Christian Rosary","4  Rosaire chrétien"),tr("5  Daily review","5  Revue journalière"),"6  Config",tr("7  Reminders","7  Rappels"),tr("8  Timer","8  Minuteur"),tr("9  Close the day","9  Terminer le jour")};
             const unsigned first=daysBack?1:0, total=daysBack?2:10;
             for(unsigned i=0;i<total;++i)line(6+int(i),menu[first+i],i==selection);
@@ -1247,19 +1486,35 @@ public:
             line(12,tr("Enter: save / Esc: cancel","Entrée : valider / Échap : annuler"));
             line(14,tr("Next day is suggested after closing.","Jour suivant proposé après clôture."));
         }else if(screen==Screen::Activities){
-            std::snprintf(b,sizeof b,tr("ACTIVITIES                      %u/%u","ACTIVITÉS                       %u/%u"),page+1,PageCount);line(3,b);
-            unsigned end=(page+1)*PageSize;if(end>ActivityCount)end=ActivityCount;
+            const unsigned total=visibleActivities(),pages=currentPages();
+            std::snprintf(b,sizeof b,tr("ACTIVITIES                      %u/%u","ACTIVITÉS                       %u/%u"),page+1,pages);line(3,b);
+            if(!total)line(6,tr("N: add an activity","N : ajouter une activité"));
+            unsigned end=(page+1)*PageSize;if(end>total)end=total;
             for(unsigned i=page*PageSize;i<end;++i){
-                // Label is the page-relative key (1-9, 0 for row 10), same "1  Name"
-                // spacing as the home menu. Pad the name by display cells, not UTF-8
-                // bytes, so the checkboxes line up (LPS-113-CHG08c).
-                char label[32];displayText(tr(EnglishActivities[i],Activities[i]),label,sizeof label);
+                char label[32];
+                const bool catalog=i<state.activityCount;
+                displayText(catalog?displayName(state.activities[i],state.language):extraLabel(day,i-state.activityCount),label,sizeof label);
                 const unsigned row=i-page*PageSize;
                 const char key=row==9?'0':char('1'+row);
-                std::snprintf(b,sizeof b,"%c  %-24s [%c]",key,label,day.flags&(ActivityFlags(1u)<<i)?'x':' ');
+                const bool checked=catalog?(day.flags&(ActivityFlags(1u)<<i)):true;
+                std::snprintf(b,sizeof b,"%c  %-24s [%c]",key,label,checked?'x':' ');
                 hw.text(0,(5+int(row))*16,b,row==selection);
             }
-            line(15,daysBack?tr("<- -> pages   Esc: day menu","<- -> pages   Échap : menu du jour"):tr("Enter: toggle  1-9: keys  <- -> pages","Entrée: cocher  1-9: racc.  <- -> pages"));
+            if(confirmingDelete&&page*PageSize+selection<state.activityCount){
+                char shown[32];displayText(displayName(state.activities[page*PageSize+selection],state.language),shown,sizeof shown);
+                std::snprintf(b,sizeof b,tr("Delete %s?","Supprimer %s ?"),shown);line(15,b);
+                line(16,tr("Enter: yes   Esc: no","Entrée : oui   Échap : non"));
+            }else if(daysBack)line(15,tr("<- -> pages   Esc: day menu","<- -> pages   Échap : menu du jour"));
+            else {
+                line(15,tr("1-9,0 Tick  E Ren  N New  Del","1-9,0 Cocher  E Renom  N Nouv  Suppr"));
+                line(16,tr("F4/F5 Move  <- -> Pages","F4/F5 Déplacer  <- -> Pages"));
+            }
+        }else if(screen==Screen::ActivityEdit){
+            line(3,editingActivity<ActivityCapacity?tr("RENAME ACTIVITY","RENOMMER L'ACTIVITÉ"):tr("NEW ACTIVITY","NOUVELLE ACTIVITÉ"));
+            line(6,activityDraft.data(),true);
+            std::snprintf(b,sizeof b,tr("%u/24 characters","%u/24 caractères"),displayWidth(activityDraft.data()));line(9,b);
+            line(13,tr("Enter: save  (empty cancels)","Entrée : enregistrer  (vide = annuler)"));
+            line(15,tr("Backspace: erase  Esc: cancel","Retour : effacer  Échap : annuler"));
         }else if(screen==Screen::Weight){
             line(3,tr("WEIGHT TRACKER (kg)","SUIVI DU POIDS (kg)"));std::snprintf(b,sizeof b,tr("Expected : %s","Attendu  : %s"),weights[0].data());line(6,b,field==0);std::snprintf(b,sizeof b,tr("Actual   : %s","Effectif : %s"),weights[1].data());line(9,b,field==1);
             int32_t a=0,c=0;bool valid=parseWeight(weights[0].data(),a)&&parseWeight(weights[1].data(),c)&&a>=0&&c>=0;
@@ -1425,7 +1680,7 @@ public:
         if(std::rename("lps_companion.jsn.tmp","lps_companion.jsn")!=0)return false;
         ++generation;return true;
     }
-    bool exportIcs(const lps::Day& day,uint32_t,uint32_t,lps::Language)override{
+    bool exportIcs(const lps::Day& day,uint32_t,uint32_t,lps::Language,const lps::State&)override{
         // Oversized date buffers keep strict host builds independent of range inference.
         char name[48],ymd[13],tomorrow[13];lps::dateText(day.date,name,sizeof name);
         std::snprintf(ymd,sizeof ymd,"%04u%02u%02u",day.date.year,day.date.month,day.date.day);
@@ -1481,7 +1736,7 @@ public:
         stored=scratch;size=n;++generation;exists=true;return true;
     }
     void put(const lps::State& state){assert(save(state));}
-    bool exportIcs(const lps::Day&,uint32_t,uint32_t,lps::Language)override{if(failExport)return false;++exports;return true;}
+    bool exportIcs(const lps::Day&,uint32_t,uint32_t,lps::Language,const lps::State&)override{if(failExport)return false;++exports;return true;}
     bool exportWeightCsv(const lps::Day&)override{if(failWeightCsv)return false;++weightExports;return true;}
 };
 int main(){
@@ -1550,7 +1805,7 @@ int main(){
     a.key(Up);a.key(Enter);a.key(Enter);assert(a.data().xp==40&&a.data().today.number==2&&a.data().today.flags==0);assert(a.data().history[0].actual==111200);a.key(Enter);assert(a.data().xp==40);
     App restored(mem);restored.start();assert(restored.data().xp==40&&restored.data().today.number==2);
     // LPS-113-CHG06: the stored save is JSON; a cut-off copy is rejected.
-    {constexpr char head[]="{\"format\":\"lps-companion\",\"version\":1,";assert(std::memcmp(mem.stored.data(),head,sizeof head-1)==0);}
+    {constexpr char head[]="{\"format\":\"lps-companion\",\"version\":2,";assert(std::memcmp(mem.stored.data(),head,sizeof head-1)==0);}
     {State decoded;SaveInfo info;lps_test::MemorySource whole(mem.stored.data(),mem.size);assert(readSave(whole,decoded,info)==SaveCheck::Valid&&decoded.xp==40&&decoded.today.number==2);
      lps_test::MemorySource cut(mem.stored.data(),10);assert(readSave(cut,decoded,info)==SaveCheck::Damaged);}
     for(int i=0;i<40;++i){restored.key(Escape);restored.key(Up);restored.key(Enter);restored.key(Enter);restored.key(Enter);}assert(restored.data().count==31&&restored.data().today.number==42);

@@ -15,7 +15,7 @@ public:
     void setPalette(Palette)override{}
     LoadResult load(State& state)override{return stored.read(state);}
     bool save(const State&)override{return true;}
-    bool exportIcs(const Day&,uint32_t,uint32_t,Language)override{return true;}
+    bool exportIcs(const Day&,uint32_t,uint32_t,Language,const State&)override{return true;}
     bool exportWeightCsv(const Day&)override{return true;}
     bool has(const char* value)const{char cells[100];displayText(value,cells,sizeof cells);for(const auto& r:rows)if(std::strstr(r.data(),cells))return true;return false;}
 };

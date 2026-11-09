@@ -34,7 +34,7 @@ int main(){
         // History is stored oldest first and reloaded as a straight ring.
         assert(back.next==0&&back.count==HistoryLength&&back.history[0].number==60+7);
     }
-    assert(json.rfind("{\"format\":\"lps-companion\",\"version\":1,\"generation\":1,\n\"state\":{",0)==0);
+    assert(json.rfind("{\"format\":\"lps-companion\",\"version\":2,\"generation\":1,\n\"state\":{",0)==0);
     assert(json.find("\"language\":\"fr\",\"palette\":\"pink\",\"xp\":123456")!=std::string::npos);
     assert(json.find("\"activities\":[\"Marche\",\"Régime\",\"Bible\"")!=std::string::npos);
     assert(json.find("\"note\":\"Note 100: \\\"quoted\\\" back\\\\slash x\"")!=std::string::npos);
@@ -104,7 +104,7 @@ int main(){
         s.today.flags=ActivityMask;j=lps_test::encodeJson(s);
         assert(j.text().find("\"Shopping\",\"Sport\",\"Cuisine\",\"Ménage\",\"Famille\",\"Amis\",\"Méditation\"]")!=std::string::npos);
         assert(parse(j.text(),back)==SaveCheck::Valid&&back.today.flags==ActivityMask);
-        assert(ActivityCount==22&&PageCount==3);
+        assert(DefaultActivityCount==22&&activityPages(DefaultActivityCount)==3);
     }
     // 6. String escaping: quotes, backslashes, control characters and UTF-8.
     {
@@ -147,10 +147,10 @@ int main(){
     }
     // 8. Schema versions: a newer, intact file is Unsupported; a newer damaged one is Damaged.
     {
-        State back;const std::string v2=replaced(json,"\"version\":1","\"version\":2");
+        State back;const std::string v2=replaced(json,"\"version\":2","\"version\":3");
         assert(parse(signedJson(replaced(v2,"\"state\":{","\"state\":{\"shape\":[\"anything\"],")),back)==SaveCheck::Unsupported);
         assert(parse(v2,back)==SaveCheck::Damaged);
-        assert(parse(signedJson(replaced(json,"\"version\":1","\"version\":0")),back)==SaveCheck::Damaged);
+        assert(parse(signedJson(replaced(json,"\"version\":2","\"version\":0")),back)==SaveCheck::Damaged);
     }
     // 9. An I/O error part-way is reported as such, not as damage.
     {FailingSource source;source.data=json;State back;SaveInfo info;assert(readSave(source,back,info)==SaveCheck::IOError);}

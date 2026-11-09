@@ -18,7 +18,8 @@ It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display
   - **Migration**: on first start, if there is no `.JSN` save yet, v1.13 reads your existing `SAVE_A.BIN`/`SAVE_B.BIN` (any format from v1.0 to v1.12) and writes `SAVE_A.JSN` at the first save. The `.BIN` files are never modified or deleted and stay on the card as a backup. A save written by v1.13 cannot be read by v1.12.
   - Each day stores its ticked activities **by name** (`"activities":["Marche","Messe"]`, French names) rather than as bit positions, ready for user-defined activities.
   - ICS and CSV exports are unchanged.
-- **22 activities** (LPS-113-CHG08): six activities are added after the existing 16: **Sport / Sport, Cooking / Cuisine, Chores / Ménage, Family / Famille, Friends / Amis, Meditation / Méditation**. The Activities screen now has three pages (10 + 10 + 2), and the home counter reads `x/22`. The first 16 keep their order, so days from v1.12 saves migrate unchanged. When ticked, the new activities appear by name in the ICS export, with the same format as before. The list is still fixed; editing it is planned next (CHG07). The Activities screen always opens on page 1 (CHG08b). Number keys 1–9 and 0 now act on the current page rather than on the whole list (CHG08b). Each row is labelled with that key: `1`–`9` for the first nine rows of the page, and `0` for the tenth (`0  Day off` on page 1, `1  Weekend` … `0  Family` on page 2, `1  Friends` and `2  Meditation` on page 3) (CHG08c).
+- **User-defined activities** (LPS-113-CHG07): you can rename, add, delete and reorder the list from the Activities screen. **E** renames the selected activity, **N** adds one at the end (up to 30), **Del** deletes it after confirmation, **F4** / **F5** move it up or down (the same keys as the Kanban). A name is stored only in the language you are using; if the other language has no name, the same name is shown in both. Past days keep the names that were ticked then, so renaming or deleting an activity does not rewrite history or old ICS exports. The default list of 22 is used for a new profile, when loading a v1 JSON save, and when migrating a `.BIN` save.
+- **22 activities** (LPS-113-CHG08): six activities are added after the existing 16: **Sport / Sport, Cooking / Cuisine, Chores / Ménage, Family / Famille, Friends / Amis, Meditation / Méditation**. The Activities screen now has three pages (10 + 10 + 2), and the home counter reads `x/22`. The first 16 keep their order, so days from v1.12 saves migrate unchanged. When ticked, the new activities appear by name in the ICS export, with the same format as before. The list is user-defined (CHG07). The Activities screen always opens on page 1 (CHG08b). Number keys 1–9 and 0 act on the current page (CHG08b). Each row is labelled with that key: `1`–`9` for the first nine rows of the page, and `0` for the tenth (CHG08c).
 
 ## Changes in v1.12
 
@@ -283,7 +284,17 @@ Each row is labelled with the key that toggles it on that page (`1`–`9`, and `
 | `1` | Friends | Amis |
 | `2` | Meditation | Méditation |
 
-Activities are displayed across three pages (10 + 10 + 2, since v1.13). Opening the screen from Home or from an archived day always starts on page 1, with the cursor on the first row. **Left/Right** changes page and wraps around; **Up/Down** selects an activity; **Enter** toggles its checkbox. Keys **1–9** toggle rows 1–9 of the page you are on, and **0** toggles row 10 when the page has one. On the last page (2 rows) keys that point past the last row are ignored.
+Activities are displayed across up to three pages of 10 (the default list is 10 + 10 + 2). Opening the screen from Home or from an archived day always starts on page 1, with the cursor on the first row. **Left/Right** changes page and wraps around; **Up/Down** selects an activity; **Enter** toggles its checkbox. Keys **1–9** toggle rows 1–9 of the page you are on, and **0** toggles row 10 when the page has one. On a short last page, keys that point past the last row are ignored.
+
+On the current day you can also edit the list. Names are limited to 24 letters (the space before the checkbox). An empty name cancels; a duplicate name in the current language is refused. The list holds at most 30 activities. An archived day is read-only: those keys do nothing, and any activity that was ticked that day but later renamed or removed still appears at the end, already checked.
+
+| Key | Action |
+| --- | --- |
+| `E` | Rename the selected activity (Enter saves, Esc cancels). Only the current language is changed. |
+| `N` | Add a new activity at the end (refused at 30). |
+| `Del` | Delete the selected activity, after `Confirm? Enter/Esc`. |
+| `F4` / `F5` | Move the selected activity up or down (same keys as the Kanban). |
+
 
 Each checkbox can be counted once per day. Checking or unchecking an activity saves immediately.
 
@@ -368,11 +379,12 @@ LPS-Companion stores data in the SD card's `LPS` directory:
 
 Each file is a complete snapshot of the current day, total XP, retained history, configuration and global Kanban; the two files are not assigned to different days. The app alternates writes between them. At startup it checks both records and loads the highest-generation valid snapshot. If the newest is missing or fails validation, it uses the older intact snapshot, which may lack the latest change. If loading fails due to an I/O error or neither existing record is valid, writes are blocked. A JSON save written by a newer version of the app (a higher `version`) also blocks writes, so it is never overwritten.
 
-Since v1.13 each file is a single JSON object (schema `version` 1):
+Since v1.13 each file is a single JSON object (schema `version` 2 since CHG07; v1 files still load and receive the default list of 22 activities):
 
 ```json
-{"format":"lps-companion","version":1,"generation":3,
+{"format":"lps-companion","version":2,"generation":3,
 "state":{"language":"en","palette":"green","xp":0,
+"activities":[{"id":1,"fr":"Marche","en":"Walk"},{"id":2,"fr":"Messe","en":"Mass"}],
 "today":{"date":"2026-09-17","number":1,"activities":["Marche","Bible"],"expected":null,"actual":null,"note":""},
 "history":[],
 "kanban":[
@@ -381,7 +393,7 @@ Since v1.13 each file is a single JSON object (schema `version` 1):
 "crc32":"825db3bc"}
 ```
 
-`generation` increases with every save; the higher valid one wins. `crc32` is the standard CRC-32 (the same as Python's `zlib.crc32`) of every byte before `"crc32"`, and must be the last member. History is stored oldest first. Weights are integer grams, or `null` when not recorded. Unknown keys are ignored, so later versions can add fields.
+`generation` increases with every save; the higher valid one wins. `crc32` is the standard CRC-32 (the same as Python's `zlib.crc32`) of every byte before `"crc32"`, and must be the last member. History is stored oldest first. Weights are integer grams, or `null` when not recorded. The top-level `activities` array is the editable list (id plus French and English names). Each day still stores only the names that were ticked that day, so renaming or deleting an activity later does not rewrite past days. Unknown keys are ignored, so later versions can add fields.
 
 Day navigation uses the history from that loaded snapshot in RAM. It indexes backwards from the history ring's next-write position, so the correct day is selected even after the 31 slots wrap. It does not reload the card at every arrow press, switch between A and B to change days, or write while browsing. Back up the **whole `LPS` directory** to preserve your data.
 
@@ -393,7 +405,7 @@ If saving fails, restart with a working SD card before continuing. A missing, un
 
 - Battery charge is estimated from RP2040 VSYS voltage; the 20% warning must be calibrated on the physical PicoCalc.
 - Date is manually entered; there is no RTC/autonomous clock integration.
-- Activities are daily checkboxes, without duration or repetition counts.
+- Activities are daily checkboxes, without duration or repetition counts. The list holds at most 30 names of up to 24 letters each.
 - Notes support ASCII text only.
 - Kanban is limited to 24 tasks; task names support 32 printable ASCII characters.
 - Saved history is limited to 31 completed days; earlier days cannot be recovered by browsing. Past days are read-only.

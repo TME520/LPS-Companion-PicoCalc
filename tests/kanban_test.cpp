@@ -21,7 +21,7 @@ public:
         if(fail||!stored.write(state))return false;
         ++writes;exists=true;return true;
     }
-    bool exportIcs(const Day&,uint32_t,uint32_t,Language)override{return true;}
+    bool exportIcs(const Day&,uint32_t,uint32_t,Language,const State&)override{return true;}
     bool exportWeightCsv(const Day&)override{return true;}
     bool has(int row,const char* value)const{return std::strstr(rows[row].data(),value)!=nullptr;}
 };

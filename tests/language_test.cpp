@@ -37,7 +37,7 @@ public:
         if(fail||!stored.write(state))return false;
         ++writes;exists=true;return true;
     }
-    bool exportIcs(const Day&,uint32_t,uint32_t,Language)override{if(failExport)return false;++exports;return true;}
+    bool exportIcs(const Day&,uint32_t,uint32_t,Language,const State&)override{if(failExport)return false;++exports;return true;}
     bool exportWeightCsv(const Day&)override{if(failWeightCsv)return false;++weightExports;return true;}
 };
 void choose(App& app,Language language){app.key('6');app.key('1');app.key(language==Language::French?'2':'1');}

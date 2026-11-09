@@ -236,7 +236,7 @@ public:
         if(check.status!=Slot::Valid||check.generation!=generation+1||check.checksum!=checksum){writeFault=true;return false;}
         active=int(slot);++generation;return true;
     }
-    bool exportIcs(const lps::Day& day,uint32_t,uint32_t,lps::Language language)override{
+    bool exportIcs(const lps::Day& day,uint32_t,uint32_t,lps::Language language,const lps::State& state)override{
         if(!mounted||!lps::validDate(day.date))return false;
         FRESULT r=f_mkdir("0:/LPS");if(r!=FR_OK&&r!=FR_EXIST)return false;
         r=f_mkdir("0:/LPS/EXPORT");if(r!=FR_OK&&r!=FR_EXIST)return false;
@@ -250,9 +250,9 @@ public:
         std::snprintf(line,sizeof line,"UID:lps-companion-%s@picocalc\r\nDTSTART;VALUE=DATE:%s\r\nDTEND;VALUE=DATE:%s\r\n",ymd,ymd,next);ok=ok&&put(f,line);
         ok=ok&&put(f,"SUMMARY:LPS Companion\r\nDESCRIPTION:");
         const char* names=language==lps::Language::English?"Activities: ":"Activités: ";ok=ok&&escaped(f,names);
-        bool first=true;for(unsigned i=0;i<lps::ActivityCount;++i)if(day.flags&(lps::ActivityFlags(1u)<<i)){
+        bool first=true;lps::eachExportedActivity(state,day,language,[&](const char* name){
             if(!first)ok=ok&&put(f,", ");
-            ok=ok&&escaped(f,language==lps::Language::English?lps::EnglishActivities[i]:lps::Activities[i]);first=false;}
+            ok=ok&&escaped(f,name);first=false;});
         if(first)ok=ok&&put(f,"none");
         // RFC 5545 TEXT line breaks are a single backslash followed by N. Do
         // not run that escape through escaped(), or it becomes a literal \\N.

@@ -70,7 +70,9 @@ inline bool sameDay(const lps::Day& a,const lps::Day& b){
 inline const lps::Day& archived(const lps::State& s,unsigned i){return s.history[(s.next+lps::HistoryLength-s.count+i)%lps::HistoryLength];}
 inline bool sameState(const lps::State& a,const lps::State& b){
     if(a.language!=b.language||a.palette!=b.palette||a.xp!=b.xp||!sameDay(a.today,b.today)||a.count!=b.count
-       ||a.taskCount!=b.taskCount||a.reminderCount!=b.reminderCount)return false;
+       ||a.taskCount!=b.taskCount||a.reminderCount!=b.reminderCount||a.activityCount!=b.activityCount)return false;
+    for(unsigned i=0;i<a.activityCount;++i)
+        if(a.activities[i].id!=b.activities[i].id||a.activities[i].french!=b.activities[i].french||a.activities[i].english!=b.activities[i].english)return false;
     for(unsigned i=0;i<a.count;++i)if(!sameDay(archived(a,i),archived(b,i)))return false;
     for(unsigned i=0;i<a.taskCount;++i)if(a.tasks[i].status!=b.tasks[i].status||a.tasks[i].name!=b.tasks[i].name)return false;
     for(unsigned i=0;i<a.reminderCount;++i){
