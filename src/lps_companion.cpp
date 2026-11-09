@@ -252,6 +252,26 @@ void swapActivities(State& s,unsigned a,unsigned b){
     s.today.flags&=~(bitA|bitB);
     if(hadA)s.today.flags|=bitB;if(hadB)s.today.flags|=bitA;
 }
+void rotateActivity(State& s,bool firstToEnd){
+    if(s.activityCount<2)return;
+    const unsigned n=s.activityCount;
+    if(firstToEnd){
+        const Activity keep=s.activities[0];
+        for(unsigned i=0;i+1<n;++i)s.activities[i]=s.activities[i+1];
+        s.activities[n-1]=keep;
+        const bool had=s.today.flags&1u;
+        s.today.flags>>=1;
+        if(had)s.today.flags|=ActivityFlags(1u)<<(n-1);
+        s.today.flags&=n>=32?~ActivityFlags(0):(ActivityFlags(1u)<<n)-1;
+    }else{
+        const Activity keep=s.activities[n-1];
+        for(unsigned i=n-1;i>0;--i)s.activities[i]=s.activities[i-1];
+        s.activities[0]=keep;
+        const ActivityFlags lastBit=ActivityFlags(1u)<<(n-1);
+        const bool had=s.today.flags&lastBit;
+        s.today.flags=((s.today.flags&(lastBit-1))<<1)|(had?ActivityFlags(1u):0);
+    }
+}
 void trimName(char* text){
     char* start=text;while(*start==' ')++start;
     std::size_t n=std::strlen(start);while(n&&start[n-1]==' ')--n;
@@ -324,6 +344,7 @@ struct Blob { std::array<uint8_t,BlobCapacity> bytes{};std::size_t size=0; };
 constexpr std::size_t WireV1=3568, WireV2=WireV1+1, WireV3=WireV2+32*4, WireV4=WireV3+1;
 constexpr std::size_t WireV5=WireV4+1+TaskCapacity*(1+TaskNameLength+1);
 constexpr std::size_t WireSize=WireV5+1+ReminderCapacity*(2+1+1+2+ReminderTextLength+1);
+void resetState(State& s);
 bool decode(const uint8_t* bytes,std::size_t size,State& out) {
     if(size!=WireSize&&size!=WireV5&&size!=WireV4&&size!=WireV3&&size!=WireV2&&size!=WireV1)return false;
     std::size_t pos=size-4;
@@ -332,10 +353,11 @@ bool decode(const uint8_t* bytes,std::size_t size,State& out) {
     pos=0;if(get(4)!=0x3153504c)return false;
     const auto version=get(2);
     if(!((version==1&&size==WireV1)||(version==2&&size==WireV2)||(version==3&&size==WireV3)||(version==4&&size==WireV4)||(version==5&&size==WireV5)||(version==6&&size==WireSize)))return false;
-    State s;s.xp=get(4);s.next=uint8_t(get(1));s.count=uint8_t(get(1));
-    if(version>=2){const auto language=get(1);if(language>1)return false;s.language=Language(language);}
-    if(version>=4){const auto palette=get(1);if(palette>4)return false;s.palette=Palette(palette);}
-    bool valid=s.next<HistoryLength&&s.count<=HistoryLength;
+    resetState(out);
+    out.xp=get(4);out.next=uint8_t(get(1));out.count=uint8_t(get(1));
+    if(version>=2){const auto language=get(1);if(language>1)return false;out.language=Language(language);}
+    if(version>=4){const auto palette=get(1);if(palette>4)return false;out.palette=Palette(palette);}
+    bool valid=out.next<HistoryLength&&out.count<=HistoryLength;
     auto day=[&](Day& d){d.date={};if(version>=3){d.date.year=uint16_t(get(2));d.date.month=uint8_t(get(1));d.date.day=uint8_t(get(1));}
         d.number=get(4);d.flags=ActivityFlags(get(2)); // Bits 0-15: the first 16 activities, unchanged.
         auto w=[&](){uint32_t v=get(4);if(v==0xffffffffu)return int32_t(-1);if(v==0||v>999999){valid=false;return int32_t(-1);}return int32_t(v);};
@@ -343,29 +365,29 @@ bool decode(const uint8_t* bytes,std::size_t size,State& out) {
         valid=valid&&d.number>0&&(d.flags&~ActivityMask)==0&&d.note.back()==0&&(d.date.year==0||validDate(d.date));
         bool ended=false;for(char c:d.note){if(!c)ended=true;else if(!ended&&(c<32||c>126))valid=false;}
     };
-    day(s.today);for(Day& d:s.history)day(d);
+    day(out.today);for(Day& d:out.history)day(d);
     if(version>=5){
-        s.taskCount=uint8_t(get(1));valid=valid&&s.taskCount<=TaskCapacity;
+        out.taskCount=uint8_t(get(1));valid=valid&&out.taskCount<=TaskCapacity;
         for(unsigned i=0;i<TaskCapacity;++i){
-            const auto status=get(1);if(status>2)valid=false;s.tasks[i].status=TaskStatus(status);
-            for(char& c:s.tasks[i].name)c=char(get(1));
-            valid=valid&&s.tasks[i].name.back()==0;
-            bool ended=false;for(char c:s.tasks[i].name){if(!c)ended=true;else if(!ended&&(c<32||c>126))valid=false;}
-            if(i<s.taskCount&&s.tasks[i].name[0]==0)valid=false;
+            const auto status=get(1);if(status>2)valid=false;out.tasks[i].status=TaskStatus(status);
+            for(char& c:out.tasks[i].name)c=char(get(1));
+            valid=valid&&out.tasks[i].name.back()==0;
+            bool ended=false;for(char c:out.tasks[i].name){if(!c)ended=true;else if(!ended&&(c<32||c>126))valid=false;}
+            if(i<out.taskCount&&out.tasks[i].name[0]==0)valid=false;
         }
     }
     if(version>=6){
-        s.reminderCount=uint8_t(get(1));valid=valid&&s.reminderCount<=ReminderCapacity;
+        out.reminderCount=uint8_t(get(1));valid=valid&&out.reminderCount<=ReminderCapacity;
         for(unsigned i=0;i<ReminderCapacity;++i){
-            Reminder& r=s.reminders[i];r.from.year=uint16_t(get(2));r.from.month=uint8_t(get(1));r.from.day=uint8_t(get(1));r.duration=uint16_t(get(2));
+            Reminder& r=out.reminders[i];r.from.year=uint16_t(get(2));r.from.month=uint8_t(get(1));r.from.day=uint8_t(get(1));r.duration=uint16_t(get(2));
             for(char& c:r.text)c=char(get(1));
             valid=valid&&r.text.back()==0;
             bool ended=false;for(char c:r.text){if(!c)ended=true;else if(!ended&&(c<32||c>126))valid=false;}
-            if(i<s.reminderCount)valid=valid&&validDate(r.from)&&r.duration>=1&&r.duration<=365&&r.text[0]!=0;
+            if(i<out.reminderCount)valid=valid&&validDate(r.from)&&r.duration>=1&&r.duration<=365&&r.text[0]!=0;
         }
     }
     if(!valid)return false;
-    out=s;return true;
+    return true;
 }
 // ---------------------------------------------------------------------------
 // LPS-113-CHG06: JSON save files (SAVE_A.JSN / SAVE_B.JSN).
@@ -818,6 +840,11 @@ enum class Screen { TimerSelect, TimerRunning, TimerComplete, Home, ReminderPopu
 class App {
     Platform& hw;
     State state{};
+    // Mutation scratch: stage() copies state here, handlers edit the copy,
+    // commit() saves it then copies it back. Distinct from PicoCalc::scratch
+    // (load parse / save verify). stage() is not re-entered: commit() and
+    // Platform::save do not call stage().
+    State draft{};
     Screen screen=Screen::Home;
     unsigned selection=0,page=0,field=0,daysBack=0;
     bool blocked=false;
@@ -1053,6 +1080,7 @@ class App {
     void wrap(int row,const char* text,unsigned limit){
         for(unsigned i=0;*text&&i<limit;++i){char b[41]{};std::size_t n=std::strlen(text);if(n>40)n=40;std::memcpy(b,text,n);line(row+int(i),b);text+=n;}
     }
+    State& stage(){draft=state;return draft;}
     bool commit(const State& candidate){
         if(daysBack){readOnly();return false;}
         if(blocked){say(tr("Unreadable save: writes blocked","Sauvegarde illisible : écriture bloquée"));return false;}
@@ -1108,7 +1136,7 @@ class App {
     }
     unsigned activeReminders()const{unsigned n=0;for(unsigned i=0;i<state.reminderCount;++i)if(active(state.reminders[i]))++n;return n;}
     void pruneReminders(){
-        State next=state;unsigned kept=0;
+        State& next=stage();unsigned kept=0;
         for(unsigned i=0;i<state.reminderCount;++i)if(!expired(state.reminders[i]))next.reminders[kept++]=state.reminders[i];
         if(kept!=state.reminderCount){for(unsigned i=kept;i<ReminderCapacity;++i)next.reminders[i]=Reminder{};next.reminderCount=uint8_t(kept);commit(next);}
     }
@@ -1126,7 +1154,7 @@ class App {
         const unsigned n=tasksIn(kanbanColumn),index=n?taskAt(kanbanColumn,selection):TaskCapacity;
         if(index>=state.taskCount)return;
         if(state.tasks[index].status==target){say(tr("Task is already in this column","Tâche déjà dans cette colonne"));return;}
-        State next=state;Task moved=next.tasks[index];moved.status=target;
+        State& next=stage();Task moved=next.tasks[index];moved.status=target;
         for(unsigned i=index;i+1<next.taskCount;++i)next.tasks[i]=next.tasks[i+1];
         next.tasks[next.taskCount-1]=moved;
         if(commit(next)){kanbanColumn=target;selection=tasksIn(target)-1;say(tr("Task moved","Tâche déplacée"));}
@@ -1134,7 +1162,7 @@ class App {
     void reorderTask(bool downward){
         const unsigned n=tasksIn(kanbanColumn);if(n<2)return;
         std::array<unsigned,TaskCapacity> indices{};for(unsigned i=0;i<n;++i)indices[i]=taskAt(kanbanColumn,i);
-        State next=state;unsigned destination=selection;
+        State& next=stage();unsigned destination=selection;
         if(!downward&&selection==0){
             const Task moved=next.tasks[indices[0]];for(unsigned i=0;i+1<n;++i)next.tasks[indices[i]]=next.tasks[indices[i+1]];
             next.tasks[indices[n-1]]=moved;destination=n-1;
@@ -1240,7 +1268,7 @@ public:
                 if(state.reminderCount>=ReminderCapacity)say(tr("Limit: 3 reminders","Limite : 3 rappels"));
                 else beginReminderEdit(ReminderCapacity);
             }else if(k==Enter&&state.reminderCount)beginReminderEdit(selection);
-            else if(k==DeleteKey&&state.reminderCount){State next=state;
+            else if(k==DeleteKey&&state.reminderCount){State& next=stage();
                 for(unsigned i=selection;i+1<next.reminderCount;++i)next.reminders[i]=next.reminders[i+1];
                 next.reminders[--next.reminderCount]=Reminder{};
                 if(commit(next)&&selection>=state.reminderCount&&selection)--selection;
@@ -1253,7 +1281,7 @@ public:
                 for(char c:reminderDuration)if(c){if(c<'0'||c>'9'){duration=366;break;}duration=duration*10+unsigned(c-'0');}
                 if(!parseDate(reminderDate.data(),from)||duration<1||duration>365||!reminderText[0])say(tr("Check date, 1-365 days and text","Vérifiez date, 1-365 jours et texte"));
                 else if(dayIndex(from)+duration<=dayIndex(state.today.date))say(tr("Reminder already expired","Rappel déjà expiré"));
-                else {State next=state;const unsigned index=editingReminder<ReminderCapacity?editingReminder:next.reminderCount;
+                else {State& next=stage();const unsigned index=editingReminder<ReminderCapacity?editingReminder:next.reminderCount;
                     next.reminders[index].from=from;next.reminders[index].duration=uint16_t(duration);next.reminders[index].text=reminderText;
                     if(index==next.reminderCount)++next.reminderCount;
                     if(commit(next))go(Screen::Reminders);
@@ -1264,7 +1292,7 @@ public:
                 else edit(reminderText,k);
             }
         }else if(screen==Screen::Date){
-            if(k==Enter){State next=state;Date d{};
+            if(k==Enter){State& next=stage();Date d{};
                 if(!parseDate(dateDraft.data(),d))say(tr("Invalid date: YYYY-MM-DD, 2000-2099","Date invalide : AAAA-MM-JJ, 2000-2099"));
                 else {next.today.date=d;if(commit(next))go(Screen::Home);}
             }else if((k>='0'&&k<='9')||k=='-'||k==Backspace||k==127)edit(dateDraft,k);
@@ -1277,7 +1305,7 @@ public:
                 if(k==Enter){
                     const unsigned id=page*PageSize+selection;
                     if(id<state.activityCount){
-                        State next=state;ActivityFlags flags=0;
+                        State& next=stage();ActivityFlags flags=0;
                         for(unsigned i=0;i<next.activityCount;++i)if(i!=id&&(next.today.flags&(ActivityFlags(1u)<<i)))
                             flags|=ActivityFlags(1u)<<(i<id?i:i-1);
                         next.today.flags=flags;
@@ -1296,7 +1324,7 @@ public:
                 if(row>=rows)return;
                 unsigned id=page*PageSize+row;
                 if(id>=state.activityCount)return; // Orphan archive rows are display-only.
-                State next=state;next.today.flags^=ActivityFlags(1u)<<id;
+                State& next=stage();next.today.flags^=ActivityFlags(1u)<<id;
                 if(commit(next))selection=row;
             }else if((k=='n'||k=='N')){
                 if(state.activityCount>=ActivityCapacity)say(tr("Limit: 30 activities","Limite : 30 activités"));
@@ -1305,10 +1333,13 @@ public:
             else if(k==DeleteKey&&rows&&page*PageSize+selection<state.activityCount)confirmingDelete=true;
             else if((k==F4||k==F5)&&rows){
                 const unsigned id=page*PageSize+selection;
-                if(id<state.activityCount){
-                    const unsigned other=k==F4?(id?id-1:id):(id+1<state.activityCount?id+1:id);
-                    if(other!=id){State next=state;swapActivities(next,id,other);refreshActivityFlags(next);
-                        if(commit(next)){selection=other%PageSize;page=other/PageSize;}}
+                if(id<state.activityCount&&state.activityCount>=2){
+                    State& next=stage();unsigned other;
+                    if(k==F4&&id==0){rotateActivity(next,true);other=next.activityCount-1;}
+                    else if(k==F5&&id+1==state.activityCount){rotateActivity(next,false);other=0;}
+                    else {other=k==F4?id-1:id+1;swapActivities(next,id,other);}
+                    refreshActivityFlags(next);
+                    if(commit(next)){selection=other%PageSize;page=other/PageSize;}
                 }
             }
         }else if(screen==Screen::ActivityEdit){
@@ -1317,7 +1348,7 @@ public:
                 if(!activityDraft[0]){screen=Screen::Activities;activityDraft.fill(0);} // Empty = cancel.
                 else if(!validActivityName(activityDraft.data()))say(tr("Name is too long","Nom trop long"));
                 else if(duplicateActivityName(state,activityDraft.data(),editingActivity,state.language))say(tr("That name already exists","Ce nom existe déjà"));
-                else {State next=state;unsigned destination=editingActivity;
+                else {State& next=stage();unsigned destination=editingActivity;
                     if(editingActivity>=ActivityCapacity){
                         if(next.activityCount>=ActivityCapacity){say(tr("Limit: 30 activities","Limite : 30 activités"));render();return;}
                         destination=next.activityCount;next.activities[destination].id=next.nextActivityId++;
@@ -1332,7 +1363,7 @@ public:
         }else if(screen==Screen::Weight){
             if(daysBack){if(k==Enter)go(Screen::Home);else readOnly();}
             else if(k==Up||k==Down||k==9)field=1-field;
-            else if(k==Enter){State next=state;
+            else if(k==Enter){State& next=stage();
                 if(!parseWeight(weights[0].data(),next.today.expected)||!parseWeight(weights[1].data(),next.today.actual))say(tr("Invalid weight (example: 110.500)","Poids invalide (exemple : 110,500)"));
                 else if(commit(next))go(Screen::Home);
             }else if((k>='0'&&k<='9')||k=='.'||k==','||k==Backspace||k==127)edit(weights[field],k);
@@ -1347,7 +1378,7 @@ public:
                 else beginTaskEdit(TaskCapacity);
             }else if(k==Enter&&n)beginTaskEdit(taskAt(kanbanColumn,selection));
             else if(k==DeleteKey&&n){
-                const unsigned index=taskAt(kanbanColumn,selection);State next=state;
+                const unsigned index=taskAt(kanbanColumn,selection);State& next=stage();
                 for(unsigned i=index;i+1<next.taskCount;++i)next.tasks[i]=next.tasks[i+1];
                 next.tasks[--next.taskCount]=Task{};
                 if(commit(next)&&selection>=tasksIn(kanbanColumn)&&selection) --selection;
@@ -1357,7 +1388,7 @@ public:
         }else if(screen==Screen::TaskEdit){
             if(k==Enter){
                 if(!taskDraft[0])say(tr("Task name cannot be empty","Le nom ne peut pas être vide"));
-                else {State next=state;
+                else {State& next=stage();
                     unsigned destination=editedTask;
                     if(editedTask<TaskCapacity)next.tasks[editedTask].name=taskDraft;
                     else if(next.taskCount>=TaskCapacity){say(tr("Kanban is full (24 tasks)","Kanban complet (24 tâches)"));render();return;}
@@ -1378,7 +1409,7 @@ public:
             if(k==Enter){
                 if(selection==0)go(Screen::Language);
                 else if(selection==1)go(Screen::Colors);
-                else {State next=state;next.language=pendingLanguage;
+                else {State& next=stage();next.language=pendingLanguage;
                     if(commit(next)){go(Screen::Home);say(tr("Configuration saved","Configuration enregistrée"));}}
             }
         }else if(screen==Screen::Language){
@@ -1390,7 +1421,7 @@ public:
             if(k==Down)selection=(selection+1)%5;
             if(k>='1'&&k<='5')selection=unsigned(k-'1');
             pendingPalette=Palette(selection);
-            if(k==Enter){State next=state;next.palette=pendingPalette;
+            if(k==Enter){State& next=stage();next.palette=pendingPalette;
                 if(commit(next)){go(Screen::Home);say(tr("Color saved","Couleur enregistrée"));}}
         }else if(screen==Screen::RosaryMode){
             if(k==Up)selection=(selection+3)%4;
@@ -1419,7 +1450,7 @@ public:
             if(k==Enter){uint32_t gain=points(state.today);
                 if(state.today.number==std::numeric_limits<uint32_t>::max()||state.xp>std::numeric_limits<uint32_t>::max()-gain)say(tr("Counter limit reached","Limite du compteur atteinte"));
                 else if(!validDate(state.today.date))say(tr("Set Date before closing the day","Renseignez Date avant de terminer le jour"));
-                else {State next=state;const unsigned slot=next.next;next.history[slot]=next.today;freezeDayNames(next,next.history[slot]);
+                else {State& next=stage();const unsigned slot=next.next;next.history[slot]=next.today;freezeDayNames(next,next.history[slot]);
                     next.next=uint8_t((next.next+1)%HistoryLength);if(next.count<HistoryLength)++next.count;
                     Date tomorrow=state.today.date;if(!nextDate(tomorrow)) {say(tr("Calendar ends on 2099-12-31","Le calendrier s'arrête au 2099-12-31"));render();return;}
                     // The export is deliberately written before the A/B commit.

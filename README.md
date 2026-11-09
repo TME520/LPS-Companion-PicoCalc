@@ -18,7 +18,7 @@ It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display
   - **Migration**: on first start, if there is no `.JSN` save yet, v1.13 reads your existing `SAVE_A.BIN`/`SAVE_B.BIN` (any format from v1.0 to v1.12) and writes `SAVE_A.JSN` at the first save. The `.BIN` files are never modified or deleted and stay on the card as a backup. A save written by v1.13 cannot be read by v1.12.
   - Each day stores its ticked activities **by name** (`"activities":["Marche","Messe"]`, French names) rather than as bit positions, ready for user-defined activities.
   - ICS and CSV exports are unchanged.
-- **User-defined activities** (LPS-113-CHG07): you can rename, add, delete and reorder the list from the Activities screen. **E** renames the selected activity, **N** adds one at the end (up to 30), **Del** deletes it after confirmation, **F4** / **F5** move it up or down (the same keys as the Kanban). A name is stored only in the language you are using; if the other language has no name, the same name is shown in both. Past days keep the names that were ticked then, so renaming or deleting an activity does not rewrite history or old ICS exports. The default list of 22 is used for a new profile, when loading a v1 JSON save, and when migrating a `.BIN` save.
+- **User-defined activities** (LPS-113-CHG07): you can rename, add, delete and reorder the list from the Activities screen. **E** renames the selected activity, **N** adds one at the end (up to 30), **Del** deletes it after confirmation, **F4** / **F5** move it up or down and wrap at the ends (the same keys as the Kanban, CHG07b). A name is stored only in the language you are using; if the other language has no name, the same name is shown in both. Past days keep the names that were ticked then, so renaming or deleting an activity does not rewrite history or old ICS exports. The default list of 22 is used for a new profile, when loading a v1 JSON save, and when migrating a `.BIN` save.
 - **22 activities** (LPS-113-CHG08): six activities are added after the existing 16: **Sport / Sport, Cooking / Cuisine, Chores / Ménage, Family / Famille, Friends / Amis, Meditation / Méditation**. The Activities screen now has three pages (10 + 10 + 2), and the home counter reads `x/22`. The first 16 keep their order, so days from v1.12 saves migrate unchanged. When ticked, the new activities appear by name in the ICS export, with the same format as before. The list is user-defined (CHG07). The Activities screen always opens on page 1 (CHG08b). Number keys 1–9 and 0 act on the current page (CHG08b). Each row is labelled with that key: `1`–`9` for the first nine rows of the page, and `0` for the tenth (CHG08c).
 
 ## Changes in v1.12
@@ -293,7 +293,7 @@ On the current day you can also edit the list. Names are limited to 24 letters (
 | `E` | Rename the selected activity (Enter saves, Esc cancels). Only the current language is changed. |
 | `N` | Add a new activity at the end (refused at 30). |
 | `Del` | Delete the selected activity, after `Confirm? Enter/Esc`. |
-| `F4` / `F5` | Move the selected activity up or down (same keys as the Kanban). |
+| `F4` / `F5` | Move the selected activity up or down, wrapping from first to last and last to first (same keys as the Kanban). |
 
 
 Each checkbox can be counted once per day. Checking or unchecking an activity saves immediately.

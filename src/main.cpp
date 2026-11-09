@@ -28,7 +28,7 @@ struct Record {
     size_t payloadSize=0;
     enum Status { Missing, Valid, Damaged, IOError } status=Missing;
 };
-Record readLegacyRecord(unsigned slot){
+Record readLegacyRecord(unsigned slot,lps::State& into){
     Record r;FIL f;FRESULT result=f_open(&f,legacyPaths[slot],FA_READ);
     if(result==FR_NO_FILE||result==FR_NO_PATH)return r;
     if(result!=FR_OK){r.status=Record::IOError;return r;}
@@ -37,8 +37,7 @@ Record readLegacyRecord(unsigned slot){
     result=rightSize?f_read(&f,r.bytes.data(),recordSize,&n):FR_OK;
     FRESULT closed=f_close(&f);
     if(result!=FR_OK||closed!=FR_OK){r.status=Record::IOError;return r;}
-    lps::State candidate;
-    if(!rightSize||n!=recordSize||get32(r.bytes.data())!=0x3152504c||get32(r.bytes.data()+8)!=recordSize-16||get32(r.bytes.data()+recordSize-4)!=lps::crc32(r.bytes.data(),recordSize-4)||!lps::decode(r.bytes.data()+12,recordSize-16,candidate)){
+    if(!rightSize||n!=recordSize||get32(r.bytes.data())!=0x3152504c||get32(r.bytes.data()+8)!=recordSize-16||get32(r.bytes.data()+recordSize-4)!=lps::crc32(r.bytes.data(),recordSize-4)||!lps::decode(r.bytes.data()+12,recordSize-16,into)){
         r.status=Record::Damaged;return r;
     }
     r.generation=get32(r.bytes.data()+4);r.payloadSize=recordSize-16;r.status=Record::Valid;return r;
@@ -78,8 +77,8 @@ class PicoCalc final:public lps::Platform {
     bool lowBattery=false;
     int active=-1;
     uint32_t generation=0;
-    // Parse target for slot checks and write read-back (about 5 KB, static
-    // with the adapter, so not on the stack).
+    // Parse target for slot checks, BIN migration checks and write read-back
+    // (one State, static with the adapter, so not on the stack).
     lps::State scratch{};
     // A full year of the compact CSV is below 16 KiB.  Keeping this buffer in
     // the hardware adapter avoids a large stack allocation on the RP2040.
@@ -211,7 +210,7 @@ public:
     // Migration: no JSON save yet (or only an interrupted first JSON write).
     // Load SAVE_A/B.BIN formats 1-6; the next save writes SAVE_A.JSN.
     lps::LoadResult loadLegacy(lps::State& out,bool damagedJson){
-        Record a=readLegacyRecord(0),b=readLegacyRecord(1);
+        Record a=readLegacyRecord(0,scratch),b=readLegacyRecord(1,scratch);
         if(a.status==Record::IOError||b.status==Record::IOError)return lps::LoadResult::Error;
         if(a.status!=Record::Valid&&b.status!=Record::Valid){
             return a.status==Record::Missing&&b.status==Record::Missing&&!damagedJson?lps::LoadResult::Missing:lps::LoadResult::Error;

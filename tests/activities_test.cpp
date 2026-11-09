@@ -84,6 +84,40 @@ int main(){
         assert(app.data().activityCount==21&&!(app.data().today.flags&1));
         assert(std::strcmp(app.data().activities[0].english.data(),"Diet")==0);
     }
+    // F4/F5 wrap like the Kanban; today's tick and the cursor follow (EN then FR).
+    {
+        Display d;App app(d);app.start();
+        app.key('1');app.key(Enter);assert(app.data().today.flags&1);
+        app.key(F4); // First activity moves to the end.
+        assert(std::strcmp(app.data().activities[21].english.data(),"Walk")==0);
+        assert(std::strcmp(app.data().activities[0].english.data(),"Diet")==0);
+        assert(std::strcmp(app.data().activities[20].english.data(),"Meditation")==0);
+        assert((app.data().today.flags&(1u<<21))&&!(app.data().today.flags&1));
+        assert(d.has(3,"3/3")&&d.has(5,"1  Meditation")&&d.has(6,"2  Walk")&&d.has(6,"[x]"));
+        app.key(F5); // Last activity moves to the top.
+        assert(std::strcmp(app.data().activities[0].english.data(),"Walk")==0);
+        assert(std::strcmp(app.data().activities[21].english.data(),"Meditation")==0);
+        assert(app.data().today.flags&1);
+        assert(d.has(3,"1/3")&&d.has(5,"1  Walk")&&d.has(5,"[x]"));
+        app.key(Right);app.key(Right);app.key(Down);
+        assert(d.has(6,"2  Meditation"));
+        app.key(F5);
+        assert(std::strcmp(app.data().activities[0].english.data(),"Meditation")==0);
+        assert(std::strcmp(app.data().activities[1].english.data(),"Walk")==0);
+        assert((app.data().today.flags&(1u<<1))&&!(app.data().today.flags&1));
+        assert(d.has(3,"1/3")&&d.has(5,"1  Meditation")&&d.has(6,"2  Walk")&&d.has(6,"[x]"));
+        app.key(F4); // Restore default order; Walk stays ticked.
+        assert(std::strcmp(app.data().activities[0].english.data(),"Walk")==0&&(app.data().today.flags&1));
+        app.key(Escape);choose(app,Language::French);
+        app.key('1');assert(d.has(5,"1  Marche")&&d.has(5,"[x]"));
+        app.key(F4);
+        assert(std::strcmp(app.data().activities[21].french.data(),"Marche")==0);
+        assert(app.data().today.flags&(1u<<21));
+        assert(d.has(3,"3/3")&&d.has(5,"1  Méditation")&&d.has(6,"2  Marche")&&d.has(6,"[x]"));
+        app.key(F5);
+        assert(std::strcmp(app.data().activities[0].french.data(),"Marche")==0&&(app.data().today.flags&1));
+        assert(d.has(3,"1/3")&&d.has(5,"1  Marche")&&d.has(5,"[x]"));
+    }
     // After save/load, today's frozen names follow a French rename (tick stays).
     {
         Display d;App app(d);app.start();
