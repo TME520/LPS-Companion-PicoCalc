@@ -1,4 +1,4 @@
-# LPS-Companion v1.12
+# LPS-Companion v1.13
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
@@ -8,7 +8,17 @@ LPS-Companion helps you record daily activities and compare your expected and ac
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries are saved to the SD card.
 
-**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.12 refines the timer, removes gamification and the notepad, and shows the long date with ISO week; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
+**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.13 moves the saves to JSON and makes the activity list user-defined (22 by default, up to 30); it needs device testing. See `BUILD-VALIDATION.md` for host checks and physical-test limits.
+
+## Changes in v1.13
+
+- **Title** (LPS-113-CHG09): the title bar reads `LPS COMPANION v1.13`.
+- **JSON save files** (LPS-113-CHG06): the save is now `LPS/SAVE_A.JSN` and `LPS/SAVE_B.JSN`, still written alternately with a generation number and a CRC-32 check, so a damaged or half-written file falls back to the other one exactly as before. The app writes and reads them as a stream with a small hand-written parser (no library, no dynamic memory). The files are managed only by the app; do not edit them by hand.
+  - **Migration**: on first start, if there is no `.JSN` save yet, v1.13 reads your existing `SAVE_A.BIN`/`SAVE_B.BIN` (any format from v1.0 to v1.12) and writes `SAVE_A.JSN` at the first save. The `.BIN` files are never modified or deleted and stay on the card as a backup. A save written by v1.13 cannot be read by v1.12.
+  - Each day stores its ticked activities **by name** (`"activities":["Marche","Messe"]`, French names) rather than as bit positions, ready for user-defined activities.
+  - ICS and CSV exports are unchanged.
+- **User-defined activities** (LPS-113-CHG07): you can rename, add, delete and reorder the list from the Activities screen. **E** renames the selected activity, **N** adds one at the end (up to 30), **Del** deletes it after confirmation, **F4** / **F5** move it up or down and wrap at the ends (the same keys as the Kanban, CHG07b). A name is stored only in the language you are using; if the other language has no name, the same name is shown in both. Past days keep the names that were ticked then, so renaming or deleting an activity does not rewrite history or old ICS exports. The default list of 22 is used for a new profile, when loading a v1 JSON save, and when migrating a `.BIN` save.
+- **22 activities** (LPS-113-CHG08): six activities are added after the existing 16: **Sport / Sport, Cooking / Cuisine, Chores / Ménage, Family / Famille, Friends / Amis, Meditation / Méditation**. The Activities screen now has three pages (10 + 10 + 2), and the home counter reads `x/22`. The first 16 keep their order, so days from v1.12 saves migrate unchanged. When ticked, the new activities appear by name in the ICS export, with the same format as before. The list is user-defined (CHG07). The Activities screen always opens on page 1 (CHG08b). Number keys 1–9 and 0 act on the current page (CHG08b). Each row is labelled with that key: `1`–`9` for the first nine rows of the page, and `0` for the tenth (CHG08c).
 
 ## Changes in v1.12
 
@@ -234,6 +244,10 @@ After closing a day, the next date is set automatically, including month/year bo
 
 ### Activities
 
+Each row is labelled with the key that toggles it on that page (`1`–`9`, and `0` for the tenth row), in the same style as the home menu (`1  Activities`).
+
+**Page 1**
+
 | Key | English | Français |
 | --- | --- | --- |
 | `1` | Walk | Marche |
@@ -245,15 +259,41 @@ After closing a day, the next date is set automatically, including month/year bo
 | `7` | Nap | Sieste |
 | `8` | Gurumed | Gurumed |
 | `9` | Illness | Maladie |
-| Arrows + Enter | Day off (10) | Congé (10) |
-| Arrows + Enter | Weekend (11) | Weekend (11) |
-| Arrows + Enter | Outing (12) | Sortie (12) |
-| Arrows + Enter | Gaming (13) | Jeu (13) |
-| Arrows + Enter | Doctor (14) | Docteur (14) |
-| Arrows + Enter | Reading (15) | Lecture (15) |
-| Arrows + Enter | Shopping (16) | Shopping (16) |
+| `0` | Day off | Congé |
 
-Activities are displayed across two pages (10 + 6). **Left/Right** changes page; **Up/Down** selects an activity; **Enter** toggles its checkbox. Keys **1–9** toggle the corresponding activity from any page. Select activities 10–16 with Up/Down, then press Enter.
+**Page 2**
+
+| Key | English | Français |
+| --- | --- | --- |
+| `1` | Weekend | Weekend |
+| `2` | Outing | Sortie |
+| `3` | Gaming | Jeu |
+| `4` | Doctor | Docteur |
+| `5` | Reading | Lecture |
+| `6` | Shopping | Shopping |
+| `7` | Sport | Sport |
+| `8` | Cooking | Cuisine |
+| `9` | Chores | Ménage |
+| `0` | Family | Famille |
+
+**Page 3**
+
+| Key | English | Français |
+| --- | --- | --- |
+| `1` | Friends | Amis |
+| `2` | Meditation | Méditation |
+
+Activities are displayed across up to three pages of 10 (the default list is 10 + 10 + 2). Opening the screen from Home or from an archived day always starts on page 1, with the cursor on the first row. **Left/Right** changes page and wraps around; **Up/Down** selects an activity; **Enter** toggles its checkbox. Keys **1–9** toggle rows 1–9 of the page you are on, and **0** toggles row 10 when the page has one. On a short last page, keys that point past the last row are ignored.
+
+On the current day you can also edit the list. Names are limited to 24 letters (the space before the checkbox). An empty name cancels; a duplicate name in the current language is refused. The list holds at most 30 activities. An archived day is read-only: those keys do nothing, and any activity that was ticked that day but later renamed or removed still appears at the end, already checked.
+
+| Key | Action |
+| --- | --- |
+| `E` | Rename the selected activity (Enter saves, Esc cancels). Only the current language is changed. |
+| `N` | Add a new activity at the end (refused at 30). |
+| `Del` | Delete the selected activity, after `Confirm? Enter/Esc`. |
+| `F4` / `F5` | Move the selected activity up or down, wrapping from first to last and last to first (same keys as the Kanban). |
+
 
 Each checkbox can be counted once per day. Checking or unchecking an activity saves immediately.
 
@@ -332,10 +372,27 @@ Each file is an iCalendar 2.0 file with one all-day event. It can be copied from
 
 LPS-Companion stores data in the SD card's `LPS` directory:
 
-- `SAVE_A.BIN`
-- `SAVE_B.BIN`
+- `SAVE_A.JSN`
+- `SAVE_B.JSN`
+- `SAVE_A.BIN`, `SAVE_B.BIN`: saves from v1.12 and earlier. Since v1.13 they are only read once, to migrate to JSON, and are left untouched as a backup.
 
-Each file is a complete snapshot of the current day, total XP, retained history, configuration and global Kanban; the two files are not assigned to different days. The app alternates writes between them. At startup it checks both records and loads the highest-generation valid snapshot. If the newest is missing or fails validation, it uses the older intact snapshot, which may lack the latest change. If loading fails due to an I/O error or neither existing record is valid, writes are blocked.
+Each file is a complete snapshot of the current day, total XP, retained history, configuration and global Kanban; the two files are not assigned to different days. The app alternates writes between them. At startup it checks both records and loads the highest-generation valid snapshot. If the newest is missing or fails validation, it uses the older intact snapshot, which may lack the latest change. If loading fails due to an I/O error or neither existing record is valid, writes are blocked. A JSON save written by a newer version of the app (a higher `version`) also blocks writes, so it is never overwritten.
+
+Since v1.13 each file is a single JSON object (schema `version` 2 since CHG07; v1 files still load and receive the default list of 22 activities):
+
+```json
+{"format":"lps-companion","version":2,"generation":3,
+"state":{"language":"en","palette":"green","xp":0,
+"activities":[{"id":1,"fr":"Marche","en":"Walk"},{"id":2,"fr":"Messe","en":"Mass"}],
+"today":{"date":"2026-09-17","number":1,"activities":["Marche","Bible"],"expected":null,"actual":null,"note":""},
+"history":[],
+"kanban":[
+{"status":"todo","name":"Write \"JSON\" doc"}],
+"reminders":[]},
+"crc32":"825db3bc"}
+```
+
+`generation` increases with every save; the higher valid one wins. `crc32` is the standard CRC-32 (the same as Python's `zlib.crc32`) of every byte before `"crc32"`, and must be the last member. History is stored oldest first. Weights are integer grams, or `null` when not recorded. The top-level `activities` array is the editable list (id plus French and English names). Each day still stores only the names that were ticked that day, so renaming or deleting an activity later does not rewrite past days. Unknown keys are ignored, so later versions can add fields.
 
 Day navigation uses the history from that loaded snapshot in RAM. It indexes backwards from the history ring's next-write position, so the correct day is selected even after the 31 slots wrap. It does not reload the card at every arrow press, switch between A and B to change days, or write while browsing. Back up the **whole `LPS` directory** to preserve your data.
 
@@ -347,7 +404,7 @@ If saving fails, restart with a working SD card before continuing. A missing, un
 
 - Battery charge is estimated from RP2040 VSYS voltage; the 20% warning must be calibrated on the physical PicoCalc.
 - Date is manually entered; there is no RTC/autonomous clock integration.
-- Activities are daily checkboxes, without duration or repetition counts.
+- Activities are daily checkboxes, without duration or repetition counts. The list holds at most 30 names of up to 24 letters each.
 - Notes support ASCII text only.
 - Kanban is limited to 24 tasks; task names support 32 printable ASCII characters.
 - Saved history is limited to 31 completed days; earlier days cannot be recovered by browsing. Past days are read-only.
@@ -363,6 +420,8 @@ If saving fails, restart with a working SD card before continuing. A missing, un
 | `CMakeLists.txt` | Firmware build and memory layout. |
 | `build.sh` | Dependency download and compilation. |
 | `test.sh` | Application tests and A/B storage integration tests with host files. |
+| `tests/json_save_test.cpp` | JSON save writer/parser: round trip, truncation, CRC, unknown keys, escaping and limits. |
+| `tests/migration_test.cpp` | Migration of v1.2 and v1.12 binary saves to JSON through the real adapter. |
 | `tests/kanban_test.cpp` | Kanban navigation, editing, movement, ordering, rollback and persistence tests. |
 | `tests/` | Hardware/FatFs stand-ins used only for host tests of the actual firmware adapter. |
 | `verify_uf2.py` | UF2 format, target and address checks. |

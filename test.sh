@@ -14,6 +14,8 @@ g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/daily_review_test.cpp -o b
 ./build-host/daily_review_test
 g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/reminders_test.cpp -o build-host/reminders_test
 ./build-host/reminders_test
+g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/json_save_test.cpp -o build-host/json_save_test
+./build-host/json_save_test
 g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror -Itests/stubs tests/storage_test.cpp -o build-host/storage_test
 g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror -Itests/stubs tests/migration_test.cpp -o build-host/migration_test
 storage_test_path="$PWD/build-host/storage_test"
@@ -23,5 +25,7 @@ storage_test_dir="$(mktemp -d)"
 trap 'rm -rf -- "$storage_test_dir"' EXIT
 (cd "$storage_test_dir" && "$storage_test_path")
 (cd "$storage_test_dir" && "$migration_test_path" "$legacy_fixture_path")
+g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/activities_test.cpp -o build-host/activities_test
+./build-host/activities_test
 g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/timer_test.cpp -o build-host/timer_test
 ./build-host/timer_test

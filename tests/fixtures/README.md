@@ -8,5 +8,5 @@ It contains day 3 with flags 1025, expected weight 110.500 kg, actual weight
 are retained. Day 2 has flags 512, actual weight 111.500 kg, and note
 `Yesterday from v1.2`.
 
-`migration_test.cpp` wraps these original bytes in A/B envelopes and exercises
-the real firmware adapter's mixed-format loading, upgrade and fallback paths.
+`migration_test.cpp` wraps these original bytes in A/B `.BIN` envelopes and
+exercises the real firmware adapter's migration to JSON `.JSN` saves (v1.13).

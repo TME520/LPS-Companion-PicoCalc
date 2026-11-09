@@ -15,9 +15,9 @@ public:
     void alert(int x,int y,const char* value)override{text(x,y,value,true);}
     void present()override{}
     void setPalette(Palette)override{}
-    LoadResult load(uint8_t*,std::size_t,std::size_t&)override{return LoadResult::Missing;}
-    bool save(const uint8_t*,std::size_t)override{return true;}
-    bool exportIcs(const Day&,uint32_t,uint32_t,Language)override{return true;}
+    LoadResult load(State&)override{return LoadResult::Missing;}
+    bool save(const State&)override{return true;}
+    bool exportIcs(const Day&,uint32_t,uint32_t,Language,const State&)override{return true;}
     bool exportWeightCsv(const Day&)override{return true;}
     bool has(const char* utf8)const{
         char cells[256];displayText(utf8,cells,sizeof cells);

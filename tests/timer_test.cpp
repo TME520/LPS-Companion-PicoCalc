@@ -6,9 +6,9 @@ struct TimerDisplay: lps::Platform {
  void clear()override{} void text(int,int,const char*,bool)override{} void alert(int,int,const char*)override{}
  void present()override{} void setPalette(lps::Palette)override{}
  void largeText(const char* v,bool r)override{value=v;red=r;}
- lps::LoadResult load(uint8_t*,size_t,size_t&)override{return lps::LoadResult::Missing;}
- bool save(const uint8_t*,size_t)override{++writes;return true;}
- bool exportIcs(const lps::Day&,uint32_t,uint32_t,lps::Language)override{return true;}
+ lps::LoadResult load(lps::State&)override{return lps::LoadResult::Missing;}
+ bool save(const lps::State&)override{++writes;return true;}
+ bool exportIcs(const lps::Day&,uint32_t,uint32_t,lps::Language,const lps::State&)override{return true;}
  bool exportWeightCsv(const lps::Day&)override{return true;}
 };
 int main(){using namespace lps;

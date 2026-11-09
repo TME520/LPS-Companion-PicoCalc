@@ -14,11 +14,13 @@ extern unsigned char *MainFont;
 void draw_bitmap_spi(int,int,int,int,int,int,int,unsigned char*);
 }
 namespace {
-constexpr const char* paths[]={"0:/LPS/SAVE_A.BIN","0:/LPS/SAVE_B.BIN"};
+// LPS-113-CHG06: the save is JSON in two alternating files. The binary files
+// of v1.12 and earlier are only read, to migrate them, and never modified.
+constexpr const char* paths[]={"0:/LPS/SAVE_A.JSN","0:/LPS/SAVE_B.JSN"};
+constexpr const char* legacyPaths[]={"0:/LPS/SAVE_A.BIN","0:/LPS/SAVE_B.BIN"};
 constexpr size_t RecordSize=lps::WireSize+16;
 constexpr size_t RecordSizeV5=lps::WireV5+16;
 constexpr size_t RecordSizeV4=lps::WireV4+16,RecordSizeV3=lps::WireV3+16,RecordSizeV2=lps::WireV2+16,RecordSizeV1=lps::WireV1+16;
-void put32(uint8_t* p,uint32_t x){for(int i=0;i<4;++i){p[i]=uint8_t(x);x>>=8;}}
 uint32_t get32(const uint8_t* p){return uint32_t(p[0])|(uint32_t(p[1])<<8)|(uint32_t(p[2])<<16)|(uint32_t(p[3])<<24);}
 struct Record {
     std::array<uint8_t,RecordSize> bytes{};
@@ -26,8 +28,8 @@ struct Record {
     size_t payloadSize=0;
     enum Status { Missing, Valid, Damaged, IOError } status=Missing;
 };
-Record readRecord(unsigned slot){
-    Record r;FIL f;FRESULT result=f_open(&f,paths[slot],FA_READ);
+Record readLegacyRecord(unsigned slot,lps::State& into){
+    Record r;FIL f;FRESULT result=f_open(&f,legacyPaths[slot],FA_READ);
     if(result==FR_NO_FILE||result==FR_NO_PATH)return r;
     if(result!=FR_OK){r.status=Record::IOError;return r;}
     const size_t recordSize=f_size(&f);
@@ -35,11 +37,36 @@ Record readRecord(unsigned slot){
     result=rightSize?f_read(&f,r.bytes.data(),recordSize,&n):FR_OK;
     FRESULT closed=f_close(&f);
     if(result!=FR_OK||closed!=FR_OK){r.status=Record::IOError;return r;}
-    lps::State candidate;
-    if(!rightSize||n!=recordSize||get32(r.bytes.data())!=0x3152504c||get32(r.bytes.data()+8)!=recordSize-16||get32(r.bytes.data()+recordSize-4)!=lps::crc32(r.bytes.data(),recordSize-4)||!lps::decode(r.bytes.data()+12,recordSize-16,candidate)){
+    if(!rightSize||n!=recordSize||get32(r.bytes.data())!=0x3152504c||get32(r.bytes.data()+8)!=recordSize-16||get32(r.bytes.data()+recordSize-4)!=lps::crc32(r.bytes.data(),recordSize-4)||!lps::decode(r.bytes.data()+12,recordSize-16,into)){
         r.status=Record::Damaged;return r;
     }
     r.generation=get32(r.bytes.data()+4);r.payloadSize=recordSize-16;r.status=Record::Valid;return r;
+}
+// FatFs streams for the JSON writer/reader: no whole-file buffer.
+struct FileSink final:lps::SaveSink {
+    FIL& file;explicit FileSink(FIL& f):file(f){}
+    bool write(const char* data,size_t size)override{UINT n=0;return f_write(&file,data,UINT(size),&n)==FR_OK&&n==size;}
+};
+struct FileSource final:lps::SaveSource {
+    FIL& file;explicit FileSource(FIL& f):file(f){}
+    long read(char* data,size_t capacity)override{UINT n=0;return f_read(&file,data,UINT(capacity),&n)==FR_OK?long(n):-1;}
+};
+struct Slot {
+    enum Status { Missing, Valid, Damaged, Unsupported, IOError } status=Missing;
+    uint32_t generation=0,checksum=0;
+};
+// Parse one JSON slot into `into` (overwritten even when the file is invalid).
+Slot readSlot(unsigned slot,lps::State& into){
+    Slot s;FIL f;FRESULT result=f_open(&f,paths[slot],FA_READ);
+    if(result==FR_NO_FILE||result==FR_NO_PATH)return s;
+    if(result!=FR_OK){s.status=Slot::IOError;return s;}
+    FileSource source(f);lps::SaveInfo info;
+    const auto check=lps::readSave(source,into,info);
+    const FRESULT closed=f_close(&f);
+    if(check==lps::SaveCheck::IOError||closed!=FR_OK){s.status=Slot::IOError;return s;}
+    if(check==lps::SaveCheck::Unsupported){s.status=Slot::Unsupported;return s;}
+    if(check!=lps::SaveCheck::Valid){s.status=Slot::Damaged;return s;}
+    s.status=Slot::Valid;s.generation=info.generation;s.checksum=info.checksum;return s;
 }
 class PicoCalc final:public lps::Platform {
     std::array<std::array<char,40>,20> frame{},previous{};
@@ -50,6 +77,9 @@ class PicoCalc final:public lps::Platform {
     bool lowBattery=false;
     int active=-1;
     uint32_t generation=0;
+    // Parse target for slot checks, BIN migration checks and write read-back
+    // (one State, static with the adapter, so not on the stack).
+    lps::State scratch{};
     // A full year of the compact CSV is below 16 KiB.  Keeping this buffer in
     // the hardware adapter avoids a large stack allocation on the RP2040.
     std::array<char,16384> csv{};
@@ -161,36 +191,51 @@ public:
         hadLarge=largeValue[0]!=0;
         previous=frame;oldReverse=reverse;oldAlertRow=alertRow;oldBold=bold;first=false;
     }
-    lps::LoadResult load(uint8_t* bytes,size_t cap,size_t& size)override{
+    lps::LoadResult load(lps::State& out)override{
         if(!mounted)return lps::LoadResult::NoStorage;
-        if(cap<lps::WireSize)return lps::LoadResult::Error;
-        Record a=readRecord(0),b=readRecord(1);
+        const Slot a=readSlot(0,scratch),b=readSlot(1,scratch);
+        // A newer schema is protected like an unreadable card: never overwritten.
+        if(a.status==Slot::IOError||b.status==Slot::IOError||a.status==Slot::Unsupported||b.status==Slot::Unsupported)return lps::LoadResult::Error;
+        if(a.status==Slot::Valid||b.status==Slot::Valid){
+            active=b.status==Slot::Valid&&(a.status!=Slot::Valid||b.generation>a.generation)?1:0;
+            // scratch holds B (parsed last); re-read A if A is the newest.
+            if(active==0){const Slot again=readSlot(0,scratch);if(again.status!=Slot::Valid||again.checksum!=a.checksum)return lps::LoadResult::Error;}
+            generation=active?b.generation:a.generation;out=scratch;return lps::LoadResult::Ok;
+        }
+        // Both JSON slots damaged: a JSON save existed, so the BIN files are
+        // older data. Protect everything rather than fall back silently.
+        if(a.status==Slot::Damaged&&b.status==Slot::Damaged)return lps::LoadResult::Error;
+        return loadLegacy(out,a.status==Slot::Damaged||b.status==Slot::Damaged);
+    }
+    // Migration: no JSON save yet (or only an interrupted first JSON write).
+    // Load SAVE_A/B.BIN formats 1-6; the next save writes SAVE_A.JSN.
+    lps::LoadResult loadLegacy(lps::State& out,bool damagedJson){
+        Record a=readLegacyRecord(0,scratch),b=readLegacyRecord(1,scratch);
         if(a.status==Record::IOError||b.status==Record::IOError)return lps::LoadResult::Error;
         if(a.status!=Record::Valid&&b.status!=Record::Valid){
-            return a.status==Record::Missing&&b.status==Record::Missing?lps::LoadResult::Missing:lps::LoadResult::Error;
+            return a.status==Record::Missing&&b.status==Record::Missing&&!damagedJson?lps::LoadResult::Missing:lps::LoadResult::Error;
         }
-        active=b.status==Record::Valid&&(a.status!=Record::Valid||b.generation>a.generation)?1:0;
-        const auto& best=active?b:a;generation=best.generation;
-        size=best.payloadSize;std::memcpy(bytes,best.bytes.data()+12,size);return lps::LoadResult::Ok;
+        const auto& best=b.status==Record::Valid&&(a.status!=Record::Valid||b.generation>a.generation)?b:a;
+        if(!lps::decode(best.bytes.data()+12,best.payloadSize,out))return lps::LoadResult::Error;
+        active=-1;generation=best.generation;return lps::LoadResult::Ok;
     }
-    bool save(const uint8_t* bytes,size_t size)override{
-        if(!mounted||writeFault||size!=lps::WireSize||generation==UINT32_MAX)return false;
+    bool save(const lps::State& state)override{
+        if(!mounted||writeFault||generation==UINT32_MAX)return false;
         FRESULT result=f_mkdir("0:/LPS");if(result!=FR_OK&&result!=FR_EXIST)return false;
         const unsigned slot=active==0?1:0;
-        std::array<uint8_t,RecordSize> record{};
-        put32(record.data(),0x3152504c);put32(record.data()+4,generation+1);put32(record.data()+8,uint32_t(size));
-        std::memcpy(record.data()+12,bytes,size);put32(record.data()+RecordSize-4,lps::crc32(record.data(),RecordSize-4));
         FIL f;result=f_open(&f,paths[slot],FA_WRITE|FA_CREATE_ALWAYS);if(result!=FR_OK)return false;
-        UINT n=0;result=f_write(&f,record.data(),RecordSize,&n);
+        // Streamed through a 256-byte buffer: no whole-file copy in RAM.
+        FileSink sink(f);uint32_t checksum=0;
+        const bool written=lps::writeSave(state,generation+1,sink,checksum);
         const auto synced=f_sync(&f),closed=f_close(&f);
         // A/B preserves the active slot. If a late write/sync/readback fails,
         // outcome may be ambiguous: block further writes until restart/recovery.
-        if(result!=FR_OK||n!=RecordSize||synced!=FR_OK||closed!=FR_OK){writeFault=true;return false;}
-        const Record check=readRecord(slot);
-        if(check.status!=Record::Valid||check.bytes!=record){writeFault=true;return false;}
+        if(!written||synced!=FR_OK||closed!=FR_OK){writeFault=true;return false;}
+        const Slot check=readSlot(slot,scratch);
+        if(check.status!=Slot::Valid||check.generation!=generation+1||check.checksum!=checksum){writeFault=true;return false;}
         active=int(slot);++generation;return true;
     }
-    bool exportIcs(const lps::Day& day,uint32_t,uint32_t,lps::Language language)override{
+    bool exportIcs(const lps::Day& day,uint32_t,uint32_t,lps::Language language,const lps::State& state)override{
         if(!mounted||!lps::validDate(day.date))return false;
         FRESULT r=f_mkdir("0:/LPS");if(r!=FR_OK&&r!=FR_EXIST)return false;
         r=f_mkdir("0:/LPS/EXPORT");if(r!=FR_OK&&r!=FR_EXIST)return false;
@@ -204,9 +249,9 @@ public:
         std::snprintf(line,sizeof line,"UID:lps-companion-%s@picocalc\r\nDTSTART;VALUE=DATE:%s\r\nDTEND;VALUE=DATE:%s\r\n",ymd,ymd,next);ok=ok&&put(f,line);
         ok=ok&&put(f,"SUMMARY:LPS Companion\r\nDESCRIPTION:");
         const char* names=language==lps::Language::English?"Activities: ":"Activités: ";ok=ok&&escaped(f,names);
-        bool first=true;for(unsigned i=0;i<lps::ActivityCount;++i)if(day.flags&(1u<<i)){
+        bool first=true;lps::eachExportedActivity(state,day,language,[&](const char* name){
             if(!first)ok=ok&&put(f,", ");
-            ok=ok&&escaped(f,language==lps::Language::English?lps::EnglishActivities[i]:lps::Activities[i]);first=false;}
+            ok=ok&&escaped(f,name);first=false;});
         if(first)ok=ok&&put(f,"none");
         // RFC 5545 TEXT line breaks are a single backslash followed by N. Do
         // not run that escape through escaped(), or it becomes a literal \\N.
