@@ -2,7 +2,7 @@
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
-![main](./main.png "Main screen")
+![main](./main112.png "Main screen")
 
 LPS-Companion helps you record daily activities and compare your expected and actual weight.
 
