@@ -64,7 +64,7 @@ void checkMenus(Display& d,App& a,bool fr){
     a.key('0');assert(d.has(3,"DATE"));assert(d.has(6,"2026-09-17"));
     assert(d.has(9,fr?"Calendrier":"Calendar"));a.key(Escape);
     a.key('1');assert(d.has(3,fr?"ACTIVITÉS":"ACTIVITIES"));assert(d.has(6,fr?"Régime":"Diet"));
-    assert(d.has(14,fr?"Congé":"Day off"));a.key(Right);assert(d.has(5,"Weekend"));assert(d.has(6,fr?"Sortie":"Outing"));assert(d.has(7,fr?"Jeu":"Gaming"));assert(d.has(8,fr?"Docteur":"Doctor"));assert(d.has(9,fr?"Lecture":"Reading"));assert(d.has(10,"Shopping"));a.key(Right);a.key(Escape);
+    assert(d.has(14,fr?"Congé":"Day off"));a.key(Right);assert(d.has(5,"Weekend"));assert(d.has(6,fr?"Sortie":"Outing"));assert(d.has(7,fr?"Jeu":"Gaming"));assert(d.has(8,fr?"Docteur":"Doctor"));assert(d.has(9,fr?"Lecture":"Reading"));assert(d.has(10,"Shopping"));a.key(Right);assert(d.has(6,fr?"22  Méditation":"22  Meditation"));a.key(Right);a.key(Escape);
     a.key('2');assert(d.has(3,fr?"SUIVI DU POIDS":"WEIGHT TRACKER"));
     assert(d.has(6,fr?"Attendu":"Expected"));assert(d.has(9,fr?"Effectif":"Actual"));
     a.key('0');a.key(Enter);assert(d.has(17,fr?"Poids invalide":"Invalid weight"));a.key(Escape);
@@ -82,6 +82,33 @@ int main(){
     { Display activityDisplay;App activityApp(activityDisplay);activityApp.start();activityApp.key('1');activityApp.key(Right);
       for(unsigned i=0;i<5;++i){activityApp.key(Down);}activityApp.key(Enter);
       assert(activityApp.data().today.flags==uint16_t(1u<<15));assert(activityDisplay.has(10,"Shopping")); }
+    // LPS-113-CHG08: 22 activities on three pages (10, 10, 2), in both languages.
+    for(bool fr:{false,true}){
+      Display dd;App app(dd);app.start();
+      if(fr)choose(app,Language::French),app.key('3');
+      assert(dd.has(4,fr?"0/22 activités":"0/22 activities"));
+      app.key('1');assert(dd.has(3,"1/3"));
+      app.key(Right);assert(dd.has(3,"2/3")&&dd.has(5,"11  Weekend")&&dd.has(6,fr?"12  Sortie":"12  Outing")&&dd.has(11,fr?"17  Sport":"17  Sport"));
+      assert(dd.has(12,fr?"18  Cuisine":"18  Cooking")&&dd.has(13,fr?"19  Ménage":"19  Chores")&&dd.has(14,fr?"20  Famille":"20  Family"));
+      app.key(Right);assert(dd.has(3,"3/3")&&dd.has(5,fr?"21  Amis":"21  Friends")&&dd.has(6,fr?"22  Méditation":"22  Meditation"));
+      for(int row=7;row<=14;++row)assert(dd.rows[row][0]==0); // Short last page: no stale rows.
+      assert(dd.has(6,"[ ]"));
+      app.key(Down);app.key(Down);app.key(Down);app.key(Enter); // Down wraps within the two rows: Méditation.
+      assert(app.data().today.flags==(ActivityFlags(1u)<<21)&&dd.has(6,"[x]")&&dd.has(3,"3/3"));
+      app.key(Right);assert(dd.has(3,"1/3"));app.key(Left);app.key(Left);assert(dd.has(3,"2/3"));
+      app.key(Left);app.key(Left);assert(dd.has(3,"3/3")); // Left wraps from page 1 to page 3.
+      app.key(Enter);assert(app.data().today.flags==((ActivityFlags(1u)<<21)|(ActivityFlags(1u)<<20)));
+      app.key(Escape);assert(dd.has(4,fr?"2/22 activités":"2/22 activities"));
+      // Reboot from the JSON save keeps the new activities; the review lists them.
+      App again(dd);again.start();assert(again.data().today.flags==app.data().today.flags);
+      again.key('5');{auto any=[&](const char* t){for(int r=0;r<20;++r)if(dd.has(r,t))return true;return false;};assert(any(fr?"  Amis":"  Friends")&&any(fr?"  Méditation":"  Meditation")&&any(fr?"ACTIVITÉS (2)":"ACTIVITIES (2)"));}again.key(Escape);
+      // Close the day: Finish counts 2; the archived day shows Méditation ticked on page 3.
+      again.key('9');assert(dd.has(6,fr?"Activités : 2":"Activities: 2"));again.key(Enter);again.key(Enter);
+      assert(again.data().today.flags==0&&again.data().history[0].flags==app.data().today.flags);
+      again.key(Left);assert(dd.has(4,fr?"2/22 activités":"2/22 activities"));
+      again.key('1');again.key(Right);again.key(Right);assert(dd.has(6,fr?"22  Méditation":"22  Meditation")&&dd.has(6,"[x]"));
+      again.key(Enter);assert(again.data().history[0].flags==app.data().today.flags); // Read-only.
+    }
     Display d;App a(d);a.start();assert(a.data().language==Language::English);checkMenus(d,a,false);
     a.key(Up);a.key(Up);a.key(Up);a.key(Up);a.key(Enter);assert(a.currentScreen()==Screen::Config);
     a.key(Enter);a.key(Down);a.key(Escape);assert(d.has(6,"English"));

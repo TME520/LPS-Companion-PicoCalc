@@ -81,7 +81,9 @@ int main(int argc,char** argv){
     // A full v1.12 (format 6) save: every field, wrapped history, Kanban and reminders.
     {
         clean();
-        const State full=lps_test::fullState('m');
+        State full=lps_test::fullState('m');
+        // BIN formats hold 16 activity bits: they map to the first 16 names unchanged.
+        full.today.flags&=0xffffu;for(Day& d:full.history)d.flags&=0xffffu;
         writeLegacy(bins[0],lps_test::encodeLegacyV6(full),7);
         State older=full;older.xp=1;writeLegacy(bins[1],lps_test::encodeLegacyV6(older),6);
         PicoCalc disk;disk.init();App app(disk);app.start();

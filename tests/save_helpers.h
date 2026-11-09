@@ -84,11 +84,11 @@ inline lps::State fullState(char fill='x'){
     using namespace lps;
     State s;s.language=Language::French;s.palette=Palette::Pink;s.xp=123456;
     auto day=[&](Day& d,unsigned n){
-        d.date={2026,uint8_t(1+n%12),uint8_t(1+n%28)};d.number=n;d.flags=uint16_t((n*2654435761u)>>16);
+        d.date={2026,uint8_t(1+n%12),uint8_t(1+n%28)};d.number=n;d.flags=(n*2654435761u)&ActivityMask; // Uses all 22 activities.
         d.expected=n%3?int32_t(100000+n):-1;d.actual=n%4?int32_t(90000+n):-1;
         std::snprintf(d.note.data(),d.note.size(),"Note %u: \"quoted\" back\\slash %c",n,fill);
     };
-    day(s.today,100);s.today.flags=0xffff;
+    day(s.today,100);s.today.flags=ActivityMask;
     for(unsigned i=0;i<HistoryLength;++i)day(s.history[i],60+i);
     s.history[3].date={};s.history[4].note.fill(0);
     s.next=7;s.count=HistoryLength;

@@ -46,7 +46,7 @@ int main(){
     {
         State worst=full;
         auto stuff=[](auto& text){text.fill(0);for(std::size_t i=0;i+1<text.size();++i)text[i]=i%2?'"':'\\';};
-        stuff(worst.today.note);for(Day& d:worst.history){stuff(d.note);d.flags=0xffff;}
+        stuff(worst.today.note);for(Day& d:worst.history){stuff(d.note);d.flags=ActivityMask;}
         for(Task& t:worst.tasks)stuff(t.name);for(Reminder& r:worst.reminders)stuff(r.text);
         const JsonStore big=lps_test::encodeJson(worst);State back;
         assert(parse(big.text(),back)==SaveCheck::Valid&&lps_test::sameState(worst,back));
@@ -90,6 +90,21 @@ int main(){
         assert(t.find("\"activities\":[\"Marche\",\"Congé\"]")!=std::string::npos);
         t=replaced(t,"\"activities\":[\"Marche\",","\"activities\":[\"Piano\",\"Marche\",\"Walk\",");
         State back;assert(parse(signedJson(t),back)==SaveCheck::Valid&&back.today.flags==((1u<<0)|(1u<<9)));
+    }
+    // LPS-113-CHG08: the six new activities round-trip by French name, bits 16-21.
+    {
+        State s;s.today.flags=(ActivityFlags(1u)<<15)|(ActivityFlags(1u)<<18)|(ActivityFlags(1u)<<21);
+        s.history[0].flags=ActivityFlags(1u)<<16;s.history[0].number=7;s.count=1;s.next=1;
+        JsonStore j=lps_test::encodeJson(s);const std::string t=j.text();
+        assert(t.find("\"activities\":[\"Shopping\",\"Ménage\",\"Méditation\"]")!=std::string::npos);
+        assert(t.find("\"activities\":[\"Sport\"]")!=std::string::npos);
+        State back;assert(parse(t,back)==SaveCheck::Valid&&lps_test::sameState(s,back));
+        assert(back.today.flags==s.today.flags&&back.history[0].flags==(ActivityFlags(1u)<<16));
+        // Every activity, in list order.
+        s.today.flags=ActivityMask;j=lps_test::encodeJson(s);
+        assert(j.text().find("\"Shopping\",\"Sport\",\"Cuisine\",\"Ménage\",\"Famille\",\"Amis\",\"Méditation\"]")!=std::string::npos);
+        assert(parse(j.text(),back)==SaveCheck::Valid&&back.today.flags==ActivityMask);
+        assert(ActivityCount==22&&PageCount==3);
     }
     // 6. String escaping: quotes, backslashes, control characters and UTF-8.
     {

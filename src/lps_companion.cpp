@@ -21,7 +21,7 @@
  - English default; French selectable in Config, applied on explicit Save.
  - PAL1 red, PAL2 green (default), and PAL3 blue are previewed live and saved on Enter.
  - Format 5 adds a persistent 24-task Kanban; formats 1-4 import safely.
- - Sixteen daily checkboxes; 10 XP each, +10 for >=3 selections (prototype rules).
+ - 22 daily checkboxes (v1.13, LPS-113-CHG08); 10 XP each, +10 for >=3 selections (prototype rules).
  - No Journal or collectible browser; new souvenirs still appear after closing a day.
  - Expected/actual weights are OPTIONAL daily inputs, stored as integer grams.
    Comma or dot accepted, up to three decimals. No generated weight-loss target.
@@ -106,12 +106,22 @@ struct Platform {
     // Implementations must treat a repeated date as already exported.
     virtual bool exportWeightCsv(const Day& day)=0;
 };
-constexpr const char* Activities[]={"Marche","Régime","Bible","Messe","Travail","Projet","Sieste","Gurumed","Maladie","Congé","Weekend","Sortie","Jeu","Docteur","Lecture","Shopping"};
-constexpr const char* EnglishActivities[]={"Walk","Diet","Bible","Mass","Work","Project","Nap","Gurumed","Illness","Day off","Weekend","Outing","Gaming","Doctor","Reading","Shopping"};
+// LPS-113-CHG08: default list of 22 activities. Order matters: the first 16
+// keep the bit positions of v1.12 binary saves; JSON saves store the French names.
+constexpr const char* Activities[]={"Marche","Régime","Bible","Messe","Travail","Projet","Sieste","Gurumed","Maladie","Congé","Weekend","Sortie","Jeu","Docteur","Lecture","Shopping",
+                                    "Sport","Cuisine","Ménage","Famille","Amis","Méditation"};
+constexpr const char* EnglishActivities[]={"Walk","Diet","Bible","Mass","Work","Project","Nap","Gurumed","Illness","Day off","Weekend","Outing","Gaming","Doctor","Reading","Shopping",
+                                           "Sport","Cooking","Chores","Family","Friends","Meditation"};
 constexpr unsigned ActivityCount=sizeof Activities/sizeof Activities[0];
+static_assert(ActivityCount==sizeof EnglishActivities/sizeof EnglishActivities[0],"Every activity needs an English name");
+// Day flags hold one bit per activity; 30 is the design capacity (3 pages of 10).
+using ActivityFlags=uint32_t;
+constexpr unsigned ActivityCapacity=30;
+static_assert(ActivityCount<=ActivityCapacity&&ActivityCapacity<=32,"Activity flags are 32 bits");
 constexpr unsigned PageSize=10, PageCount=(ActivityCount+PageSize-1)/PageSize;
-static_assert(ActivityCount<=16,"Activity flags require more than 16 bits");
-constexpr uint16_t ActivityMask=(1u<<ActivityCount)-1;
+constexpr ActivityFlags ActivityMask=ActivityFlags((uint64_t(1)<<ActivityCount)-1);
+constexpr unsigned LegacyActivityCount=16; // Binary saves (formats 1-6) hold 16 bits.
+static_assert(LegacyActivityCount<=ActivityCount,"Legacy bits must keep their activity");
 struct Date { uint16_t year=0;uint8_t month=0,day=0; };
 constexpr Date FirstCalendarDate{2000,1,1}, LastCalendarDate{2099,12,31}, DefaultDate{2026,9,17};
 bool leap(uint16_t year){return year%4==0&&(year%100!=0||year%400==0);}
@@ -135,7 +145,7 @@ bool parseDate(const char* text,Date& d){
 struct Day {
     Date date=DefaultDate; // Old-format decoder explicitly clears this.
     uint32_t number=1;
-    uint16_t flags=0;
+    ActivityFlags flags=0;
     int32_t expected=-1, actual=-1; // grams; -1 is missing
     std::array<char,NoteLength+1> note{};
 };
@@ -157,7 +167,7 @@ struct State {
     uint8_t reminderCount=0;
     std::array<Reminder,ReminderCapacity> reminders{};
 };
-unsigned count(uint16_t flags) { unsigned n=0;for(;flags;flags>>=1)n+=flags&1;return n; }
+unsigned count(ActivityFlags flags) { unsigned n=0;for(;flags;flags>>=1)n+=flags&1;return n; }
 uint32_t points(const Day& d) { unsigned n=count(d.flags);return n*10+(n>=3?10:0); }
 bool parseWeight(const char* s,int32_t& grams) {
     if(!*s){grams=-1;return true;}
@@ -206,7 +216,7 @@ bool decode(const uint8_t* bytes,std::size_t size,State& out) {
     if(version>=4){const auto palette=get(1);if(palette>4)return false;s.palette=Palette(palette);}
     bool valid=s.next<HistoryLength&&s.count<=HistoryLength;
     auto day=[&](Day& d){d.date={};if(version>=3){d.date.year=uint16_t(get(2));d.date.month=uint8_t(get(1));d.date.day=uint8_t(get(1));}
-        d.number=get(4);d.flags=uint16_t(get(2));
+        d.number=get(4);d.flags=ActivityFlags(get(2)); // Bits 0-15: the first 16 activities, unchanged.
         auto w=[&](){uint32_t v=get(4);if(v==0xffffffffu)return int32_t(-1);if(v==0||v>999999){valid=false;return int32_t(-1);}return int32_t(v);};
         d.expected=w();d.actual=w();for(char& c:d.note)c=char(get(1));
         valid=valid&&d.number>0&&(d.flags&~ActivityMask)==0&&d.note.back()==0&&(d.date.year==0||validDate(d.date));
@@ -299,7 +309,7 @@ void writeDay(JsonWriter& w,const Day& d){
     w.raw("{");w.key("date");w.date(d.date);w.raw(",");w.key("number");w.number(d.number);
     w.raw(",");w.key("activities");w.raw("[");
     bool first=true;
-    for(unsigned i=0;i<ActivityCount;++i)if(d.flags&(1u<<i)){if(!first)w.raw(",");w.text(Activities[i]);first=false;}
+    for(unsigned i=0;i<ActivityCount;++i)if(d.flags&(ActivityFlags(1u)<<i)){if(!first)w.raw(",");w.text(Activities[i]);first=false;}
     w.raw("],");w.key("expected");w.weight(d.expected);w.raw(",");w.key("actual");w.weight(d.actual);
     w.raw(",");w.key("note");w.text(d.note.data());w.raw("}");
 }
@@ -534,7 +544,7 @@ bool readDay(JsonReader& r,Token first,Day& d){
             d.flags=0;
             return elements(r,[&](Token t){
                 if(t!=Token::String)return false;
-                for(unsigned i=0;i<ActivityCount;++i)if(!r.overflow&&!std::strcmp(r.text.data(),Activities[i]))d.flags|=uint16_t(1u<<i);
+                for(unsigned i=0;i<ActivityCount;++i)if(!r.overflow&&!std::strcmp(r.text.data(),Activities[i]))d.flags|=ActivityFlags(1u)<<i;
                 return true; // Unknown activity names are ignored.
             });
         }
@@ -884,7 +894,7 @@ class App {
         const unsigned activities=count(state.today.flags);
         if(index==0){std::snprintf(out,size,tr("ACTIVITIES (%u)","ACTIVITÉS (%u)"),activities);return;}
         --index;
-        for(unsigned i=0;i<ActivityCount;++i)if(state.today.flags&(1u<<i)){
+        for(unsigned i=0;i<ActivityCount;++i)if(state.today.flags&(ActivityFlags(1u)<<i)){
             if(index--==0){std::snprintf(out,size,"  %s",tr(EnglishActivities[i],Activities[i]));return;}
         }
         if(!activities){if(index--==0){std::snprintf(out,size,"  %s",tr("None selected","Aucune sélectionnée"));return;}}
@@ -1075,7 +1085,7 @@ public:
             else if(k==Down)selection=(selection+1)%rows;
             else if(daysBack&&(k==Enter||(k>='1'&&k<='9')))readOnly();
             else if(k==Enter||(k>='1'&&k<='9')){
-                unsigned id=k==Enter?page*PageSize+selection:unsigned(k-'1');State next=state;next.today.flags^=uint16_t(1u<<id);
+                unsigned id=k==Enter?page*PageSize+selection:unsigned(k-'1');State next=state;next.today.flags^=ActivityFlags(1u)<<id;
                 if(commit(next)){page=id/PageSize;selection=id%PageSize;}
             }
         }else if(screen==Screen::Weight){
@@ -1238,7 +1248,7 @@ public:
             for(unsigned i=page*PageSize;i<end;++i){
                 // Pad by display cells, not UTF-8 bytes, to align checkboxes.
                 char label[32];displayText(tr(EnglishActivities[i],Activities[i]),label,sizeof label);
-                std::snprintf(b,sizeof b,"%2u  %-24s [%c]",i+1,label,day.flags&(1u<<i)?'x':' ');
+                std::snprintf(b,sizeof b,"%2u  %-24s [%c]",i+1,label,day.flags&(ActivityFlags(1u)<<i)?'x':' ');
                 hw.text(0,(5+int(i-page*PageSize))*16,b,i-page*PageSize==selection);
             }
             line(15,daysBack?tr("<- -> pages   Esc: day menu","<- -> pages   Échap : menu du jour"):tr("Enter: toggle  1-9: keys  <- -> pages","Entrée: cocher  1-9: racc.  <- -> pages"));

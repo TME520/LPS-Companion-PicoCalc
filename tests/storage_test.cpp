@@ -114,6 +114,16 @@ int main(){
     assert(datedDisk.exportIcs(french,60,40,Language::French));
     ics=std::fopen("2028-03-02_LPS-Companion.ics","rb");assert(ics);std::memset(content,0,sizeof content);std::fread(content,1,sizeof(content)-1,ics);assert(std::fclose(ics)==0);
     assert(std::strstr(content,"Activités: Régime, Congé\\NXP:\\NPoids attendu: 110.000 kg\\NPoids effectif: 109.500 kg\\NNote: comma\\, semi\\; slash\\\\"));
+    // LPS-113-CHG08: new activities appear by name, same ICS format.
+    Day added;added.date={2028,3,3};added.flags=1u|(ActivityFlags(1u)<<16)|(ActivityFlags(1u)<<21);
+    assert(datedDisk.exportIcs(added,0,0,Language::English));
+    ics=std::fopen("2028-03-03_LPS-Companion.ics","rb");assert(ics);std::memset(content,0,sizeof content);std::fread(content,1,sizeof(content)-1,ics);assert(std::fclose(ics)==0);
+    assert(std::strstr(content,"DESCRIPTION:Activities: Walk, Sport, Meditation\\NXP:\r\nEND:VEVENT"));
+    added.flags=(ActivityFlags(1u)<<17)|(ActivityFlags(1u)<<18)|(ActivityFlags(1u)<<19)|(ActivityFlags(1u)<<20);
+    assert(datedDisk.exportIcs(added,0,0,Language::French));
+    ics=std::fopen("2028-03-03_LPS-Companion.ics","rb");assert(ics);std::memset(content,0,sizeof content);std::fread(content,1,sizeof(content)-1,ics);assert(std::fclose(ics)==0);
+    assert(std::strstr(content,"DESCRIPTION:Activités: Cuisine, Ménage, Famille, Amis\\NXP:\r\nEND:VEVENT"));
+    std::remove("2028-03-03_LPS-Companion.ics");
     std::remove("2028-02-29_LPS-Companion.ics");std::remove("2028-03-01_LPS-Companion.ics");std::remove("2028-03-02_LPS-Companion.ics");std::remove("2028.csv");std::remove("SAVE_A.JSN");std::remove("SAVE_B.JSN");
     std::puts("PASS: real A/B adapter with host files: history, date, annual CSV, ICS, retries and failure handling.");
 }

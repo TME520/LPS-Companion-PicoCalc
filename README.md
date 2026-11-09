@@ -10,7 +10,7 @@ It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display
 
 **Status:** v1.2 was confirmed working on the user's PicoCalc. v1.12 refines the timer, removes gamification and the notepad, and shows the long date with ISO week; see `BUILD-VALIDATION.md` for host checks and physical-test limits.
 
-**v1.13 in progress** (branch `susucre-lpsc-113`): the save files become JSON. The title bar still reads v1.12 until the version is bumped.
+**v1.13 in progress** (branch `susucre-lpsc-113`): the save files become JSON and the activity list grows to 22. The title bar still reads v1.12 until the version is bumped.
 
 ## Changes in v1.13 (in progress)
 
@@ -18,6 +18,7 @@ It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display
   - **Migration**: on first start, if there is no `.JSN` save yet, v1.13 reads your existing `SAVE_A.BIN`/`SAVE_B.BIN` (any format from v1.0 to v1.12) and writes `SAVE_A.JSN` at the first save. The `.BIN` files are never modified or deleted and stay on the card as a backup. A save written by v1.13 cannot be read by v1.12.
   - Each day stores its ticked activities **by name** (`"activities":["Marche","Messe"]`, French names) rather than as bit positions, ready for user-defined activities.
   - ICS and CSV exports are unchanged.
+- **22 activities** (LPS-113-CHG08): six activities are added after the existing 16: **Sport / Sport, Cooking / Cuisine, Chores / Ménage, Family / Famille, Friends / Amis, Meditation / Méditation**. The Activities screen now has three pages (10 + 10 + 2), and the home counter reads `x/22`. The first 16 keep their order, so days from v1.12 saves migrate unchanged. When ticked, the new activities appear by name in the ICS export, with the same format as before. The list is still fixed; editing it is planned next (CHG07).
 
 ## Changes in v1.12
 
@@ -261,8 +262,14 @@ After closing a day, the next date is set automatically, including month/year bo
 | Arrows + Enter | Doctor (14) | Docteur (14) |
 | Arrows + Enter | Reading (15) | Lecture (15) |
 | Arrows + Enter | Shopping (16) | Shopping (16) |
+| Arrows + Enter | Sport (17) | Sport (17) |
+| Arrows + Enter | Cooking (18) | Cuisine (18) |
+| Arrows + Enter | Chores (19) | Ménage (19) |
+| Arrows + Enter | Family (20) | Famille (20) |
+| Arrows + Enter | Friends (21) | Amis (21) |
+| Arrows + Enter | Meditation (22) | Méditation (22) |
 
-Activities are displayed across two pages (10 + 6). **Left/Right** changes page; **Up/Down** selects an activity; **Enter** toggles its checkbox. Keys **1–9** toggle the corresponding activity from any page. Select activities 10–16 with Up/Down, then press Enter.
+Activities are displayed across three pages (10 + 10 + 2, since v1.13). **Left/Right** changes page and wraps around; **Up/Down** selects an activity; **Enter** toggles its checkbox. Keys **1–9** toggle the corresponding activity from any page. Select activities 10–22 with Up/Down, then press Enter.
 
 Each checkbox can be counted once per day. Checking or unchecking an activity saves immediately.
 

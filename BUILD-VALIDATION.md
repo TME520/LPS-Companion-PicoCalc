@@ -11,6 +11,13 @@
   - The CRC-32 written by the desktop build was checked against Python's `zlib.crc32`.
   - All ten host test suites pass with C++17 and warnings treated as errors. Code also compiles warning-free for 32-bit ARM (`-Wshorten-64-to-32`), but no UF2 was built: no Arm GNU toolchain on the build box.
 - Pending on device: first start with an existing v1.12 card (migration), then a reboot (loads `.JSN`), save speed on the SD card, and power loss during a save.
+- LPS-113-CHG08: default list of 22 activities.
+  - Day activity flags widen from 16 to 32 bits (design capacity 30 for user-defined activities); binary saves still decode 16 bits, mapped to the first 16 names unchanged.
+  - `language_test`, in English and French: home counter `0/22`, then `2/22`; pages `1/3`, `2/3` (items 11-20, including Sport, Cooking/Cuisine, Chores/Ménage, Family/Famille) and `3/3` with only Friends/Amis and Meditation/Méditation, rows 7-14 blank. Up/Down wrap within the two rows of the short page, Left/Right wrap across the three pages. Ticking Méditation and Amis survives a reboot from the JSON save, shows in the daily review, counts 2 on the Close-the-day screen, and is shown ticked, read-only, on page 3 of the archived day. All labels fit 40 columns with the accented display cells.
+  - `json_save_test`: new activities round-trip by French name (`"Ménage"`, `"Méditation"`, `"Sport"`), and the full list in order; full and worst-case saves now use all 22 activities (8.9 KB and 18.4 KB).
+  - `storage_test` (real adapter): ICS with `Activities: Walk, Sport, Meditation` and `Activités: Cuisine, Ménage, Famille, Amis`; the existing first-16 ICS and CSV assertions are unchanged.
+  - `migration_test`: v1.2 and v1.12 BIN days keep their 16 activities.
+  - All ten host test suites pass; also compiles warning-free for 32-bit ARM. No UF2 built.
 
 # Validation v1.12 — 8 November 2026
 

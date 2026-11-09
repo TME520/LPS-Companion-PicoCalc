@@ -250,7 +250,7 @@ public:
         std::snprintf(line,sizeof line,"UID:lps-companion-%s@picocalc\r\nDTSTART;VALUE=DATE:%s\r\nDTEND;VALUE=DATE:%s\r\n",ymd,ymd,next);ok=ok&&put(f,line);
         ok=ok&&put(f,"SUMMARY:LPS Companion\r\nDESCRIPTION:");
         const char* names=language==lps::Language::English?"Activities: ":"Activités: ";ok=ok&&escaped(f,names);
-        bool first=true;for(unsigned i=0;i<lps::ActivityCount;++i)if(day.flags&(1u<<i)){
+        bool first=true;for(unsigned i=0;i<lps::ActivityCount;++i)if(day.flags&(lps::ActivityFlags(1u)<<i)){
             if(!first)ok=ok&&put(f,", ");
             ok=ok&&escaped(f,language==lps::Language::English?lps::EnglishActivities[i]:lps::Activities[i]);first=false;}
         if(first)ok=ok&&put(f,"none");
