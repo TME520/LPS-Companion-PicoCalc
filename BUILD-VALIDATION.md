@@ -1,4 +1,6 @@
-# Validation v1.14 (in progress) — 14 November 2026
+# Validation v1.14 — 14 November 2026
+
+- LPS-114-CHG03: title bar `LPS COMPANION v1.14`; header comment v1.14; language_test asserts the new title. All twelve host test suites pass; compiles warning-free for 32-bit ARM (`-Wshorten-64-to-32`). No UF2 built.
 
 - LPS-114-CHG01: Meal Planner.
   - New `tests/meal_planner_test.cpp`. The deck has 16 cards in rows of 6, 8 and 2 in the agreed order, with separate duplicates; every English and French name and portion fits the card (22 cells).

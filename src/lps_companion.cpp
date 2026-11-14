@@ -1,5 +1,5 @@
 /*
- LPS Companion - v1.14 in progress (title still v1.13), 2026-11-14.
+ LPS Companion - v1.14, 2026-11-14.
  Screen: 320x320, 8x16 bitmap font, 40 columns x 20 rows.
 
  Desktop build (Fedora/Linux):
@@ -13,7 +13,7 @@
  In this package src/main.cpp supplies the LCD, keyboard and SD implementation.
  Run bash build.sh from the project root to create build/lps_companion.uf2.
  Target: original RP2040 PicoCalc, standalone BOOTSEL firmware.
- v1.2 confirmed on the user's PicoCalc; v1.13 needs device testing.
+ v1.2 confirmed on the user's PicoCalc; v1.14 needs device testing.
  The portable application remains independent of the Pico SDK; desktop and
  built-in tests below remain available for checking the UI/state machine.
 
@@ -1689,7 +1689,7 @@ public:
     void render(){
         hw.setPalette(displayedPalette());hw.clear();char b[128];const Day& day=viewedDay();char date[11]{};
         if(validDate(day.date))dateText(day.date,date,sizeof date);else std::snprintf(date,sizeof date,"%s%lu",tr("D","J"),static_cast<unsigned long>(day.number));
-        std::snprintf(b,sizeof b,"LPS COMPANION v1.13    %s",date);line(0,b,true);
+        std::snprintf(b,sizeof b,"LPS COMPANION v1.14    %s",date);line(0,b,true);
         if(validDate(day.date)){longDateText(day.date,b,sizeof b);line(1,b);}
         if(daysBack)line(2,tr("ARCHIVED DAY - READ ONLY","JOUR ARCHIVÉ - LECTURE SEULE"));
         if(screen==Screen::Home){

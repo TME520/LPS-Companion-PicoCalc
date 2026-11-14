@@ -58,7 +58,7 @@ void checkMenus(Display& d,App& a,bool fr){
     assert(key&&d.bold[19][unsigned(key-footer)]);
     if(fr){char back[24];displayText("Retour",back,sizeof back);const char* plain=std::strstr(footer,back);assert(plain);for(unsigned i=0;i<std::strlen(back);++i)assert(!d.bold[19][unsigned(plain-footer)+i]);}
     assert(d.has(17,fr?"Jour précédent":"Previous day"));
-    assert(d.has(0,"v1.13    2026-09-17"));
+    assert(d.has(0,"v1.14    2026-09-17"));
     // LPS-112-CHG03: no XP anywhere; line 1 shows the long date and ISO week.
     assert(d.has(1,fr?"Jeudi 17 Septembre 2026 (semaine 38)":"Thursday 17 September 2026 (week 38)")&&!d.anyXp());
     a.key('0');assert(d.has(3,"DATE"));assert(d.has(6,"2026-09-17"));

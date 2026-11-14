@@ -1,4 +1,4 @@
-# LPS-Companion v1.13
+# LPS-Companion v1.14
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
@@ -8,10 +8,11 @@ LPS-Companion helps you record daily activities and compare your expected and ac
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries are saved to the SD card.
 
-**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.14 is in progress (Meal Planner); the title bar still reads v1.13. v1.13 moves the saves to JSON and makes the activity list user-defined (22 by default, up to 30); it needs device testing. See `BUILD-VALIDATION.md` for host checks and physical-test limits.
+**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.14 adds the Meal Planner, a hidden card deck for the day's meals (Space on the home menu) with a daily CSV export; it needs device testing. See `BUILD-VALIDATION.md` for host checks and physical-test limits.
 
-## Changes in v1.14 (in progress)
+## Changes in v1.14
 
+- **Title** (LPS-114-CHG03): the title bar reads `LPS COMPANION v1.14`.
 - **Meal Planner** (LPS-114-CHG01): a hidden mode for your 24-hour meal cards. Press **Space** on the home menu to open it (there is no menu entry); **Space** or **Esc** returns to the menu. The deck is fixed at 16 cards in three rows, in this order, with duplicates as separate cards:
   - **Drinks / Boissons** (6): Coffee (Latte) / Café (Latte), Coffee (Black) / Café (Noir) ×2, Tea / Thé, Mint Tea / Thé à la menthe, Light Juice / Jus léger.
   - **Food / Nourriture** (8): Light Cheese Wrap / Wrap fromage léger ×2, Tomato Salad / Salade de tomates, Biscuit, Cheese / Fromage, Apple / Pomme, Orange, Soup / Soupe.
