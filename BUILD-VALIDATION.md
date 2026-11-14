@@ -1,3 +1,19 @@
+# Validation v1.14 (in progress) — 14 November 2026
+
+- LPS-114-CHG01: Meal Planner.
+  - New `tests/meal_planner_test.cpp`. The deck has 16 cards in rows of 6, 8 and 2 in the agreed order, with separate duplicates; every English and French name and portion fits the card (22 cells).
+  - Space on Home opens the planner, with no visible menu entry; Space and Esc return to Home. After a visit, the home digits, arrows and Enter still open Activities, Weight and Close the day. Space still types a space in the Kanban editor and is ignored on the Activities screen. Visiting the planner writes nothing.
+  - Navigation: Left/Right wrap inside a row (Drinks 1/6 → 6/6 → 1/6, Food 1/8 → 8/8), Up/Down wrap between rows and keep the column, or clamp to the last card of the Blank row.
+  - Enter plays a card and saves at once: header `PLAYED #n`, counter `15/16 left`, footer `Enter:Put back`. Enter again puts it back, and later plays move up one place. Both Coffee (Black) cards are played separately. Reopening lands on the first card still in the deck. With all 16 played, the counter reads `0/16 left`. French labels: `PLANIFICATEUR DE REPAS`, `JOUÉE #1`, `Boissons 1/6`, `0/16 restantes`, `Entrée:Remettre`.
+  - Persistence: `"meals":{"played":[8,2,1]}` is written at the end of `state` and the order survives a restart. A schema-2 save without `meals` (v1.13) loads with a full deck. Unknown keys inside `meals` are skipped. An index of 16 or -1, a duplicate, a string, a fraction or a non-object `meals` is rejected as damage. The schema stays 2.
+  - A failed save rolls the play back and shows `Save failed`; a damaged save blocks plays. From an archived day, Space shows `Archived day: read-only`.
+  - Closing the day resets the deck to 16 cards in RAM and in the save; a failed close keeps today's deck.
+  - Drawing (`drawMealCard` into a host frame): everything stays inside the 192 × 190 card at (64, 81), with rounded corners left untouched and the row colour on the border. The apple sprite puts red in the centre. A played card is entirely grey. Labels are centred inside the border (`Food`, `Apple`, `1 medium`; `Boissons`, `Thé à la menthe`).
+  - PicoCalc adapter: the card is drawn after the text rows with `draw_rect_spi` (fills) and `draw_buffer_spi` (one 128-pixel row at a time, 576-byte row buffer in BSS), and its labels with the same accent-composed 8×16 glyphs as the text rows (glyph code shared). Entering or leaving the planner repaints all rows, so no card remnants are left on Home. Previews were rendered on the host through the real adapter and upstream font.
+  - Memory: `sizeof(State)` grows from 30288 to 30308 bytes (17-byte deck state). Firmware object for 32-bit ARM (Cortex-M0+, `-Os`): BSS +0.6 KB (three States, card views, row buffer), flash about +10 KB (6.7 KB of sprites in `.rodata`, plus code). The render path adds about 1.2 KB of stack (row of 128 colours + label bitmap).
+  - All twelve host test suites pass with C++17 and warnings treated as errors. Code also compiles warning-free for 32-bit ARM (`-Wshorten-64-to-32`), but no UF2 was built: no Arm GNU toolchain on the build box.
+- Pending on device: Space key reaches the app; card colours and sprite look on the real LCD; drawing speed of the card; save time per play.
+
 # Validation v1.13 — 9 November 2026
 
 - LPS-113-CHG09: title bar `LPS COMPANION v1.13`; header comment v1.13; language_test asserts the new title.

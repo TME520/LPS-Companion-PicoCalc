@@ -12,6 +12,9 @@ extern "C" {
 #include "ff.h"
 extern unsigned char *MainFont;
 void draw_bitmap_spi(int,int,int,int,int,int,int,unsigned char*);
+// LPS-114-CHG01: solid rectangles and 24-bit pixel rows for the Meal Planner card.
+void draw_rect_spi(int,int,int,int,int);
+void draw_buffer_spi(int,int,int,int,unsigned char*);
 }
 namespace {
 // LPS-113-CHG06: the save is JSON in two alternating files. The binary files
@@ -68,7 +71,7 @@ Slot readSlot(unsigned slot,lps::State& into){
     if(check!=lps::SaveCheck::Valid){s.status=Slot::Damaged;return s;}
     s.status=Slot::Valid;s.generation=info.generation;s.checksum=info.checksum;return s;
 }
-class PicoCalc final:public lps::Platform {
+class PicoCalc final:public lps::Platform,public lps::Canvas {
     std::array<std::array<char,40>,20> frame{},previous{};
     std::array<bool,20> reverse{},oldReverse{};
     std::array<bool,20> alertRow{},oldAlertRow{};
@@ -84,6 +87,32 @@ class PicoCalc final:public lps::Platform {
     // the hardware adapter avoids a large stack allocation on the RP2040.
     std::array<char,16384> csv{};
     std::array<char,6> largeValue{};bool largeRed=false,hadLarge=false;
+    // LPS-114-CHG01: Meal Planner card, drawn after the text rows; one pixel row buffer (B,G,R).
+    lps::MealCardView card{},shownCard{};bool hasCard=false,hadCard=false;
+    std::array<unsigned char,lps::MealCardW*3> pixelRow{};
+    // One 8x16 cell of the upstream 8x12 font, padded by two rows above and
+    // below. The upstream extended font is NOT Latin-1: French accents are
+    // composed over their ASCII bases. out[row*stride] receives row 0..15.
+    static void glyphCell(unsigned c,bool heavy,unsigned char* out,int stride){
+        unsigned accent=0;bool upper=false;
+        switch(c){
+        case 0xc0:c='A';accent=2;upper=true;break;
+        case 0xe9:c='e';accent=1;break;case 0xe8:c='e';accent=2;break;
+        case 0xea:c='e';accent=3;break;case 0xe0:c='a';accent=2;break;
+        case 0xe2:c='a';accent=3;break;case 0xee:c='i';accent=3;break;
+        case 0xf4:c='o';accent=3;break;case 0xf9:c='u';accent=2;break;
+        case 0xfb:c='u';accent=3;break;case 0xe7:c='c';accent=4;break;
+        case 0xc9:c='E';accent=1;upper=true;break;case 0xc8:c='E';accent=2;upper=true;break;
+        }
+        if(c<32||c>126)c=32;
+        for(int y=0;y<12;++y){const auto glyph=MainFont[4+(c-32)*12+y];
+            out[(y+2)*stride]=heavy?static_cast<unsigned char>(glyph|(glyph>>1)):glyph;}
+        const unsigned top=upper?0:3;
+        if(accent==1){out[top*stride]=0x08;out[(top+1)*stride]=0x10;}
+        if(accent==2){out[top*stride]=0x10;out[(top+1)*stride]=0x08;}
+        if(accent==3){out[top*stride]=0x10;out[(top+1)*stride]=0x28;}
+        if(accent==4){out[12*stride]=0x10;out[13*stride]=0x20;}
+    }
     int foreground=0xe4eed5,background=0x18291c,selected=0xbad99f;
     static bool put(FIL& f,const char* text){UINT written=0;const auto n=std::strlen(text);return f_write(&f,text,n,&written)==FR_OK&&written==n;}
     static bool escaped(FIL& f,const char* text){
@@ -105,7 +134,7 @@ public:
         adc_init();adc_gpio_init(29);
         if(sd_init_driver())mounted=f_mount(&sd_get_by_num(0)->fatfs,"0:",1)==FR_OK;
     }
-    void clear()override{largeValue.fill(0);for(auto& row:frame)row.fill(' ');reverse.fill(false);alertRow.fill(false);for(auto& row:bold)row.fill(false);}
+    void clear()override{hasCard=false;largeValue.fill(0);for(auto& row:frame)row.fill(' ');reverse.fill(false);alertRow.fill(false);for(auto& row:bold)row.fill(false);}
     void setPalette(lps::Palette palette)override{
         const int oldForeground=foreground,oldBackground=background,oldSelected=selected;
         switch(palette){
@@ -139,39 +168,34 @@ public:
         else if(millivolts>3550)lowBattery=false;
         return lowBattery;
     }
+    void mealCard(const lps::MealCardView& view)override{card=view;hasCard=true;}
+    void fill(int x,int y,int w,int h,uint32_t rgb)override{if(w>0&&h>0)draw_rect_spi(x,y,x+w-1,y+h-1,int(rgb));}
+    void pixels(int x,int y,int w,const uint32_t* rgb)override{
+        if(w<=0||std::size_t(w)*3>pixelRow.size())return;
+        for(int i=0;i<w;++i){pixelRow[std::size_t(i)*3]=uint8_t(rgb[i]);pixelRow[std::size_t(i)*3+1]=uint8_t(rgb[i]>>8);pixelRow[std::size_t(i)*3+2]=uint8_t(rgb[i]>>16);}
+        draw_buffer_spi(x,y,x+w-1,y,pixelRow.data());
+    }
+    void label(int x,int y,const char* latin1,uint32_t fg,uint32_t bg)override{
+        std::array<unsigned char,16*40> bitmap{};int n=0;
+        for(;latin1[n]&&n<40;++n){}
+        if(!n)return;
+        for(int col=0;col<n;++col)glyphCell(static_cast<unsigned char>(latin1[col]),false,bitmap.data()+col,n);
+        draw_bitmap_spi(x,y,n*8,16,1,int(fg),int(bg),bitmap.data());
+    }
     void largeText(const char* value,bool red)override{
         std::snprintf(largeValue.data(),largeValue.size(),"%s",value);largeRed=red;
     }
     void present()override{
         if(hadLarge||largeValue[0])first=true;
+        // Entering or leaving the Meal Planner repaints every row under the card.
+        if(hadCard!=hasCard)first=true;
         // Upstream font is 8x12. Pad two rows above/below to make 8x16 cells.
         // One 640-byte monochrome line buffer, not a 307,200-byte framebuffer.
         std::array<unsigned char,640> bitmap{};
         for(int row=0;row<20;++row){
             if(!first&&frame[row]==previous[row]&&reverse[row]==oldReverse[row]&&alertRow[row]==oldAlertRow[row]&&bold[row]==oldBold[row])continue;
             bitmap.fill(0);
-            for(int col=0;col<40;++col){unsigned c=static_cast<unsigned char>(frame[row][col]);
-                // The upstream extended font is NOT Latin-1. Compose French
-                // accents over its ASCII bases in the padded 8x16 cell.
-                unsigned accent=0;bool upper=false;
-                switch(c){
-                case 0xc0:c='A';accent=2;upper=true;break;
-                case 0xe9:c='e';accent=1;break;case 0xe8:c='e';accent=2;break;
-                case 0xea:c='e';accent=3;break;case 0xe0:c='a';accent=2;break;
-                case 0xe2:c='a';accent=3;break;case 0xee:c='i';accent=3;break;
-                case 0xf4:c='o';accent=3;break;case 0xf9:c='u';accent=2;break;
-                case 0xfb:c='u';accent=3;break;case 0xe7:c='c';accent=4;break;
-                case 0xc9:c='E';accent=1;upper=true;break;case 0xc8:c='E';accent=2;upper=true;break;
-                }
-                if(c<32||c>126)c=32;
-                for(int y=0;y<12;++y){const auto glyph=MainFont[4+(c-32)*12+y];
-                    bitmap[(y+2)*40+col]=(alertRow[row]||bold[row][col])?static_cast<unsigned char>(glyph|(glyph>>1)):glyph;}
-                const unsigned top=upper?0:3;
-                if(accent==1){bitmap[top*40+col]=0x08;bitmap[(top+1)*40+col]=0x10;}
-                if(accent==2){bitmap[top*40+col]=0x10;bitmap[(top+1)*40+col]=0x08;}
-                if(accent==3){bitmap[top*40+col]=0x10;bitmap[(top+1)*40+col]=0x28;}
-                if(accent==4){bitmap[12*40+col]=0x10;bitmap[13*40+col]=0x20;}
-            }
+            for(int col=0;col<40;++col)glyphCell(static_cast<unsigned char>(frame[row][col]),alertRow[row]||bold[row][col],bitmap.data()+col,40);
             const int fg=alertRow[row]?0xf05252:(reverse[row]?background:foreground),bg=reverse[row]?selected:background;
             draw_bitmap_spi(0,row*16,320,16,1,fg,bg,bitmap.data());
         }
@@ -189,6 +213,8 @@ public:
             draw_bitmap_spi(80,112,160,64,1,largeRed?0xf05252:foreground,background,largeBitmap.data());
         }
         hadLarge=largeValue[0]!=0;
+        if(hasCard&&(first||card!=shownCard)){lps::drawMealCard(*this,card);shownCard=card;}
+        hadCard=hasCard;
         previous=frame;oldReverse=reverse;oldAlertRow=alertRow;oldBold=bold;first=false;
     }
     lps::LoadResult load(lps::State& out)override{

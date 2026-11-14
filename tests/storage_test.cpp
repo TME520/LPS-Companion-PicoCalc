@@ -15,6 +15,8 @@ unsigned char fontStub[4+224*12]{};
 extern "C" {
 unsigned char* MainFont=fontStub;
 void draw_bitmap_spi(int,int,int,int,int,int,int,unsigned char*){}
+void draw_rect_spi(int,int,int,int,int){}
+void draw_buffer_spi(int,int,int,int,unsigned char*){}
 }
 lps::Day sample(unsigned n){
     lps::Day d;d.number=n;d.flags=uint16_t(n%2048);
