@@ -29,3 +29,5 @@ g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/activities_test.cpp -o bui
 ./build-host/activities_test
 g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/timer_test.cpp -o build-host/timer_test
 ./build-host/timer_test
+g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/meal_planner_test.cpp -o build-host/meal_planner_test
+./build-host/meal_planner_test

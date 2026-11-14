@@ -8,6 +8,8 @@ unsigned char fontStub[4+224*12]{};
 extern "C" {
 unsigned char* MainFont=fontStub;
 void draw_bitmap_spi(int,int,int,int,int,int,int,unsigned char*){}
+void draw_rect_spi(int,int,int,int,int){}
+void draw_buffer_spi(int,int,int,int,unsigned char*){}
 }
 void put32(uint8_t* p,uint32_t x){for(int i=0;i<4;++i){p[i]=uint8_t(x);x>>=8;}}
 // Wrap a legacy payload in the v1.12 A/B record envelope (SAVE_A/B.BIN).

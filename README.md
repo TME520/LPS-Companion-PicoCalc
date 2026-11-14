@@ -1,4 +1,4 @@
-# LPS-Companion v1.13
+# LPS-Companion v1.14
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
@@ -8,7 +8,33 @@ LPS-Companion helps you record daily activities and compare your expected and ac
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries are saved to the SD card.
 
-**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.13 moves the saves to JSON and makes the activity list user-defined (22 by default, up to 30); it needs device testing. See `BUILD-VALIDATION.md` for host checks and physical-test limits.
+**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.14 adds the Meal Planner, a hidden card deck for the day's meals (Space on the home menu) with a daily CSV export; it needs device testing. See `BUILD-VALIDATION.md` for host checks and physical-test limits.
+
+## Changes in v1.14
+
+- **Title** (LPS-114-CHG03): the title bar reads `LPS COMPANION v1.14`.
+- **Meal Planner** (LPS-114-CHG01): a hidden mode for your 24-hour meal cards. Press **Space** on the home menu to open it (there is no menu entry); **Space** or **Esc** returns to the menu. The deck is fixed at 16 cards in three rows, in this order, with duplicates as separate cards:
+  - **Drinks / Boissons** (6): Coffee (Latte) / Café (Latte), Coffee (Black) / Café (Noir) ×2, Tea / Thé, Mint Tea / Thé à la menthe, Light Juice / Jus léger.
+  - **Food / Nourriture** (8): Light Cheese Wrap / Wrap fromage léger ×2, Tomato Salad / Salade de tomates, Biscuit, Cheese / Fromage, Apple / Pomme, Orange, Soup / Soupe.
+  - **Blank** (2): mystery food, nothing to type.
+  - One card is shown at a time, drawn like your paper cards (LPS-114-CHG01b): the card's own pastel border (peach latte, pink black coffee, yellow wrap, green salad, lavender biscuit, blue cheese…), a header band naming the row, your illustration (88 × 64 pixels shown at 176 × 128), the name, and the portion on a ribbon (for example `1 mug` / `1 tasse`). The Blank card shows your Blank design: the grey `Blank` ribbon with its burst lines. Above the card: the row and position (`Drinks 1/6`) and the cards left (`11/16 left` / `11/16 restantes`).
+  - **Left** / **Right** move between the cards of a row and wrap at the ends. **Up** / **Down** move between the rows (Drinks, Food, Blank) and wrap; the position in the row is kept when the new row is long enough, otherwise the last card is shown.
+  - **Enter** plays the card: it turns grey and the header shows its place in the order of play (`PLAYED #3` / `JOUÉE #3`). **Enter** on a grey card puts it back in the deck; the cards played after it move up one place. The PicoCalc has no clock, so the order of play is the only order kept.
+  - Each play or put-back is saved at once in `SAVE_A.JSN`/`SAVE_B.JSN`, like an activity tick (`"meals":{"played":[…]}`, deck positions in order of play). The key is optional, so v1.13 saves load with a full deck and the schema version stays 2.
+  - The Meal Planner opens on the first card still in the deck. It works on today only; from an archived day, Space shows the read-only message.
+  - **New day, new deck**: closing the day (9) deals 16 fresh cards. Played cards are not added to the archive or to the ICS export.
+  - The pictures come from your two card sheets, kept in `assets/meal_deck_sheet1.png` and `assets/meal_deck_sheet2.png`. `tools/meal_sprites.py` (Python 3 + Pillow) crops each illustration, removes the white background, reduces it to 88 × 64 with 15 colours of its own, and writes `src/meal_sprites.h` (13 distinct pictures, 4 bits per pixel, about 37 KB in flash).
+
+- **Meal Planner CSV** (LPS-114-CHG02): leaving the Meal Planner (**Space** or **Esc**) rewrites `LPS/EXPORT/MPYYMMDD.CSV` for the current day (for example `MP261114.CSV` for 14 November 2026), next to the ICS files. It lists the played cards in the order they were played, with English names whatever the screen language so other tools can read it:
+
+  ```
+  order,category,card,portion
+  1,Drinks,Coffee (Latte),1 mug
+  2,Food,Tomato Salad,1 bowl
+  3,Blank,Blank,
+  ```
+
+  Lines end in CRLF, text is UTF-8, and a field holding a comma, a quote or a line break is quoted (RFC 4180). Blank cards have an empty portion. If no card is played, no file is created, but an existing file for that day is reset to its header line. If the write fails, the incomplete file is removed and `Meal CSV export failed` / `Export CSV repas échoué` appears on Home. The deck itself is already saved, and the next exit tries again. Closing the day does not write this file.
 
 ## Changes in v1.13
 

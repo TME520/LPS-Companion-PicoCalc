@@ -1,5 +1,5 @@
 /*
- LPS Companion - v1.13, 2026-11-09.
+ LPS Companion - v1.14, 2026-11-14.
  Screen: 320x320, 8x16 bitmap font, 40 columns x 20 rows.
 
  Desktop build (Fedora/Linux):
@@ -13,7 +13,7 @@
  In this package src/main.cpp supplies the LCD, keyboard and SD implementation.
  Run bash build.sh from the project root to create build/lps_companion.uf2.
  Target: original RP2040 PicoCalc, standalone BOOTSEL firmware.
- v1.2 confirmed on the user's PicoCalc; v1.13 needs device testing.
+ v1.2 confirmed on the user's PicoCalc; v1.14 needs device testing.
  The portable application remains independent of the Pico SDK; desktop and
  built-in tests below remain available for checking the UI/state machine.
 
@@ -40,7 +40,7 @@
    A/B recovery chooses the highest-generation intact record. No dynamic allocation in
    application code. SD adapter must provide atomic/durable replacement.
 
- Desktop commands are line-based: enter/up/down/left/right/esc/back, digits 1-9,
+ Desktop commands are line-based: enter/up/down/left/right/esc/space/back, digits 1-9,
  text YOUR TEXT, quit. To edit a field, use back, or enter an empty field as-is.
  Desktop save is lps_companion.jsn in the current working directory
  (an older lps_companion.sav is read once and left untouched).
@@ -50,7 +50,9 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <algorithm>
 #include <limits>
+#include "meal_sprites.h" // LPS-114-CHG01b: generated from the user's card sheets
 
 namespace lps {
 enum class Language : uint8_t { English, French };
@@ -84,6 +86,24 @@ enum Key { Enter=13, Backspace=8, Escape=27, Up=1000, Down, Left, Right, DeleteK
 enum class LoadResult { Missing, Ok, NoStorage, Error };
 struct Day;
 struct State;
+struct Date;
+struct MealDeckState;
+// LPS-114-CHG01: what the Meal Planner shows. The adapter keeps it until
+// present() and draws it with drawMealCard() after the text rows.
+struct MealCardView {
+    uint8_t card=0;      // index in MealDeck
+    uint8_t position=0;  // 1-based order of play, 0 when not played
+    Language language=Language::English;
+    bool operator==(const MealCardView& o)const{return card==o.card&&position==o.position&&language==o.language;}
+    bool operator!=(const MealCardView& o)const{return!(*this==o);}
+};
+// Minimal pixel surface for the card, in screen pixels with 0xRRGGBB colours.
+struct Canvas {
+    virtual ~Canvas()=default;
+    virtual void fill(int x,int y,int w,int h,uint32_t rgb)=0;
+    virtual void pixels(int x,int y,int w,const uint32_t* rgb)=0; // one row of w pixels
+    virtual void label(int x,int y,const char* latin1,uint32_t fg,uint32_t bg)=0; // 8x16 cells
+};
 struct Platform {
     virtual ~Platform() = default;
     virtual void clear()=0;
@@ -97,6 +117,9 @@ struct Platform {
     // Hardware may override this. Host/test platforms report a healthy battery.
     virtual bool batteryBelow20(){return false;}
     virtual void largeText(const char* value,bool red){if(red)alert(80,128,value);else text(80,128,value,false);}
+    // LPS-114-CHG01: the Meal Planner card, drawn over blank rows 5-16.
+    // Text-only platforms may ignore it.
+    virtual void mealCard(const MealCardView&){}
     virtual void present()=0;
     // Apply the selected theme before drawing. The desktop implementation may ignore it.
     virtual void setPalette(Palette)=0;
@@ -114,6 +137,11 @@ struct Platform {
     // The yearly weight journal is exported before the state commit as well.
     // Implementations must treat a repeated date as already exported.
     virtual bool exportWeightCsv(const Day& day)=0;
+    // LPS-114-CHG02: rewrite the day's Meal Planner CSV (MPYYMMDD.CSV) when
+    // the planner is left. With no card played, an existing file is reset to
+    // its header and a missing one is not created. Platforms without storage
+    // may keep the default.
+    virtual bool exportMealCsv(const Date&,const MealDeckState&){return true;}
 };
 // LPS-113-CHG08: default list of 22 activities. Order matters: the first 16
 // keep the bit positions of v1.12 binary saves; JSON saves store the French names.
@@ -176,6 +204,49 @@ struct Task {
     std::array<char,TaskNameLength+1> name{};
 };
 struct Reminder { Date from{};uint16_t duration=1;std::array<char,ReminderTextLength+1> text{}; };
+// LPS-114-CHG01: Meal Planner. A fixed deck of 16 cards for one day, in
+// three rows; duplicates are separate cards. The device has no clock, so the
+// order of play is the only order kept. Closing the day deals a new deck.
+enum class MealRow : uint8_t { Drinks, Food, Blank };
+struct MealCard { MealRow row;uint8_t sprite;const char* en;const char* fr;const char* enPortion;const char* frPortion; };
+constexpr MealCard MealDeck[]={
+    {MealRow::Drinks,meal_sprites::Latte,"Coffee (Latte)","Café (Latte)","1 mug","1 tasse"},
+    {MealRow::Drinks,meal_sprites::Black,"Coffee (Black)","Café (Noir)","1 cup","1 tasse"},
+    {MealRow::Drinks,meal_sprites::Black,"Coffee (Black)","Café (Noir)","1 cup","1 tasse"},
+    {MealRow::Drinks,meal_sprites::Tea,"Tea","Thé","1 cup","1 tasse"},
+    {MealRow::Drinks,meal_sprites::MintTea,"Mint Tea","Thé à la menthe","1 cup","1 tasse"},
+    {MealRow::Drinks,meal_sprites::Juice,"Light Juice","Jus léger","1 glass","1 verre"},
+    {MealRow::Food,meal_sprites::Wrap,"Light Cheese Wrap","Wrap fromage léger","1 wrap","1 wrap"},
+    {MealRow::Food,meal_sprites::Wrap,"Light Cheese Wrap","Wrap fromage léger","1 wrap","1 wrap"},
+    {MealRow::Food,meal_sprites::Salad,"Tomato Salad","Salade de tomates","1 bowl","1 bol"},
+    {MealRow::Food,meal_sprites::Biscuit,"Biscuit","Biscuit","1 serving","1 portion"},
+    {MealRow::Food,meal_sprites::Cheese,"Cheese","Fromage","1 portion","1 portion"},
+    {MealRow::Food,meal_sprites::Apple,"Apple","Pomme","1 medium","1 moyenne"},
+    {MealRow::Food,meal_sprites::Orange,"Orange","Orange","1 medium","1 moyenne"},
+    {MealRow::Food,meal_sprites::Soup,"Soup","Soupe","1 bowl","1 bol"},
+    {MealRow::Blank,meal_sprites::Blank,"Blank","Blank","?","?"},
+    {MealRow::Blank,meal_sprites::Blank,"Blank","Blank","?","?"},
+};
+constexpr unsigned MealCardCount=sizeof MealDeck/sizeof MealDeck[0], MealRowCount=3;
+constexpr uint8_t MealRowFirst[MealRowCount+1]={0,6,14,16}; // first card of each row, then the end
+static_assert(MealCardCount==16&&MealRowFirst[MealRowCount]==MealCardCount,"The deck has 16 cards");
+struct MealDeckState {
+    uint8_t playedCount=0;
+    std::array<uint8_t,MealCardCount> order{}; // deck indices, in order of play
+};
+// 1-based position in the order of play, 0 when the card is still in the deck.
+unsigned mealPlayPosition(const MealDeckState& d,unsigned card){
+    for(unsigned i=0;i<d.playedCount;++i)if(d.order[i]==card)return i+1;
+    return 0;
+}
+// Plays a card, or puts a played card back (later plays move up one place).
+void toggleMealCard(MealDeckState& d,unsigned card){
+    if(card>=MealCardCount)return;
+    if(const unsigned position=mealPlayPosition(d,card)){
+        for(unsigned i=position-1;i+1<d.playedCount;++i)d.order[i]=d.order[i+1];
+        d.order[--d.playedCount]=0;
+    }else if(d.playedCount<MealCardCount)d.order[d.playedCount++]=uint8_t(card);
+}
 struct State {
     Language language=Language::English;
     Palette palette=Palette::Green;
@@ -190,6 +261,7 @@ struct State {
     uint8_t activityCount=0;
     uint16_t nextActivityId=1;
     std::array<Activity,ActivityCapacity> activities{};
+    MealDeckState meals{};
     State();
 };
 const char* storedName(const Activity& a){return a.french[0]?a.french.data():a.english.data();}
@@ -404,6 +476,10 @@ bool decode(const uint8_t* bytes,std::size_t size,State& out) {
 //             "expected":grams|null,"actual":grams|null,"note":"..."}
 //   TASK     {"status":"todo"|"doing"|"done","name":"..."}
 //   REMINDER {"from":"YYYY-MM-DD","days":N,"text":"..."}
+// LPS-114-CHG01 adds "meals":{"played":[3,0,...]} at the end of "state": the
+// played deck indices in order of play. It is optional (absent = full deck),
+// so the schema stays 2: v1.13 saves load with a full deck, and v1.13 skips
+// the key as unknown.
 // "crc32" is the CRC-32 (IEEE, lowercase hex) of every byte before the
 // "crc32" key and must be the last member. History is stored oldest first.
 // Each day stores ticked identity names (French if set, otherwise English).
@@ -464,6 +540,37 @@ void writeDay(JsonWriter& w,const State& s,const Day& d){
 }
 // Streams the whole save to sink through one small buffer. checksum receives
 // the CRC-32 written in the file, so the adapter can verify its read-back.
+// ---------------------------------------------------------------------------
+// LPS-114-CHG02: Meal Planner CSV, one file per day: MPYYMMDD.CSV (MP = Meal
+// Planner). It lists the played cards in order of play (the device has no
+// clock), with stable English names whatever the UI language, so tools can
+// read it; Blank cards have an empty portion. CRLF lines, UTF-8, RFC 4180
+// quoting:
+//   order,category,card,portion
+//   1,Drinks,Coffee (Latte),1 mug
+void mealCsvName(const Date& d,char* out,std::size_t n){
+    std::snprintf(out,n,"MP%02u%02u%02u.CSV",unsigned(d.year%100),unsigned(d.month),unsigned(d.day));
+}
+// A field is quoted when it holds a comma, a quote or a line break; quotes are doubled.
+bool writeCsvField(SaveSink& sink,const char* value){
+    if(!std::strpbrk(value,",\"\r\n"))return sink.write(value,std::strlen(value));
+    bool ok=sink.write("\"",1);
+    for(const char* p=value;*p&&ok;++p)ok=*p=='"'?sink.write("\"\"",2):sink.write(p,1);
+    return ok&&sink.write("\"",1);
+}
+bool writeMealCsv(const MealDeckState& meals,SaveSink& sink){
+    constexpr char header[]="order,category,card,portion\r\n";
+    constexpr const char* rows[]={"Drinks","Food","Blank"};
+    bool ok=sink.write(header,sizeof header-1);
+    for(unsigned i=0;i<meals.playedCount&&ok;++i){
+        const MealCard& card=MealDeck[meals.order[i]<MealCardCount?meals.order[i]:0];
+        char number[8];std::snprintf(number,sizeof number,"%u,",i+1);
+        ok=sink.write(number,std::strlen(number))&&writeCsvField(sink,rows[unsigned(card.row)])&&sink.write(",",1)
+            &&writeCsvField(sink,card.en)&&sink.write(",",1)
+            &&writeCsvField(sink,card.row==MealRow::Blank?"":card.enPortion)&&sink.write("\r\n",2);
+    }
+    return ok;
+}
 bool writeSave(const State& s,uint32_t generation,SaveSink& sink,uint32_t& checksum){
     JsonWriter w(sink);
     w.raw("{");w.key("format");w.text("lps-companion");w.raw(",");w.key("version");w.number(SaveSchemaVersion);
@@ -496,7 +603,9 @@ bool writeSave(const State& s,uint32_t generation,SaveSink& sink,uint32_t& check
         w.raw("\n{");w.key("from");w.date(r.from);w.raw(",");w.key("days");w.number(r.duration);
         w.raw(",");w.key("text");w.text(r.text.data());w.raw("}");
     }
-    w.raw("]},\n");
+    w.raw("],\n");w.key("meals");w.raw("{");w.key("played");w.raw("[");
+    for(unsigned i=0;i<s.meals.playedCount;++i){if(i)w.raw(",");w.number(s.meals.order[i]);}
+    w.raw("]}},\n");
     checksum=w.checksum();
     char hex[12];std::snprintf(hex,sizeof hex,"%08lx",static_cast<unsigned long>(checksum));
     w.key("crc32");w.text(hex);w.raw("}\n");w.flush();
@@ -716,6 +825,7 @@ void resetState(State& s){
     for(Task& t:s.tasks)t=Task{};
     s.reminderCount=0;
     for(Reminder& r:s.reminders)r=Reminder{};
+    s.meals=MealDeckState{};
     fillDefaultActivities(s);
 }
 bool readState(JsonReader& r,State& s){
@@ -789,6 +899,21 @@ bool readState(JsonReader& r,State& s){
                 ++s.reminderCount;return true;
             });
         }
+        if(!std::strcmp(key,"meals")){
+            if(r.next()!=Token::ObjectBegin)return false;
+            s.meals=MealDeckState{};
+            return members(r,[&](const char* field){
+                if(std::strcmp(field,"played"))return r.skip(r.next());
+                if(r.next()!=Token::ArrayBegin)return false;
+                s.meals=MealDeckState{};
+                return elements(r,[&](Token t){
+                    // Deck indices, each card at most once.
+                    if(t!=Token::Number||!r.integer||r.number<0||r.number>=int64_t(MealCardCount))return false;
+                    if(mealPlayPosition(s.meals,unsigned(r.number)))return false;
+                    s.meals.order[s.meals.playedCount++]=uint8_t(r.number);return true;
+                });
+            });
+        }
         return r.skip(r.next());
     }))return false;
     resolveAllDayFlags(s);return true;
@@ -835,8 +960,67 @@ SaveCheck readSave(SaveSource& source,State& out,SaveInfo& info){
     info.checksum=stored;
     return unsupported?SaveCheck::Unsupported:SaveCheck::Valid;
 }
+// LPS-114-CHG01: the Meal Planner card, 192x190 pixels over text rows 5-16,
+// in the style of the user's paper cards (LPS-114-CHG01b): the card's own
+// pastel border and header band (the header names the row), the illustration
+// (88x64 drawn x2), the name, and the portion on a ribbon. The Blank card is
+// the user's design (ribbon and burst lines) with no name or portion below.
+// Played cards are drawn entirely in faded greys.
+constexpr int MealCardX=64,MealCardY=81,MealCardW=192,MealCardH=190,MealSpriteScale=2;
+constexpr uint32_t MealCardBody=0xfffdf8,MealCardInk=0x4a3029;
+uint32_t mealGrey(uint32_t rgb){
+    const uint32_t r=rgb>>16,g=(rgb>>8)&255,b=rgb&255,luma=(r*77+g*150+b*29)>>8,v=110+luma*90/255;
+    return (v<<16)|(v<<8)|v;
+}
+const char* mealRowName(MealRow row,Language language){
+    constexpr const char* en[]={"Drinks","Food","Blank"};constexpr const char* fr[]={"Boissons","Nourriture","Blank"};
+    return language==Language::French?fr[unsigned(row)]:en[unsigned(row)];
+}
+void roundedFill(Canvas& c,int x,int y,int w,int h,uint32_t rgb,const uint8_t* inset,int rows){
+    for(int i=0;i<rows;++i){c.fill(x+inset[i],y+i,w-2*inset[i],1,rgb);c.fill(x+inset[i],y+h-1-i,w-2*inset[i],1,rgb);}
+    c.fill(x,y+rows,w,h-2*rows,rgb);
+}
+void centredLabel(Canvas& c,int y,const char* utf8,uint32_t fg,uint32_t bg){
+    char cells[32];displayText(utf8,cells,sizeof cells);
+    c.label(MealCardX+(MealCardW-int(std::strlen(cells))*8)/2,y,cells,fg,bg);
+}
+void drawMealCard(Canvas& c,const MealCardView& v){
+    const MealCard& card=MealDeck[v.card<MealCardCount?v.card:0];
+    const bool played=v.position!=0,blank=card.row==MealRow::Blank;
+    auto colour=[&](uint32_t rgb){return played?mealGrey(rgb):rgb;};
+    const uint32_t edge=colour(meal_sprites::Border[card.sprite]),body=colour(MealCardBody),ink=colour(MealCardInk);
+    constexpr uint8_t outer[]={4,2,1,1},inner[]={2,1};
+    constexpr int x=MealCardX,y=MealCardY,w=MealCardW,h=MealCardH;
+    roundedFill(c,x,y,w,h,edge,outer,4);
+    roundedFill(c,x+4,y+22,w-8,h-26,body,inner,2);
+    centredLabel(c,y+4,mealRowName(card.row,v.language),ink,edge);
+    constexpr int sw=meal_sprites::Width,sh=meal_sprites::Height,scale=MealSpriteScale,sx=x+(w-sw*scale)/2;
+    static_assert(sw*scale<=w-8&&sh*scale<=130,"the illustration fits between the header and the name");
+    const int sy=blank?y+22+(h-26-sh*scale)/2:y+24;
+    std::array<uint32_t,sw*scale> line{};
+    const uint8_t* sprite=meal_sprites::Pixels[card.sprite];
+    const uint32_t* palette=meal_sprites::Palettes[card.sprite];
+    for(int py=0;py<sh;++py){
+        for(int px=0;px<sw;++px){
+            const uint8_t pair=sprite[(py*sw+px)/2];const unsigned index=(px&1)?pair&15u:unsigned(pair>>4);
+            const uint32_t rgb=index?colour(palette[index]):body;
+            for(int k=0;k<scale;++k)line[std::size_t(px*scale+k)]=rgb;
+        }
+        for(int k=0;k<scale;++k)c.pixels(sx,sy+py*scale+k,sw*scale,line.data());
+    }
+    if(blank)return;
+    const bool fr=v.language==Language::French;
+    centredLabel(c,y+154,fr?card.fr:card.en,ink,body);
+    // Portion ribbon: at least 96 pixels wide, with notched ends.
+    const char* portion=fr?card.frPortion:card.enPortion;
+    const int rw=std::max(96,int(displayWidth(portion))*8+32),rx=x+(w-rw)/2,ry=y+170;
+    const uint32_t ribbon=colour(meal_sprites::Ribbon[card.sprite]);
+    c.fill(rx,ry,rw,16,ribbon);
+    for(int j=0;j<16;++j){const int notch=5-(j<8?7-j:j-8)*5/7;if(notch>0){c.fill(rx,ry+j,notch,1,body);c.fill(rx+rw-notch,ry+j,notch,1,body);}}
+    centredLabel(c,ry,portion,ink,ribbon);
+}
 enum class Screen { TimerSelect, TimerRunning, TimerComplete, Home, ReminderPopup, Reminders, ReminderEdit, Date, Activities, ActivityEdit, Weight, Kanban, TaskEdit, DailyReview, Finish, Reward, Config, Language, Colors,
-                    RosaryMode, RosarySet, RosaryDecade, RosaryPrayer, RosaryComplete };
+                    RosaryMode, RosarySet, RosaryDecade, RosaryPrayer, RosaryComplete, MealPlanner };
 class App {
     Platform& hw;
     State state{};
@@ -871,6 +1055,7 @@ class App {
     unsigned rosaryDecade=0,rosaryStep=0,rosaryPage=0;
     uint64_t timerNow=0,timerLast=0,timerRemaining=0;
     bool timerPaused=false;
+    unsigned mealCursor=0; // deck index of the card shown in the Meal Planner
     unsigned timerSeconds()const{return unsigned((timerRemaining+999)/1000);}
     void startTimer(unsigned option){constexpr unsigned minutes[]={5,30,60};timerRemaining=uint64_t(minutes[option])*60000;timerLast=timerNow;timerPaused=false;go(Screen::TimerRunning);}
     unsigned extraCount(const Day& d)const{
@@ -1065,7 +1250,7 @@ class App {
     void line(int row,const char* text,bool reverse=false){
         char cells[100];displayText(text,cells,sizeof cells);hw.text(0,row*16,cells,reverse);
         constexpr const char* keys[]={"Enter","Esc","Delete","Del","Backspace","Up","Down","Left","Right",
-            "Entrée","Échap","Suppr","Haut","Bas","F1","F2","F3","F4","F5","N","E","<-","->","1-9","1-9,0"};
+            "Entrée","Échap","Suppr","Haut","Bas","Space","Espace","F1","F2","F3","F4","F5","N","E","<-","->","1-9","1-9,0"};
         for(unsigned col=0;cells[col]&&col<40;){
             bool matched=false;
             for(const char* key:keys){char latin[24];displayText(key,latin,sizeof latin);const unsigned len=unsigned(std::strlen(latin));
@@ -1076,6 +1261,11 @@ class App {
             }
             if(!matched)++col;
         }
+    }
+    // Left text, then right text aligned on column 40.
+    void columns(int row,const char* left,const char* right){
+        const unsigned used=displayWidth(left)+displayWidth(right),pad=used<40?40-used:1;
+        char b[128];std::snprintf(b,sizeof b,"%s%*s%s",left,int(pad),"",right);line(row,b);
     }
     void wrap(int row,const char* text,unsigned limit){
         for(unsigned i=0;*text&&i<limit;++i){char b[41]{};std::size_t n=std::strlen(text);if(n>40)n=40;std::memcpy(b,text,n);line(row+int(i),b);text+=n;}
@@ -1182,7 +1372,19 @@ class App {
         if(s==Screen::Weight){field=0;for(unsigned i=0;i<2;++i){int32_t v=i?viewedDay().actual:viewedDay().expected;weights[i].fill(0);if(v>=0)weightText(v,weights[i].data(),weights[i].size());}}
         if(s==Screen::Date){dateDraft.fill(0);Date d=validDate(state.today.date)?state.today.date:DefaultDate;dateText(d,dateDraft.data(),dateDraft.size());}
         if(s==Screen::Activities)page=0; // LPS-113-CHG08b: always open on page 1, first row.
+        if(s==Screen::MealPlanner){ // LPS-114-CHG01: open on the first card still in the deck.
+            mealCursor=0;while(mealCursor+1<MealCardCount&&mealPlayPosition(state.meals,mealCursor))++mealCursor;
+            if(mealPlayPosition(state.meals,mealCursor))mealCursor=0;
+        }
         confirmingDelete=false;
+    }
+    // LPS-114-CHG02: leaving the Meal Planner (Space or Esc) rewrites the
+    // day's CSV. A failure is reported on Home; the deck itself is already saved.
+    void leaveMealPlanner(){
+        go(Screen::Home);
+        if(missingStorage)return; // the red missing-SD warning already explains it
+        if(!validDate(state.today.date)){say(tr("Set Date to export meals","Renseignez Date pour exporter les repas"));return;}
+        if(!hw.exportMealCsv(state.today.date,state.meals))say(tr("Meal CSV export failed","Export CSV repas échoué"));
     }
     template<std::size_t N> void edit(std::array<char,N>& value,int key){
         std::size_t len=std::strlen(value.data());
@@ -1220,6 +1422,7 @@ public:
         if(k==Escape){
             if(screen==Screen::Activities&&confirmingDelete){confirmingDelete=false;message.fill(0);render();return;}
             if(screen==Screen::ActivityEdit){screen=Screen::Activities;activityDraft.fill(0);message.fill(0);render();return;}
+            if(screen==Screen::MealPlanner){leaveMealPlanner();render();return;}
             Screen target=Screen::Home;
             if(screen==Screen::Language||screen==Screen::Colors)target=Screen::Config;
             else if(screen==Screen::ReminderEdit)target=Screen::Reminders;
@@ -1231,6 +1434,8 @@ public:
         message.fill(0);
         if(screen==Screen::ReminderPopup){go(Screen::Home);
         }else if(screen==Screen::Home){
+            // LPS-114-CHG01: SPACE opens the hidden Meal Planner (today only).
+            if(k==' '){if(daysBack)readOnly();else go(Screen::MealPlanner);render();return;}
             if(k==Left){
                 if(daysBack<state.count){++daysBack;selection=0;page=0;}
                 else say(state.count?tr("Oldest saved day","Plus ancien jour conservé"):tr("No archived days","Aucun jour archivé"));
@@ -1458,17 +1663,33 @@ public:
                     if(!hw.exportWeightCsv(state.today)){say(tr("Weight CSV export failed; day remains open","Export CSV poids échoué ; journée reste ouverte"));render();return;}
                     if(!hw.exportIcs(next.history[slot],state.xp+gain,gain,state.language,next)){say(tr("ICS export failed; day remains open","Export ICS échoué ; journée reste ouverte"));render();return;}
                     next.xp+=gain;next.today=Day{};next.today.number=state.today.number+1;next.today.date=tomorrow;
+                    next.meals=MealDeckState{}; // LPS-114-CHG01: new day, new deck.
                     // LPS-112-CHG03: XP is still banked in the save for format compatibility, never shown.
                     if(commit(next))go(Screen::Reward);
                 }
             }
         }else if(screen==Screen::Reward&&k==Enter)go(Screen::Home);
+        else if(screen==Screen::MealPlanner){
+            // Left/Right wrap within the row, Up/Down wrap between rows and keep
+            // the column when the new row is long enough. Enter plays or puts
+            // back the card and saves at once, like an activity tick.
+            unsigned row=unsigned(MealDeck[mealCursor].row);
+            const unsigned first=MealRowFirst[row],n=MealRowFirst[row+1]-first,column=mealCursor-first;
+            if(k==' ')leaveMealPlanner();
+            else if(k==Left)mealCursor=first+(column+n-1)%n;
+            else if(k==Right)mealCursor=first+(column+1)%n;
+            else if(k==Up||k==Down){
+                row=(row+(k==Up?MealRowCount-1:1))%MealRowCount;
+                const unsigned m=MealRowFirst[row+1]-MealRowFirst[row];
+                mealCursor=MealRowFirst[row]+(column<m?column:m-1);
+            }else if(k==Enter){State& next=stage();toggleMealCard(next.meals,mealCursor);commit(next);}
+        }
         render();
     }
     void render(){
         hw.setPalette(displayedPalette());hw.clear();char b[128];const Day& day=viewedDay();char date[11]{};
         if(validDate(day.date))dateText(day.date,date,sizeof date);else std::snprintf(date,sizeof date,"%s%lu",tr("D","J"),static_cast<unsigned long>(day.number));
-        std::snprintf(b,sizeof b,"LPS COMPANION v1.13    %s",date);line(0,b,true);
+        std::snprintf(b,sizeof b,"LPS COMPANION v1.14    %s",date);line(0,b,true);
         if(validDate(day.date)){longDateText(day.date,b,sizeof b);line(1,b);}
         if(daysBack)line(2,tr("ARCHIVED DAY - READ ONLY","JOUR ARCHIVÉ - LECTURE SEULE"));
         if(screen==Screen::Home){
@@ -1637,14 +1858,26 @@ public:
             line(13,tr("Enter: return to LPS Companion","Entrée : retour à LPS Companion"));
         }else if(screen==Screen::Finish){
             line(3,tr("CLOSE THE DAY?","TERMINER LE JOUR ?"));std::snprintf(b,sizeof b,tr("Activities: %u","Activités : %u"),count(state.today.flags));line(6,b);line(13,tr("Enter: save and advance","Entrée : enregistrer et avancer"));line(15,tr("An empty day has no penalty.","Une journée vide ne coûte rien."));
+        }else if(screen==Screen::MealPlanner){
+            const MealCard& card=MealDeck[mealCursor];const unsigned row=unsigned(card.row);
+            const unsigned position=mealPlayPosition(state.meals,mealCursor);
+            char right[24]{};
+            if(position)std::snprintf(right,sizeof right,tr("PLAYED #%u","JOUÉE #%u"),position);
+            columns(3,tr("MEAL PLANNER","PLANIFICATEUR DE REPAS"),right);
+            std::snprintf(b,sizeof b,"%s %u/%u",mealRowName(card.row,state.language),mealCursor-MealRowFirst[row]+1,unsigned(MealRowFirst[row+1]-MealRowFirst[row]));
+            std::snprintf(right,sizeof right,tr("%u/%u left","%u/%u restantes"),unsigned(MealCardCount-state.meals.playedCount),MealCardCount);
+            columns(4,b,right);
+            hw.mealCard(MealCardView{uint8_t(mealCursor),uint8_t(position),state.language});
+            line(17,tr("<- -> Card   Up/Down Row","<- -> Carte   Haut/Bas Rangée"));
         }else{
             line(3,tr("DAY SAVED","JOUR ENREGISTRÉ"));
             line(15,tr("Enter: start the new day","Entrée : commencer le nouveau jour"));
         }
-        const int statusRow=screen==Screen::Home?18:((screen==Screen::TimerRunning||screen==Screen::TimerComplete)?16:17);
+        const int statusRow=(screen==Screen::Home||screen==Screen::MealPlanner)?18:((screen==Screen::TimerRunning||screen==Screen::TimerComplete)?16:17);
         if(missingStorage)hw.alert(0,statusRow*16,message.data());else if(message[0])line(statusRow,message.data());
         if(hw.batteryBelow20())hw.alert(0,18*16,tr("[!] Low battery!","[!] Batterie faible !"));
-        if(screen!=Screen::TimerRunning&&screen!=Screen::TimerComplete)line(19,tr("Up/Down  Enter:OK  Esc:Back","Haut/Bas  Entrée:OK  Échap:Retour"),true);
+        if(screen==Screen::MealPlanner)line(19,mealPlayPosition(state.meals,mealCursor)?tr("Enter:Put back  Space/Esc:Back","Entrée:Remettre  Espace/Échap:Retour"):tr("Enter:Play  Space/Esc:Back","Entrée:Jouer  Espace/Échap:Retour"),true);
+        else if(screen!=Screen::TimerRunning&&screen!=Screen::TimerComplete)line(19,tr("Up/Down  Enter:OK  Esc:Back","Haut/Bas  Entrée:OK  Échap:Retour"),true);
         hw.present();
     }
 };
@@ -1677,13 +1910,20 @@ public:
         int row=y/16,col=x/8;if(row<0||row>=20||col<0||col>=40)return;
         inverse[row]=reverse;while(*s&&col<40)cells[row][col++]=*s++;
     }
+    // LPS-114-CHG01: the terminal shows the card as two text lines.
+    void mealCard(const lps::MealCardView& v)override{
+        const lps::MealCard& c=lps::MealDeck[v.card];const bool fr=v.language==lps::Language::French;
+        char utf8[64],cells8[64];
+        std::snprintf(utf8,sizeof utf8,"      [ %s ]%s",fr?c.fr:c.en,v.position?" ----":"");lps::displayText(utf8,cells8,sizeof cells8);text(0,9*16,cells8,v.position!=0);
+        std::snprintf(utf8,sizeof utf8,"        %s",fr?c.frPortion:c.enPortion);lps::displayText(utf8,cells8,sizeof cells8);text(0,10*16,cells8,false);
+    }
     void present()override{
         std::printf("\033[2J\033[H");for(unsigned i=0;i<20;++i){
             std::printf("%s",inverse[i]?"\033[7m":"");
             for(unsigned char c:cells[i]){if(!c)break;if(c>=128){std::putchar(0xc0|(c>>6));std::putchar(0x80|(c&0x3f));}else std::putchar(c);}
             std::printf("\033[0m\n");
         }
-        std::printf("\nCommands: 1-9, up/down/left/right, enter, esc, back,\ntext YOUR TEXT, quit\n> ");std::fflush(stdout);
+        std::printf("\nCommands: 1-9, up/down/left/right, enter, esc, space, back,\ntext YOUR TEXT, quit\n> ");std::fflush(stdout);
     }
     lps::LoadResult load(lps::State& state)override{
         FILE* f=std::fopen("lps_companion.jsn","rb");
@@ -1734,6 +1974,7 @@ int main(){Terminal terminal;lps::App app(terminal);app.start();std::string s;
         else if(s=="up")app.key(lps::Up);else if(s=="down")app.key(lps::Down);
         else if(s=="left")app.key(lps::Left);else if(s=="right")app.key(lps::Right);
         else if(s=="esc")app.key(lps::Escape);else if(s=="back")app.key(lps::Backspace);
+        else if(s=="space")app.key(' ');
         else if(s=="enter"||s.empty())app.key(lps::Enter);else if(s.size()==1)app.key(s[0]);
         else {std::cout<<"Unknown command.\n";app.render();}
     }
