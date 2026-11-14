@@ -188,18 +188,22 @@ int main(){
             else if(played.at(x,y)!=Frame::Unset)assert(grey(played.at(x,y)));
         }
         assert(live.at(MealCardX,MealCardY)==Frame::Unset); // rounded corner
-        assert(live.at(MealCardX+1,MealCardY+MealCardH/2)==MealRowColours[1]);
-        assert(fr.at(MealCardX+1,MealCardY+MealCardH/2)==MealRowColours[0]);
+        assert(live.at(MealCardX+1,MealCardY+MealCardH/2)==meal_sprites::Border[meal_sprites::Apple]);
+        assert(fr.at(MealCardX+1,MealCardY+MealCardH/2)==meal_sprites::Border[meal_sprites::MintTea]);
         assert(live.at(MealCardX+6,MealCardY+MealCardH-12)==MealCardBody);
         // The apple sprite brings red into the card centre; the played one is grey.
-        unsigned red=0;for(int y=MealCardY+24;y<MealCardY+152;++y)for(int x=MealCardX+32;x<MealCardX+160;++x)if(live.at(x,y)==meal_sprites::Palette[6])++red;
+        unsigned red=0;for(int y=MealCardY+24;y<MealCardY+152;++y)for(int x=MealCardX+8;x<MealCardX+184;++x){const uint32_t p=live.at(x,y);if((p>>16)>180&&((p>>8)&255)<120&&(p&255)<120)++red;}
         assert(red>1000);
-        assert(played.at(MealCardX+1,MealCardY+MealCardH/2)==mealGrey(MealRowColours[1]));
-        // Sprites are 4 bits per pixel in flash: 512 bytes each.
-        static_assert(sizeof meal_sprites::Pixels==meal_sprites::Count*512,"4bpp 32x32");
+        assert(played.at(MealCardX+1,MealCardY+MealCardH/2)==mealGrey(meal_sprites::Border[meal_sprites::Apple]));
+        // The portion sits on the card's ribbon colour; the Blank card has no name or portion below its art.
+        assert(live.at(MealCardX+MealCardW/2-38,MealCardY+178)==meal_sprites::Ribbon[meal_sprites::Apple]);
+        Frame blank;drawMealCard(blank,MealCardView{14,0,Language::French});
+        assert(blank.labels==std::vector<std::string>{"Blank"}&&blank.at(MealCardX+1,MealCardY+MealCardH/2)==meal_sprites::Border[meal_sprites::Blank]);
+        // Sprites are 4 bits per pixel in flash: 2816 bytes each.
+        static_assert(sizeof meal_sprites::Pixels==meal_sprites::Count*88*64/2,"4bpp 88x64");
     }
     // Memory: the deck adds 17 bytes to State.
     static_assert(sizeof(MealDeckState)==17,"compact deck state");
-    std::printf("State: %zu bytes, sprites: %zu bytes\n",sizeof(State),sizeof meal_sprites::Pixels+sizeof meal_sprites::Palette);
+    std::printf("State: %zu bytes, sprites: %zu bytes\n",sizeof(State),sizeof meal_sprites::Pixels+sizeof meal_sprites::Palettes+sizeof meal_sprites::Border+sizeof meal_sprites::Ribbon);
     std::puts("PASS: Meal Planner: hidden SPACE entry/exit, home keys intact, row/card wrap, play/put back with order, greyed card, counter, FR labels, save/restore, v2 save without deck, invalid deck data, failed-save rollback, read-only archive, new deck at day close and card drawing.");
 }

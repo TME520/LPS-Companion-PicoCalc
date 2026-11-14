@@ -1,282 +1,181 @@
 #!/usr/bin/env python3
-"""LPS-114-CHG01: generate the Meal Planner card sprites.
+"""LPS-114-CHG01b: Meal Planner sprites from the user's own card sheets.
 
-Draws each food as 32x32 pixel art with Pillow (no anti-aliasing), adds a
-one-pixel dark outline, and writes src/meal_sprites.h: one shared 16-colour
-palette plus 4 bits per pixel (512 bytes per sprite, in flash). Index 0 is
-transparent and takes the card colour when drawn. The app scales sprites x4.
+Sources: assets/meal_deck_sheet1.png and assets/meal_deck_sheet2.png
+("Daily Edible Deck", two columns x four rows of cards each).
+
+For each distinct card the script:
+  * crops the illustration (above the name), including the steam, hearts
+    and motion lines drawn around the food;
+  * turns the near-white card background into transparency by flood-filling
+    from the crop edges (white cups and bowls stay opaque: their outline
+    closes them);
+  * trims, fits into 88 x 64 pixels (drawn x2 on the PicoCalc, 176 x 128)
+    with premultiplied-alpha box filtering, and keeps pixels at alpha >= 50%;
+  * quantizes the opaque pixels to 15 colours: one 16-colour palette per
+    sprite, index 0 transparent, 4 bits per pixel;
+  * samples the card's border and ribbon colours from the sheet.
+
+The Blank card keeps the user's design: the grey "Blank" ribbon with its
+burst lines (taller crop).
 
     python3 tools/meal_sprites.py            # writes src/meal_sprites.h
-    python3 tools/meal_sprites.py --png DIR  # also writes x8 PNG previews
+    python3 tools/meal_sprites.py --png DIR  # also writes a preview sheet
 """
 import argparse
 import pathlib
-from PIL import Image, ImageDraw
+from collections import deque
+from PIL import Image
 
-SIZE = 32
-# Index: 0 transparent, then the shared palette (0xRRGGBB).
-PALETTE = [
-    0x000000,  # 0 transparent (card body)
-    0x3B2A25,  # 1 outline
-    0xFFFFFF,  # 2 white
-    0xF2E2C4,  # 3 foam / cream
-    0xB07A4F,  # 4 latte brown
-    0x4A2C1D,  # 5 black coffee
-    0xD9433B,  # 6 red
-    0xF29B30,  # 7 orange
-    0xF5D76E,  # 8 yellow / cheese
-    0x6CBF4F,  # 9 green
-    0x2F7D3A,  # 10 dark green
-    0xD9A55B,  # 11 biscuit / tortilla
-    0xCFD8E0,  # 12 cup grey
-    0xFBE9A8,  # 13 light juice
-    0xE0703A,  # 14 soup
-    0x7F8FA6,  # 15 bowl blue-grey
+W, H = 88, 64
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+SHEETS = [ROOT / "assets" / "meal_deck_sheet1.png", ROOT / "assets" / "meal_deck_sheet2.png"]
+# Card bounds on the 1055 x 1491 sheets (border included), measured once.
+COLS = [(44, 515), (539, 1010)]
+ROWS = [(108, 435), (459, 783), (807, 1122), (1145, 1454)]
+# Sprite id -> (sheet, card index 0-7 reading order). Order = enum order.
+SPRITES = [
+    ("Latte", 1, 0), ("Black", 1, 1), ("Tea", 2, 0), ("MintTea", 2, 3), ("Juice", 2, 5),
+    ("Wrap", 1, 3), ("Salad", 1, 5), ("Biscuit", 1, 6), ("Cheese", 1, 7),
+    ("Apple", 2, 1), ("Orange", 2, 2), ("Soup", 2, 4), ("Blank", 2, 6),
 ]
-T, OUT, WHITE, FOAM, LATTE, BLACK, RED, ORANGE, YELLOW, GREEN, DGREEN, TAN, CUP, JUICE, SOUP, BOWL = range(16)
+BACKGROUND = 232  # min(R,G,B) at or above this, reachable from the edge, is background
 
 
-def canvas():
-    img = Image.new("P", (SIZE, SIZE), T)
-    return img, ImageDraw.Draw(img)
+def flat(img):
+    """Pixel values in reading order (Pillow 13+ renames getdata)."""
+    return img.get_flattened_data() if hasattr(img, "get_flattened_data") else img.getdata()
 
 
-def mug(d, liquid, top):
-    d.rectangle([7, 9, 22, 27], fill=CUP)          # body
-    d.ellipse([19, 12, 27, 22], outline=CUP, width=2)  # handle
-    d.rectangle([9, 11, 20, 13], fill=liquid)       # coffee surface
-    if top is not None:
-        d.rectangle([9, 9, 20, 11], fill=top)
-    d.line([8, 15, 8, 25], fill=WHITE)               # shine
+def card_box(index):
+    (x0, x1), (y0, y1) = COLS[index % 2], ROWS[index // 2]
+    return x0, y0, x1, y1
 
 
-def steam(d, x):
-    for i, (dx, y) in enumerate([(0, 2), (1, 3), (0, 4), (-1, 5), (0, 6)]):
-        d.point((x + dx, y), fill=CUP)
-        d.point((x + 5 + dx, y + 1), fill=CUP)
+def sample(img, box):
+    """Median colour of a region (per channel)."""
+    px = list(flat(img.crop(box)))
+    return tuple(sorted(c[i] for c in px)[len(px) // 2] for i in range(3))
 
 
-def latte():
-    img, d = canvas()
-    d.rectangle([8, 6, 21, 27], fill=CUP)            # tall mug
-    d.ellipse([18, 10, 27, 21], outline=CUP, width=2)
-    d.rectangle([10, 6, 19, 9], fill=FOAM)
-    d.rectangle([10, 10, 19, 12], fill=LATTE)
-    d.point((14, 7), fill=WHITE); d.point((15, 8), fill=WHITE)
-    d.line([9, 13, 9, 25], fill=WHITE)
-    return img
+def border_colour(img, box):
+    x0, y0, x1, y1 = box
+    y = (y0 + y1) // 2
+    run = [img.getpixel((x, y)) for x in range(x0 - 2, x0 + 14)]
+    return max(run, key=lambda c: max(c) - min(c))  # the most saturated pixel of the border line
 
 
-def black():
-    img, d = canvas()
-    d.ellipse([3, 24, 28, 29], fill=CUP)             # saucer
-    d.rectangle([8, 13, 22, 25], fill=CUP)
-    d.ellipse([20, 15, 27, 22], outline=CUP, width=2)
-    d.rectangle([10, 13, 20, 15], fill=BLACK)
-    d.line([9, 17, 9, 23], fill=WHITE)
-    steam(d, 13)
-    return img
+def illustration(img, box, blank):
+    x0, y0, x1, y1 = box
+    w, h = x1 - x0, y1 - y0
+    top, bottom = (0.12, 0.88) if blank else (0.03, 0.66)
+    crop = img.crop((x0 + int(w * 0.12), y0 + int(h * top), x1 - int(w * 0.12), y0 + int(h * bottom))).convert("RGBA")
+    cw, ch = crop.size
+    px = crop.load()
+    seen = bytearray(cw * ch)
+    queue = deque((x, y) for x in range(cw) for y in (0, ch - 1))
+    queue.extend((x, y) for y in range(ch) for x in (0, cw - 1))
+    while queue:
+        x, y = queue.popleft()
+        if seen[y * cw + x]:
+            continue
+        seen[y * cw + x] = 1
+        r, g, b, _ = px[x, y]
+        if min(r, g, b) < BACKGROUND:
+            continue
+        px[x, y] = (255, 255, 255, 0)
+        for nx, ny in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            if 0 <= nx < cw and 0 <= ny < ch and not seen[ny * cw + nx]:
+                queue.append((nx, ny))
+    crop = crop.crop(crop.getbbox())
+    scale = min(W / crop.width, H / crop.height)
+    size = (max(1, round(crop.width * scale)), max(1, round(crop.height * scale)))
+    small = crop.convert("RGBa").resize(size, Image.Resampling.BOX).convert("RGBA")
+    out = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    out.paste(small, ((W - size[0]) // 2, (H - size[1]) // 2))
+    return out
 
 
-def tea():
-    img, d = canvas()
-    d.ellipse([3, 24, 28, 29], fill=CUP)
-    d.rectangle([8, 13, 22, 25], fill=WHITE)
-    d.ellipse([20, 15, 27, 22], outline=WHITE, width=2)
-    d.rectangle([10, 13, 20, 15], fill=LATTE)
-    d.line([12, 13, 9, 19], fill=OUT)                # bag string
-    d.rectangle([6, 19, 9, 22], fill=YELLOW)          # tag
-    steam(d, 14)
-    return img
+def indexed(sprite):
+    """15 colours for opaque pixels + index 0 for transparency.
 
-
-def mint_tea():
-    img, d = canvas()
-    d.polygon([(8, 9), (23, 9), (21, 28), (10, 28)], fill=CUP)   # glass
-    d.polygon([(9, 13), (22, 13), (21, 27), (10, 27)], fill=JUICE)
-    d.ellipse([11, 4, 17, 11], fill=GREEN)            # mint leaves
-    d.ellipse([15, 3, 21, 10], fill=DGREEN)
-    d.ellipse([12, 15, 16, 19], fill=GREEN)
-    d.ellipse([16, 19, 20, 23], fill=DGREEN)
-    d.line([10, 14, 11, 26], fill=WHITE)
-    return img
-
-
-def juice():
-    img, d = canvas()
-    d.polygon([(8, 8), (23, 8), (21, 28), (10, 28)], fill=CUP)
-    d.polygon([(9, 12), (22, 12), (21, 27), (10, 27)], fill=JUICE)
-    d.line([18, 2, 16, 20], fill=RED, width=2)        # straw
-    d.line([20, 2, 23, 2], fill=RED, width=2)
-    d.ellipse([20, 6, 27, 13], fill=ORANGE)           # slice
-    d.line([10, 13, 11, 26], fill=WHITE)
-    return img
-
-
-def wrap():
-    img, d = canvas()
-    d.polygon([(4, 22), (20, 4), (28, 12), (12, 28)], fill=TAN)   # rolled tortilla
-    d.ellipse([18, 3, 29, 14], fill=TAN)
-    d.ellipse([20, 5, 27, 12], fill=YELLOW)           # cheese filling
-    d.point((22, 7), fill=GREEN); d.point((24, 9), fill=GREEN); d.point((23, 10), fill=RED)
-    d.line([8, 21, 18, 11], fill=FOAM)
-    d.line([11, 24, 21, 14], fill=FOAM)
-    return img
-
-
-def bowl(d, fill):
-    d.chord([3, 6, 28, 28], 0, 180, fill=BOWL)
-    d.rectangle([3, 16, 28, 17], fill=fill)
-    d.line([7, 20, 10, 24], fill=WHITE)
-
-
-def salad():
-    img, d = canvas()
-    for x, y in [(5, 9), (12, 7), (19, 9)]:
-        d.ellipse([x, y, x + 8, y + 8], fill=RED)
-        d.point((x + 4, y + 4), fill=YELLOW)
-        d.point((x + 3, y + 5), fill=YELLOW)
-    d.ellipse([9, 12, 14, 16], fill=GREEN)
-    d.ellipse([18, 12, 23, 16], fill=DGREEN)
-    bowl(d, GREEN)
-    return img
-
-
-def biscuit():
-    img, d = canvas()
-    d.rounded_rectangle([4, 6, 27, 25], radius=4, fill=TAN)
-    d.rounded_rectangle([6, 8, 25, 23], radius=3, outline=LATTE)
-    for x in (10, 15, 20):
-        for y in (12, 18):
-            d.point((x, y), fill=LATTE)
-    return img
-
-
-def cheese():
-    img, d = canvas()
-    d.polygon([(3, 24), (28, 24), (28, 12), (3, 18)], fill=YELLOW)    # side
-    d.polygon([(3, 18), (28, 12), (22, 7)], fill=JUICE)               # top
-    for x, y, r in [(9, 20, 2), (17, 17, 2), (23, 20, 1), (14, 22, 1)]:
-        d.ellipse([x - r, y - r, x + r, y + r], fill=ORANGE)
-    return img
-
-
-def apple():
-    img, d = canvas()
-    d.ellipse([5, 8, 17, 28], fill=RED)
-    d.ellipse([14, 8, 27, 28], fill=RED)
-    d.line([16, 9, 15, 3], fill=LATTE, width=2)
-    d.ellipse([17, 2, 24, 7], fill=GREEN)
-    d.ellipse([8, 12, 11, 17], fill=WHITE)
-    return img
-
-
-def orange():
-    img, d = canvas()
-    d.ellipse([4, 6, 27, 29], fill=ORANGE)
-    d.ellipse([14, 2, 22, 8], fill=GREEN)
-    d.point((15, 7), fill=DGREEN)
-    for x, y in [(10, 14), (19, 20), (13, 23), (21, 13)]:
-        d.point((x, y), fill=YELLOW)
-    d.ellipse([8, 10, 11, 13], fill=YELLOW)
-    return img
-
-
-def soup():
-    img, d = canvas()
-    bowl(d, SOUP)
-    d.line([20, 3, 27, 16], fill=CUP, width=2)        # spoon
-    d.ellipse([18, 1, 23, 6], fill=CUP)
-    for x in (8, 13):
-        for i, (dx, y) in enumerate([(0, 6), (1, 8), (0, 10), (-1, 12)]):
-            d.point((x + dx, y), fill=CUP)
-    return img
-
-
-QUESTION = """
-..XXXXXX..
-.XXXXXXXX.
-XXX....XXX
-XXX....XXX
-.......XXX
-.....XXXX.
-....XXXX..
-....XXX...
-....XXX...
-..........
-....XXX...
-....XXX...
-"""
-
-
-def blank():
-    img, d = canvas()
-    # A bold question mark: the mystery food.
-    for y, row in enumerate(QUESTION.strip().splitlines()):
-        for x, c in enumerate(row):
-            if c == "X":
-                d.rectangle([6 + 2 * x, 4 + 2 * y, 7 + 2 * x, 5 + 2 * y], fill=BOWL)
-    return img
-
-
-SPRITES = [("Latte", latte), ("Black", black), ("Tea", tea), ("MintTea", mint_tea), ("Juice", juice),
-           ("Wrap", wrap), ("Salad", salad), ("Biscuit", biscuit), ("Cheese", cheese),
-           ("Apple", apple), ("Orange", orange), ("Soup", soup), ("Blank", blank)]
-
-
-def outline(img):
-    px = img.load()
-    edge = []
-    for y in range(SIZE):
-        for x in range(SIZE):
-            if px[x, y] != T:
-                continue
-            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-                nx, ny = x + dx, y + dy
-                if 0 <= nx < SIZE and 0 <= ny < SIZE and px[nx, ny] not in (T, OUT):
-                    edge.append((x, y))
-                    break
-    for p in edge:
-        px[p] = OUT
-    return img
+    Median cut picks 14 colours; small but vivid details (the pink hearts)
+    can fall between them, so the 15th colour is the mean of the pixels
+    around the one the 14 represent worst. Every pixel then takes its nearest colour.
+    """
+    rgba = list(flat(sprite))
+    opaque = [p[:3] for p in rgba if p[3] >= 128]
+    strip = Image.new("RGB", (len(opaque), 1))
+    strip.putdata(opaque)
+    quant = strip.quantize(colors=14, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    pal = quant.getpalette()[: 14 * 3]
+    colours = [tuple(pal[i:i + 3]) for i in range(0, len(pal), 3)]
+    distance = lambda a, b: sum((x - y) ** 2 for x, y in zip(a, b))
+    nearest = lambda c: min(range(len(colours)), key=lambda i: distance(c, colours[i]))
+    # The worst-represented pixels, then those close to the very worst one.
+    errors = sorted(opaque, key=lambda c: distance(c, colours[nearest(c)]), reverse=True)
+    worst = errors[0]
+    if distance(worst, colours[nearest(worst)]) > 20 ** 2:
+        group = [c for c in errors[:200] if distance(c, worst) < 48 ** 2]
+        colours.append(tuple(sum(c[i] for c in group) // len(group) for i in range(3)))
+    palette = [0] + [(r << 16) | (g << 8) | b for r, g, b in colours]
+    palette += [0] * (16 - len(palette))
+    cache = {}
+    data = [cache.setdefault(p[:3], nearest(p[:3]) + 1) if p[3] >= 128 else 0 for p in rgba]
+    return palette, data
 
 
 def main():
-    root = pathlib.Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser()
     parser.add_argument("--png", type=pathlib.Path)
-    parser.add_argument("--out", type=pathlib.Path, default=root / "src" / "meal_sprites.h")
+    parser.add_argument("--out", type=pathlib.Path, default=ROOT / "src" / "meal_sprites.h")
     args = parser.parse_args()
-    lines = ["// LPS-114-CHG01: Meal Planner sprites. Generated by tools/meal_sprites.py; do not edit.",
-             "// 32x32, 4 bits per pixel (left pixel in the high nibble), index 0 transparent.",
-             "#pragma once", "#include <cstdint>", "namespace lps { namespace meal_sprites {",
-             f"constexpr int Size={SIZE};",
-             "constexpr uint32_t Palette[16]={" + ",".join(f"0x{c:06x}" for c in PALETTE) + "};",
-             "enum Id : uint8_t { " + ", ".join(n for n, _ in SPRITES) + ", Count };",
-             f"constexpr uint8_t Pixels[Count][{SIZE * SIZE // 2}]={{"]
-    flat = []
-    for name, draw in SPRITES:
-        img = outline(draw())
-        data = list(img.tobytes())
-        assert max(data) < 16
-        packed = [(data[i] << 4) | data[i + 1] for i in range(0, len(data), 2)]
-        rows = [",".join(f"0x{b:02x}" for b in packed[i:i + 16]) for i in range(0, len(packed), 16)]
-        lines.append(f"    {{ // {name}\n    " + ",\n    ".join(rows) + "},")
+    sheets = [Image.open(p).convert("RGB") for p in SHEETS]
+    palettes, borders, ribbons, pixels, previews = [], [], [], [], []
+    for name, sheet, index in SPRITES:
+        img, box = sheets[sheet - 1], card_box(index)
+        x0, y0, x1, y1 = box
+        w, h = x1 - x0, y1 - y0
+        blank = name == "Blank"
+        border = border_colour(img, box)
+        # Ribbon fill, left of the portion text (Blank: left of the word on its ribbon).
+        ry = y0 + int(h * (0.47 if blank else 0.875))
+        ribbon = sample(img, (x0 + int(w * 0.29), ry - 3, x0 + int(w * 0.33), ry + 3))
+        palette, data = indexed(illustration(img, box, blank))
+        palettes.append(palette)
+        borders.append((border[0] << 16) | (border[1] << 8) | border[2])
+        ribbons.append((ribbon[0] << 16) | (ribbon[1] << 8) | ribbon[2])
+        pixels.append(data)
         if args.png:
-            args.png.mkdir(parents=True, exist_ok=True)
-            rgb = Image.new("RGB", (SIZE, SIZE), (0xFB, 0xF4, 0xE6))
-            rp = rgb.load()
-            for i, v in enumerate(data):
-                if v:
-                    c = PALETTE[v]
-                    rp[i % SIZE, i // SIZE] = (c >> 16, (c >> 8) & 255, c & 255)
-            flat.append(rgb)
+            rgb = Image.new("RGB", (W, H), (0xFF, 0xFD, 0xF8))
+            rgb.putdata([(palette[v] >> 16, (palette[v] >> 8) & 255, palette[v] & 255) if v else (0xFF, 0xFD, 0xF8) for v in data])
+            previews.append(rgb)
+    hexes = lambda values: ",".join(f"0x{v:06x}" for v in values)
+    lines = ["// LPS-114-CHG01b: Meal Planner sprites from the user's card sheets",
+             "// (assets/meal_deck_sheet1.png, assets/meal_deck_sheet2.png).",
+             "// Generated by tools/meal_sprites.py; do not edit.",
+             f"// {W}x{H}, 4 bits per pixel (left pixel in the high nibble), one 16-colour",
+             "// palette per sprite, index 0 transparent. Border/Ribbon: the card's colours.",
+             "#pragma once", "#include <cstdint>", "namespace lps { namespace meal_sprites {",
+             f"constexpr int Width={W},Height={H};",
+             "enum Id : uint8_t { " + ", ".join(n for n, _, _ in SPRITES) + ", Count };",
+             "constexpr uint32_t Border[Count]={" + hexes(borders) + "};",
+             "constexpr uint32_t Ribbon[Count]={" + hexes(ribbons) + "};",
+             "constexpr uint32_t Palettes[Count][16]={"]
+    lines += ["    {" + hexes(p) + "}," for p in palettes]
+    lines += ["};", f"constexpr uint8_t Pixels[Count][{W * H // 2}]={{"]
+    for (name, _, _), data in zip(SPRITES, pixels):
+        packed = [(data[i] << 4) | data[i + 1] for i in range(0, len(data), 2)]
+        rows = [",".join(f"0x{b:02x}" for b in packed[i:i + W // 2]) for i in range(0, len(packed), W // 2)]
+        lines.append(f"    {{ // {name}\n    " + ",\n    ".join(rows) + "},")
     lines += ["};", "}} // namespace lps::meal_sprites", ""]
     args.out.write_text("\n".join(lines))
     if args.png:
-        sheet = Image.new("RGB", (len(flat) * (SIZE + 4) * 4, (SIZE + 4) * 4), (40, 40, 40))
-        for i, img in enumerate(flat):
-            sheet.paste(img.resize((SIZE * 4, SIZE * 4), Image.NEAREST), (i * (SIZE + 4) * 4 + 8, 8))
+        args.png.mkdir(parents=True, exist_ok=True)
+        cell = (W * 3 + 12, H * 3 + 12)
+        sheet = Image.new("RGB", (cell[0] * 5, cell[1] * 3), (40, 40, 40))
+        for i, img in enumerate(previews):
+            sheet.paste(img.resize((W * 3, H * 3), Image.Resampling.NEAREST), ((i % 5) * cell[0] + 6, (i // 5) * cell[1] + 6))
         sheet.save(args.png / "meal_sprites_sheet.png")
 
 

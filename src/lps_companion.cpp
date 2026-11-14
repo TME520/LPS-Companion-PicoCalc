@@ -50,8 +50,9 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <algorithm>
 #include <limits>
-#include "meal_sprites.h"
+#include "meal_sprites.h" // LPS-114-CHG01b: generated from the user's card sheets
 
 namespace lps {
 enum class Language : uint8_t { English, French };
@@ -921,12 +922,14 @@ SaveCheck readSave(SaveSource& source,State& out,SaveInfo& info){
     info.checksum=stored;
     return unsupported?SaveCheck::Unsupported:SaveCheck::Valid;
 }
-// LPS-114-CHG01: the Meal Planner card, 192x190 pixels over text rows 5-16.
-// A pastel border and header band give the row colour; the 32x32 sprite is
-// drawn x4. Played cards are drawn entirely in faded greys.
-constexpr int MealCardX=64,MealCardY=81,MealCardW=192,MealCardH=190,MealSpriteScale=4;
-constexpr uint32_t MealRowColours[MealRowCount]={0x8ec5e8,0xa5d6a0,0xc9b6e4};
-constexpr uint32_t MealCardBody=0xfbf4e6,MealCardInk=0x3b2a25;
+// LPS-114-CHG01: the Meal Planner card, 192x190 pixels over text rows 5-16,
+// in the style of the user's paper cards (LPS-114-CHG01b): the card's own
+// pastel border and header band (the header names the row), the illustration
+// (88x64 drawn x2), the name, and the portion on a ribbon. The Blank card is
+// the user's design (ribbon and burst lines) with no name or portion below.
+// Played cards are drawn entirely in faded greys.
+constexpr int MealCardX=64,MealCardY=81,MealCardW=192,MealCardH=190,MealSpriteScale=2;
+constexpr uint32_t MealCardBody=0xfffdf8,MealCardInk=0x4a3029;
 uint32_t mealGrey(uint32_t rgb){
     const uint32_t r=rgb>>16,g=(rgb>>8)&255,b=rgb&255,luma=(r*77+g*150+b*29)>>8,v=110+luma*90/255;
     return (v<<16)|(v<<8)|v;
@@ -945,28 +948,38 @@ void centredLabel(Canvas& c,int y,const char* utf8,uint32_t fg,uint32_t bg){
 }
 void drawMealCard(Canvas& c,const MealCardView& v){
     const MealCard& card=MealDeck[v.card<MealCardCount?v.card:0];
-    const bool played=v.position!=0;
+    const bool played=v.position!=0,blank=card.row==MealRow::Blank;
     auto colour=[&](uint32_t rgb){return played?mealGrey(rgb):rgb;};
-    const uint32_t edge=colour(MealRowColours[unsigned(card.row)]),body=colour(MealCardBody),ink=colour(MealCardInk);
+    const uint32_t edge=colour(meal_sprites::Border[card.sprite]),body=colour(MealCardBody),ink=colour(MealCardInk);
     constexpr uint8_t outer[]={4,2,1,1},inner[]={2,1};
     constexpr int x=MealCardX,y=MealCardY,w=MealCardW,h=MealCardH;
     roundedFill(c,x,y,w,h,edge,outer,4);
     roundedFill(c,x+4,y+22,w-8,h-26,body,inner,2);
     centredLabel(c,y+4,mealRowName(card.row,v.language),ink,edge);
-    constexpr int size=meal_sprites::Size,scale=MealSpriteScale,sx=x+(w-size*scale)/2,sy=y+24;
-    std::array<uint32_t,size*scale> line{};
+    constexpr int sw=meal_sprites::Width,sh=meal_sprites::Height,scale=MealSpriteScale,sx=x+(w-sw*scale)/2;
+    static_assert(sw*scale<=w-8&&sh*scale<=130,"the illustration fits between the header and the name");
+    const int sy=blank?y+22+(h-26-sh*scale)/2:y+24;
+    std::array<uint32_t,sw*scale> line{};
     const uint8_t* sprite=meal_sprites::Pixels[card.sprite];
-    for(int py=0;py<size;++py){
-        for(int px=0;px<size;++px){
-            const uint8_t pair=sprite[(py*size+px)/2];const unsigned index=(px&1)?pair&15u:unsigned(pair>>4);
-            const uint32_t rgb=index?colour(meal_sprites::Palette[index]):body;
+    const uint32_t* palette=meal_sprites::Palettes[card.sprite];
+    for(int py=0;py<sh;++py){
+        for(int px=0;px<sw;++px){
+            const uint8_t pair=sprite[(py*sw+px)/2];const unsigned index=(px&1)?pair&15u:unsigned(pair>>4);
+            const uint32_t rgb=index?colour(palette[index]):body;
             for(int k=0;k<scale;++k)line[std::size_t(px*scale+k)]=rgb;
         }
-        for(int k=0;k<scale;++k)c.pixels(sx,sy+py*scale+k,size*scale,line.data());
+        for(int k=0;k<scale;++k)c.pixels(sx,sy+py*scale+k,sw*scale,line.data());
     }
+    if(blank)return;
     const bool fr=v.language==Language::French;
     centredLabel(c,y+154,fr?card.fr:card.en,ink,body);
-    centredLabel(c,y+170,fr?card.frPortion:card.enPortion,ink,body);
+    // Portion ribbon: at least 96 pixels wide, with notched ends.
+    const char* portion=fr?card.frPortion:card.enPortion;
+    const int rw=std::max(96,int(displayWidth(portion))*8+32),rx=x+(w-rw)/2,ry=y+170;
+    const uint32_t ribbon=colour(meal_sprites::Ribbon[card.sprite]);
+    c.fill(rx,ry,rw,16,ribbon);
+    for(int j=0;j<16;++j){const int notch=5-(j<8?7-j:j-8)*5/7;if(notch>0){c.fill(rx,ry+j,notch,1,body);c.fill(rx+rw-notch,ry+j,notch,1,body);}}
+    centredLabel(c,ry,portion,ink,ribbon);
 }
 enum class Screen { TimerSelect, TimerRunning, TimerComplete, Home, ReminderPopup, Reminders, ReminderEdit, Date, Activities, ActivityEdit, Weight, Kanban, TaskEdit, DailyReview, Finish, Reward, Config, Language, Colors,
                     RosaryMode, RosarySet, RosaryDecade, RosaryPrayer, RosaryComplete, MealPlanner };
