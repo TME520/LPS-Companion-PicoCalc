@@ -10,6 +10,11 @@ public:
     lps_test::JsonStore stored{};bool exists=false,failSave=false;unsigned saves=0;
     std::array<std::array<char,41>,20> rows{};
     MealCardView card{};bool hasCard=false;
+    // LPS-114-CHG02: Meal Planner CSV calls through the storage interface.
+    bool failMealCsv=false;unsigned mealExports=0;Date mealDate{};MealDeckState mealDeck{};
+    bool exportMealCsv(const Date& date,const MealDeckState& meals)override{
+        ++mealExports;mealDate=date;mealDeck=meals;return!failMealCsv;
+    }
     void clear()override{for(auto& row:rows)row.fill(0);hasCard=false;}
     void text(int x,int y,const char* text,bool)override{
         assert(x==0&&y>=0&&y%16==0&&y+16<=320);
@@ -43,6 +48,11 @@ struct Frame final:Canvas {
     }
     uint32_t at(int x,int y)const{return px[std::size_t(y*320+x)];}
 };
+struct StringSink final:SaveSink {
+    std::string text;bool fail=false;
+    bool write(const char* data,std::size_t size)override{if(fail)return false;text.append(data,size);return true;}
+};
+std::string mealCsv(const MealDeckState& m){StringSink sink;assert(writeMealCsv(m,sink));return sink.text;}
 bool grey(uint32_t c){return (c>>16)==((c>>8)&255)&&((c>>8)&255)==(c&255);}
 void choose(App& app,Language language){app.key('6');app.key('1');app.key(language==Language::French?'2':'1');app.key('3');}
 std::vector<unsigned> order(const State& s){return std::vector<unsigned>(s.meals.order.begin(),s.meals.order.begin()+s.meals.playedCount);}
@@ -202,8 +212,57 @@ int main(){
         // Sprites are 4 bits per pixel in flash: 2816 bytes each.
         static_assert(sizeof meal_sprites::Pixels==meal_sprites::Count*88*64/2,"4bpp 88x64");
     }
+    // LPS-114-CHG02: CSV file name, content in order of play, quoting.
+    {
+        char name[16];
+        mealCsvName(Date{2026,11,14},name,sizeof name);assert(!std::strcmp(name,"MP261114.CSV"));
+        mealCsvName(Date{2000,1,5},name,sizeof name);assert(!std::strcmp(name,"MP000105.CSV"));
+        mealCsvName(Date{2099,12,31},name,sizeof name);assert(!std::strcmp(name,"MP991231.CSV"));
+        MealDeckState m;assert(mealCsv(m)=="order,category,card,portion\r\n");
+        for(unsigned c:{4u,0u,14u,7u,2u})toggleMealCard(m,c);
+        assert(mealCsv(m)=="order,category,card,portion\r\n1,Drinks,Mint Tea,1 cup\r\n2,Drinks,Coffee (Latte),1 mug\r\n3,Blank,Blank,\r\n4,Food,Light Cheese Wrap,1 wrap\r\n5,Drinks,Coffee (Black),1 cup\r\n");
+        toggleMealCard(m,0);toggleMealCard(m,0);
+        assert(mealCsv(m)=="order,category,card,portion\r\n1,Drinks,Mint Tea,1 cup\r\n2,Blank,Blank,\r\n3,Food,Light Cheese Wrap,1 wrap\r\n4,Drinks,Coffee (Black),1 cup\r\n5,Drinks,Coffee (Latte),1 mug\r\n");
+        auto field=[](const char* v){StringSink s;assert(writeCsvField(s,v));return s.text;};
+        assert(field("Coffee (Latte)")=="Coffee (Latte)"&&field("")=="");
+        assert(field("a,b")=="\"a,b\""&&field("say \"hi\"")=="\"say \"\"hi\"\"\""&&field("two\nlines")=="\"two\nlines\"");
+        assert(field("Thé à la menthe")=="Thé à la menthe"); // UTF-8 passes through
+        StringSink broken;broken.fail=true;assert(!writeMealCsv(m,broken));
+    }
+    // Leaving the planner (Space or Esc) exports the live day's deck; entering does not.
+    {
+        Display d;App app(d);app.start();
+        app.key(' ');assert(d.mealExports==0);
+        app.key(Enter);app.key(Right);app.key(Right);app.key(Enter);app.key(' ');
+        assert(d.mealExports==1&&d.mealDate.year==2026&&d.mealDate.month==9&&d.mealDate.day==17);
+        assert(d.mealDeck.playedCount==2&&d.mealDeck.order[0]==0&&d.mealDeck.order[1]==2);
+        assert(!d.has(18,"Meal CSV export failed"));
+        app.key(' ');app.key(Escape);assert(d.mealExports==2&&d.mealDeck.playedCount==2);
+        // Nothing played still calls the adapter (it resets an existing file, or writes nothing).
+        app.key(' ');app.key(Left);app.key(Enter);app.key(Right);app.key(Right);app.key(Enter);app.key(Escape);
+        assert(d.mealExports==3&&d.mealDeck.playedCount==0);
+        // A failed export is reported on Home; the deck stays saved; the next exit retries.
+        app.key(' ');app.key(Enter);d.failMealCsv=true;app.key(Escape);
+        assert(app.currentScreen()==Screen::Home&&d.has(18,"Meal CSV export failed")&&app.data().meals.playedCount==1);
+        {State s;assert(d.stored.check(s)==SaveCheck::Valid&&s.meals.playedCount==1);}
+        d.failMealCsv=false;app.key(' ');app.key(' ');assert(d.mealExports==5&&!d.has(18,"Meal CSV export failed"));
+        // French message; closing the day exports nothing by itself.
+        choose(app,Language::French);app.key(' ');d.failMealCsv=true;app.key(' ');assert(d.has(18,"Export CSV repas échoué"));
+        d.failMealCsv=false;const unsigned before=d.mealExports;app.key('9');app.key(Enter);assert(d.mealExports==before);
+        // Missing SD card: no export attempt (the red warning already shows).
+        Display none;
+        struct NoSd final:Platform{Display& d;explicit NoSd(Display& x):d(x){}
+            void clear()override{d.clear();}void text(int x,int y,const char* t,bool r)override{d.text(x,y,t,r);}
+            void alert(int x,int y,const char* t)override{d.alert(x,y,t);}void present()override{}void setPalette(Palette)override{}
+            void mealCard(const MealCardView& v)override{d.mealCard(v);}
+            LoadResult load(State&)override{return LoadResult::NoStorage;}bool save(const State&)override{return false;}
+            bool exportIcs(const Day&,uint32_t,uint32_t,Language,const State&)override{return false;}
+            bool exportWeightCsv(const Day&)override{return false;}
+            bool exportMealCsv(const Date& a,const MealDeckState& b)override{return d.exportMealCsv(a,b);}};
+        NoSd sd(none);App missing(sd);missing.start();missing.key(' ');missing.key(Escape);assert(none.mealExports==0);
+    }
     // Memory: the deck adds 17 bytes to State.
     static_assert(sizeof(MealDeckState)==17,"compact deck state");
     std::printf("State: %zu bytes, sprites: %zu bytes\n",sizeof(State),sizeof meal_sprites::Pixels+sizeof meal_sprites::Palettes+sizeof meal_sprites::Border+sizeof meal_sprites::Ribbon);
-    std::puts("PASS: Meal Planner: hidden SPACE entry/exit, home keys intact, row/card wrap, play/put back with order, greyed card, counter, FR labels, save/restore, v2 save without deck, invalid deck data, failed-save rollback, read-only archive, new deck at day close and card drawing.");
+    std::puts("PASS: Meal Planner: hidden SPACE entry/exit, home keys intact, row/card wrap, play/put back with order, greyed card, counter, FR labels, save/restore, v2 save without deck, CSV name/content/quoting and export on exit, invalid deck data, failed-save rollback, read-only archive, new deck at day close and card drawing.");
 }

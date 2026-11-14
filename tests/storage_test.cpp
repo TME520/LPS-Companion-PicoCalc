@@ -125,7 +125,30 @@ int main(){
     assert(datedDisk.exportIcs(added,0,0,Language::French,State{}));
     ics=std::fopen("2028-03-03_LPS-Companion.ics","rb");assert(ics);std::memset(content,0,sizeof content);std::fread(content,1,sizeof(content)-1,ics);assert(std::fclose(ics)==0);
     assert(std::strstr(content,"DESCRIPTION:Activités: Cuisine, Ménage, Famille, Amis\\NXP:\r\nEND:VEVENT"));
+    // LPS-114-CHG02: the Meal Planner CSV through the real adapter, on leaving the planner.
+    {
+        auto file=[](const char* name){std::string out;FILE* f=std::fopen(name,"rb");if(!f)return std::string("<missing>");char b[512];size_t n;while((n=std::fread(b,1,sizeof b,f))>0)out.append(b,n);std::fclose(f);return out;};
+        std::remove("MP280302.CSV");assert(dated.data().today.date.day==2&&dated.data().today.date.month==3);
+        dated.key(' ');dated.key(Escape);assert(file("MP280302.CSV")=="<missing>"); // nothing played: no file created
+        dated.key(' ');dated.key(Enter);dated.key(Down);dated.key(Right);dated.key(Right);dated.key(Enter);dated.key(Down);dated.key(Enter);dated.key(' ');
+        assert(dated.currentScreen()==Screen::Home);
+        assert(file("MP280302.CSV")=="order,category,card,portion\r\n1,Drinks,Coffee (Latte),1 mug\r\n2,Food,Tomato Salad,1 bowl\r\n3,Blank,Blank,\r\n");
+        // Put the latte back: the file is rewritten on the next exit, in play order.
+        dated.key(' ');dated.key(Left);dated.key(Enter);dated.key(Escape);
+        assert(file("MP280302.CSV")=="order,category,card,portion\r\n1,Food,Tomato Salad,1 bowl\r\n2,Blank,Blank,\r\n");
+        // A write error removes the incomplete file and reports it on Home; the deck stays saved.
+        dated.key(' ');mockWriteError=true;dated.key(Escape);mockWriteError=false;
+        assert(file("MP280302.CSV")=="<missing>"&&dated.data().meals.playedCount==2);
+        dated.key(' ');dated.key(' ');assert(file("MP280302.CSV").find("2,Blank,Blank,")!=std::string::npos);
+        // Everything put back: an existing file is reset to its header only.
+        dated.key(' ');dated.key(Down);dated.key(Right);dated.key(Right);dated.key(Enter);dated.key(Down);dated.key(Enter);dated.key(Escape);
+        assert(dated.data().meals.playedCount==0&&file("MP280302.CSV")=="order,category,card,portion\r\n");
+        // The adapter call itself: no file for an empty deck on a fresh day, invalid date refused.
+        MealDeckState none;assert(datedDisk.exportMealCsv(Date{2028,3,9},none)&&file("MP280309.CSV")=="<missing>");
+        assert(!datedDisk.exportMealCsv(Date{2028,2,30},none));
+        std::remove("MP280302.CSV");
+    }
     std::remove("2028-03-03_LPS-Companion.ics");
     std::remove("2028-02-29_LPS-Companion.ics");std::remove("2028-03-01_LPS-Companion.ics");std::remove("2028-03-02_LPS-Companion.ics");std::remove("2028.csv");std::remove("SAVE_A.JSN");std::remove("SAVE_B.JSN");
-    std::puts("PASS: real A/B adapter with host files: history, date, annual CSV, ICS, retries and failure handling.");
+    std::puts("PASS: real A/B adapter with host files: history, date, annual CSV, ICS, Meal Planner CSV, retries and failure handling.");
 }

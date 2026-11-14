@@ -86,6 +86,8 @@ enum Key { Enter=13, Backspace=8, Escape=27, Up=1000, Down, Left, Right, DeleteK
 enum class LoadResult { Missing, Ok, NoStorage, Error };
 struct Day;
 struct State;
+struct Date;
+struct MealDeckState;
 // LPS-114-CHG01: what the Meal Planner shows. The adapter keeps it until
 // present() and draws it with drawMealCard() after the text rows.
 struct MealCardView {
@@ -135,6 +137,11 @@ struct Platform {
     // The yearly weight journal is exported before the state commit as well.
     // Implementations must treat a repeated date as already exported.
     virtual bool exportWeightCsv(const Day& day)=0;
+    // LPS-114-CHG02: rewrite the day's Meal Planner CSV (MPYYMMDD.CSV) when
+    // the planner is left. With no card played, an existing file is reset to
+    // its header and a missing one is not created. Platforms without storage
+    // may keep the default.
+    virtual bool exportMealCsv(const Date&,const MealDeckState&){return true;}
 };
 // LPS-113-CHG08: default list of 22 activities. Order matters: the first 16
 // keep the bit positions of v1.12 binary saves; JSON saves store the French names.
@@ -533,6 +540,37 @@ void writeDay(JsonWriter& w,const State& s,const Day& d){
 }
 // Streams the whole save to sink through one small buffer. checksum receives
 // the CRC-32 written in the file, so the adapter can verify its read-back.
+// ---------------------------------------------------------------------------
+// LPS-114-CHG02: Meal Planner CSV, one file per day: MPYYMMDD.CSV (MP = Meal
+// Planner). It lists the played cards in order of play (the device has no
+// clock), with stable English names whatever the UI language, so tools can
+// read it; Blank cards have an empty portion. CRLF lines, UTF-8, RFC 4180
+// quoting:
+//   order,category,card,portion
+//   1,Drinks,Coffee (Latte),1 mug
+void mealCsvName(const Date& d,char* out,std::size_t n){
+    std::snprintf(out,n,"MP%02u%02u%02u.CSV",unsigned(d.year%100),unsigned(d.month),unsigned(d.day));
+}
+// A field is quoted when it holds a comma, a quote or a line break; quotes are doubled.
+bool writeCsvField(SaveSink& sink,const char* value){
+    if(!std::strpbrk(value,",\"\r\n"))return sink.write(value,std::strlen(value));
+    bool ok=sink.write("\"",1);
+    for(const char* p=value;*p&&ok;++p)ok=*p=='"'?sink.write("\"\"",2):sink.write(p,1);
+    return ok&&sink.write("\"",1);
+}
+bool writeMealCsv(const MealDeckState& meals,SaveSink& sink){
+    constexpr char header[]="order,category,card,portion\r\n";
+    constexpr const char* rows[]={"Drinks","Food","Blank"};
+    bool ok=sink.write(header,sizeof header-1);
+    for(unsigned i=0;i<meals.playedCount&&ok;++i){
+        const MealCard& card=MealDeck[meals.order[i]<MealCardCount?meals.order[i]:0];
+        char number[8];std::snprintf(number,sizeof number,"%u,",i+1);
+        ok=sink.write(number,std::strlen(number))&&writeCsvField(sink,rows[unsigned(card.row)])&&sink.write(",",1)
+            &&writeCsvField(sink,card.en)&&sink.write(",",1)
+            &&writeCsvField(sink,card.row==MealRow::Blank?"":card.enPortion)&&sink.write("\r\n",2);
+    }
+    return ok;
+}
 bool writeSave(const State& s,uint32_t generation,SaveSink& sink,uint32_t& checksum){
     JsonWriter w(sink);
     w.raw("{");w.key("format");w.text("lps-companion");w.raw(",");w.key("version");w.number(SaveSchemaVersion);
@@ -1340,6 +1378,14 @@ class App {
         }
         confirmingDelete=false;
     }
+    // LPS-114-CHG02: leaving the Meal Planner (Space or Esc) rewrites the
+    // day's CSV. A failure is reported on Home; the deck itself is already saved.
+    void leaveMealPlanner(){
+        go(Screen::Home);
+        if(missingStorage)return; // the red missing-SD warning already explains it
+        if(!validDate(state.today.date)){say(tr("Set Date to export meals","Renseignez Date pour exporter les repas"));return;}
+        if(!hw.exportMealCsv(state.today.date,state.meals))say(tr("Meal CSV export failed","Export CSV repas échoué"));
+    }
     template<std::size_t N> void edit(std::array<char,N>& value,int key){
         std::size_t len=std::strlen(value.data());
         if(key==Backspace||key==127){if(len)value[len-1]=0;}
@@ -1376,6 +1422,7 @@ public:
         if(k==Escape){
             if(screen==Screen::Activities&&confirmingDelete){confirmingDelete=false;message.fill(0);render();return;}
             if(screen==Screen::ActivityEdit){screen=Screen::Activities;activityDraft.fill(0);message.fill(0);render();return;}
+            if(screen==Screen::MealPlanner){leaveMealPlanner();render();return;}
             Screen target=Screen::Home;
             if(screen==Screen::Language||screen==Screen::Colors)target=Screen::Config;
             else if(screen==Screen::ReminderEdit)target=Screen::Reminders;
@@ -1628,7 +1675,7 @@ public:
             // back the card and saves at once, like an activity tick.
             unsigned row=unsigned(MealDeck[mealCursor].row);
             const unsigned first=MealRowFirst[row],n=MealRowFirst[row+1]-first,column=mealCursor-first;
-            if(k==' ')go(Screen::Home);
+            if(k==' ')leaveMealPlanner();
             else if(k==Left)mealCursor=first+(column+n-1)%n;
             else if(k==Right)mealCursor=first+(column+1)%n;
             else if(k==Up||k==Down){

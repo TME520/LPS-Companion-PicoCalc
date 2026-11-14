@@ -18,7 +18,13 @@
   - `meal_planner_test`: the border is the apple card's colour (mint tea's for the French drink); the apple illustration puts red in the card; the portion background is the card's ribbon colour; the Blank card draws only its header label and has its grey border; everything stays inside the card; played is all grey. Sprite data is 13 × 2816 bytes.
   - Memory: BSS unchanged. Flash for the sprites is about 37.5 KB (pixels 36.6 KB, palettes, border and ribbon colours), about +31 KB over CHG01 (the ARM object's `.rodata` is 57.7 KB, up from 26.9 KB). The render path's row buffer grows to 704 bytes of stack. The adapter's 576-byte row buffer holds the 176-pixel rows.
   - All twelve host test suites pass; compiles warning-free for 32-bit ARM (`-Wshorten-64-to-32`). No UF2 built.
-- Pending on device: Space key reaches the app; card colours and sprite look on the real LCD; drawing speed of the card; save time per play.
+- LPS-114-CHG02: Meal Planner CSV export.
+  - `meal_planner_test`: `mealCsvName` gives `MP261114.CSV`, `MP000105.CSV` and `MP991231.CSV`. `writeMealCsv` writes the header `order,category,card,portion` and then the played cards in order of play, with English names (`1,Drinks,Mint Tea,1 cup`, `3,Blank,Blank,`). Putting a card back and playing it again moves it to the end. RFC 4180 quoting (`"a,b"`, doubled quotes, line breaks) is tested, UTF-8 passes through, and a sink failure is reported. Through the storage interface: entering the planner exports nothing. Leaving with Space or Esc passes today's date and deck to the export, including an empty deck. A failed export leaves the screen on Home with `Meal CSV export failed` (or `Export CSV repas échoué`), the deck still saved, and the next exit retries. Closing the day does not export. With a missing SD card no export is attempted.
+  - `storage_test` (real `src/main.cpp` adapter on host files), on the 2028-03-02 day: leaving with nothing played creates no `MP280302.CSV`. Latte, salad and Blank give the exact three CRLF rows. Putting the latte back and leaving rewrites the file with two rows. A write error removes the file and keeps the deck, and the next exit writes it again. Putting everything back resets the existing file to its header. The adapter refuses an invalid date and creates no file for an empty deck on a new day.
+  - The file is `LPS/EXPORT/MPYYMMDD.CSV` (8.3 name), rewritten whole each time with `FA_CREATE_ALWAYS`, `f_sync` and `f_close`; a failure unlinks it, as the ICS export does.
+  - Flash about +0.8 KB of code; BSS unchanged; writing goes straight through FatFs with no extra buffer.
+  - All twelve host test suites pass; compiles warning-free for 32-bit ARM (`-Wshorten-64-to-32`). No UF2 built.
+- Pending on device: Space key reaches the app; MPYYMMDD.CSV appears in `LPS/EXPORT` and opens in a spreadsheet; card colours and sprite look on the real LCD; drawing speed of the card; save time per play.
 
 # Validation v1.13 — 9 November 2026
 

@@ -24,6 +24,17 @@ It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display
   - **New day, new deck**: closing the day (9) deals 16 fresh cards. Played cards are not added to the archive or to the ICS export.
   - The pictures come from your two card sheets, kept in `assets/meal_deck_sheet1.png` and `assets/meal_deck_sheet2.png`. `tools/meal_sprites.py` (Python 3 + Pillow) crops each illustration, removes the white background, reduces it to 88 × 64 with 15 colours of its own, and writes `src/meal_sprites.h` (13 distinct pictures, 4 bits per pixel, about 37 KB in flash).
 
+- **Meal Planner CSV** (LPS-114-CHG02): leaving the Meal Planner (**Space** or **Esc**) rewrites `LPS/EXPORT/MPYYMMDD.CSV` for the current day (for example `MP261114.CSV` for 14 November 2026), next to the ICS files. It lists the played cards in the order they were played, with English names whatever the screen language so other tools can read it:
+
+  ```
+  order,category,card,portion
+  1,Drinks,Coffee (Latte),1 mug
+  2,Food,Tomato Salad,1 bowl
+  3,Blank,Blank,
+  ```
+
+  Lines end in CRLF, text is UTF-8, and a field holding a comma, a quote or a line break is quoted (RFC 4180). Blank cards have an empty portion. If no card is played, no file is created, but an existing file for that day is reset to its header line. If the write fails, the incomplete file is removed and `Meal CSV export failed` / `Export CSV repas échoué` appears on Home. The deck itself is already saved, and the next exit tries again. Closing the day does not write this file.
+
 ## Changes in v1.13
 
 - **Title** (LPS-113-CHG09): the title bar reads `LPS COMPANION v1.13`.

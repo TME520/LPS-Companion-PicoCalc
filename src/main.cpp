@@ -291,6 +291,27 @@ public:
         if(!(ok&&sync==FR_OK&&close==FR_OK)){f_unlink(path);return false;}
         return true;
     }
+    // LPS-114-CHG02: LPS/EXPORT/MPYYMMDD.CSV, beside the ICS files. Rewritten
+    // whole each time; a failed write removes the incomplete file.
+    bool exportMealCsv(const lps::Date& date,const lps::MealDeckState& meals)override{
+        if(!mounted||!lps::validDate(date))return false;
+        FRESULT r=f_mkdir("0:/LPS");if(r!=FR_OK&&r!=FR_EXIST)return false;
+        r=f_mkdir("0:/LPS/EXPORT");if(r!=FR_OK&&r!=FR_EXIST)return false;
+        char name[16],path[40];lps::mealCsvName(date,name,sizeof name);
+        std::snprintf(path,sizeof path,"0:/LPS/EXPORT/%s",name);
+        if(!meals.playedCount){
+            // Nothing played: do not create a file, but reset an existing one.
+            FIL probe;r=f_open(&probe,path,FA_READ);
+            if(r==FR_NO_FILE||r==FR_NO_PATH)return true;
+            if(r!=FR_OK||f_close(&probe)!=FR_OK)return false;
+        }
+        FIL f;r=f_open(&f,path,FA_WRITE|FA_CREATE_ALWAYS);if(r!=FR_OK)return false;
+        FileSink sink(f);
+        const bool ok=lps::writeMealCsv(meals,sink);
+        const auto sync=f_sync(&f),close=f_close(&f);
+        if(!(ok&&sync==FR_OK&&close==FR_OK)){f_unlink(path);return false;}
+        return true;
+    }
     bool exportWeightCsv(const lps::Day& day)override{
         if(!mounted||!lps::validDate(day.date))return false;
         FRESULT r=f_mkdir("0:/LPS");if(r!=FR_OK&&r!=FR_EXIST)return false;
