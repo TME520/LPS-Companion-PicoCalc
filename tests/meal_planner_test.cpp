@@ -54,7 +54,7 @@ struct StringSink final:SaveSink {
 };
 std::string mealCsv(const MealDeckState& m){StringSink sink;assert(writeMealCsv(m,sink));return sink.text;}
 bool grey(uint32_t c){return (c>>16)==((c>>8)&255)&&((c>>8)&255)==(c&255);}
-void choose(App& app,Language language){app.key('6');app.key('1');app.key(language==Language::French?'2':'1');app.key('3');}
+void choose(App& app,Language language){app.key(Tab);app.key('1');app.key(language==Language::French?'2':'1');app.key('3');}
 std::vector<unsigned> order(const State& s){return std::vector<unsigned>(s.meals.order.begin(),s.meals.order.begin()+s.meals.playedCount);}
 int main(){
     // The deck: 16 cards in three rows, in the agreed order, duplicates separate.
@@ -81,7 +81,7 @@ int main(){
         // Home keys still work as before after a visit: digits, arrows, Enter.
         app.key('1');assert(app.currentScreen()==Screen::Activities);app.key(Escape);
         app.key(Down);app.key(Down);app.key(Enter);assert(app.currentScreen()==Screen::Weight);app.key(Escape);
-        app.key('9');assert(app.currentScreen()==Screen::Finish);app.key(Escape);
+        app.key('8');assert(app.currentScreen()==Screen::Finish);app.key(Escape);
         // SPACE elsewhere keeps its meaning (text entry, other screens).
         app.key('3');app.key('n');app.key('a');app.key(' ');app.key('b');assert(app.currentScreen()==Screen::TaskEdit);
         app.key(Enter);assert(!std::strcmp(app.data().tasks[0].name.data(),"a b"));app.key(Escape);
@@ -165,8 +165,9 @@ int main(){
         app.key(Enter);assert(app.data().meals.playedCount==0&&d.card.position==0&&d.has(18,"Save failed"));
         d.failSave=false;app.key(Enter);assert(app.data().meals.playedCount==1);
         // Close a day (needs a date) so an archive exists, then browse it.
-        app.key(Escape);app.key('9');app.key(Enter);assert(app.currentScreen()==Screen::Reward);app.key(Enter);
-        app.key(Left);app.key(' ');assert(app.currentScreen()==Screen::Home&&d.has("Archived day: read-only"));
+        app.key(Escape);app.key('8');app.key(Enter);assert(app.currentScreen()==Screen::Reward);app.key(Enter);
+        app.key(Left);app.key(Tab);assert(app.currentScreen()==Screen::Home&&d.has("Archived day: read-only")); // LPS-115-CHG01: no Config from an archive
+        app.key(Right);app.key(Left);app.key(' ');assert(app.currentScreen()==Screen::Home&&d.has("Archived day: read-only"));
         app.key(Right);app.key(' ');assert(app.currentScreen()==Screen::MealPlanner);
         Display broken;broken.exists=true;broken.stored.assign("{\"format\":\"lps-companion\"",false);
         App blocked(broken);blocked.start();blocked.key(' ');blocked.key(Enter);
@@ -176,12 +177,12 @@ int main(){
     {
         Display d;App app(d);app.start();app.key(' ');app.key(Enter);app.key(Right);app.key(Enter);
         assert(app.data().meals.playedCount==2);
-        app.key(Escape);app.key('9');app.key(Enter);assert(app.currentScreen()==Screen::Reward);
+        app.key(Escape);app.key('8');app.key(Enter);assert(app.currentScreen()==Screen::Reward);
         assert(app.data().meals.playedCount==0&&app.data().count==1);
         {State s;assert(d.stored.check(s)==SaveCheck::Valid&&s.meals.playedCount==0);}
         app.key(Enter);app.key(' ');assert(d.has(4,"16/16 left")&&d.card.card==0);
         // A failed close keeps today's deck.
-        app.key(Enter);app.key(Escape);app.key('9');d.failSave=true;app.key(Enter);
+        app.key(Enter);app.key(Escape);app.key('8');d.failSave=true;app.key(Enter);
         assert(app.data().meals.playedCount==1);d.failSave=false;
     }
     // Drawing: a coloured card with its sprite; played cards entirely grey; nothing outside the card.
@@ -248,7 +249,7 @@ int main(){
         d.failMealCsv=false;app.key(' ');app.key(' ');assert(d.mealExports==5&&!d.has(18,"Meal CSV export failed"));
         // French message; closing the day exports nothing by itself.
         choose(app,Language::French);app.key(' ');d.failMealCsv=true;app.key(' ');assert(d.has(18,"Export CSV repas échoué"));
-        d.failMealCsv=false;const unsigned before=d.mealExports;app.key('9');app.key(Enter);assert(d.mealExports==before);
+        d.failMealCsv=false;const unsigned before=d.mealExports;app.key('8');app.key(Enter);assert(d.mealExports==before);
         // Missing SD card: no export attempt (the red warning already shows).
         Display none;
         struct NoSd final:Platform{Display& d;explicit NoSd(Display& x):d(x){}

@@ -40,7 +40,7 @@
    A/B recovery chooses the highest-generation intact record. No dynamic allocation in
    application code. SD adapter must provide atomic/durable replacement.
 
- Desktop commands are line-based: enter/up/down/left/right/esc/space/back, digits 1-9,
+ Desktop commands are line-based: enter/up/down/left/right/esc/space/tab/back, digits 0-8,
  text YOUR TEXT, quit. To edit a field, use back, or enter an empty field as-is.
  Desktop save is lps_companion.jsn in the current working directory
  (an older lps_companion.sav is read once and left untouched).
@@ -82,7 +82,7 @@ unsigned displayWidth(const char* utf8){
 }
 constexpr int Width=320, Height=320, Columns=40, Rows=20;
 constexpr std::size_t NoteLength=96, HistoryLength=31, TaskNameLength=32, TaskCapacity=24, ReminderCapacity=3, ReminderTextLength=32, BlobCapacity=6144;
-enum Key { Enter=13, Backspace=8, Escape=27, Up=1000, Down, Left, Right, DeleteKey, F1, F2, F3, F4, F5 };
+enum Key { Tab=9, Enter=13, Backspace=8, Escape=27, Up=1000, Down, Left, Right, DeleteKey, F1, F2, F3, F4, F5 };
 enum class LoadResult { Missing, Ok, NoStorage, Error };
 struct Day;
 struct State;
@@ -1021,6 +1021,8 @@ void drawMealCard(Canvas& c,const MealCardView& v){
 }
 enum class Screen { TimerSelect, TimerRunning, TimerComplete, Home, ReminderPopup, Reminders, ReminderEdit, Date, Activities, ActivityEdit, Weight, Kanban, TaskEdit, DailyReview, Finish, Reward, Config, Language, Colors,
                     RosaryMode, RosarySet, RosaryDecade, RosaryPrayer, RosaryComplete, MealPlanner };
+// Home menu entries 0..8, in order (LPS-115-CHG01: Config is opened with TAB).
+constexpr Screen HomeScreens[]={Screen::Date,Screen::Activities,Screen::Weight,Screen::Kanban,Screen::RosaryMode,Screen::DailyReview,Screen::Reminders,Screen::TimerSelect,Screen::Finish};
 class App {
     Platform& hw;
     State state{};
@@ -1056,6 +1058,20 @@ class App {
     uint64_t timerNow=0,timerLast=0,timerRemaining=0;
     bool timerPaused=false;
     unsigned mealCursor=0; // deck index of the card shown in the Meal Planner
+    // LPS-115-CHG01: Config is opened with TAB and closes back to where it was
+    // opened (screen and cursor). CHG02 will open it from other screens too.
+    Screen configReturn=Screen::Home;
+    unsigned configReturnSelection=0;
+    static bool inConfig(Screen s){return s==Screen::Config||s==Screen::Language||s==Screen::Colors;}
+    void openConfig(){
+        configReturn=screen;configReturnSelection=selection;
+        pendingLanguage=state.language;pendingPalette=state.palette;go(Screen::Config);
+    }
+    // Leaves Config and its sub-screens; pending, unsaved changes are dropped.
+    void closeConfig(){
+        go(configReturn);selection=configReturnSelection;
+        pendingLanguage=state.language;pendingPalette=state.palette;
+    }
     unsigned timerSeconds()const{return unsigned((timerRemaining+999)/1000);}
     void startTimer(unsigned option){constexpr unsigned minutes[]={5,30,60};timerRemaining=uint64_t(minutes[option])*60000;timerLast=timerNow;timerPaused=false;go(Screen::TimerRunning);}
     unsigned extraCount(const Day& d)const{
@@ -1250,7 +1266,7 @@ class App {
     void line(int row,const char* text,bool reverse=false){
         char cells[100];displayText(text,cells,sizeof cells);hw.text(0,row*16,cells,reverse);
         constexpr const char* keys[]={"Enter","Esc","Delete","Del","Backspace","Up","Down","Left","Right",
-            "Entrée","Échap","Suppr","Haut","Bas","Space","Espace","F1","F2","F3","F4","F5","N","E","<-","->","1-9","1-9,0"};
+            "Entrée","Échap","Suppr","Haut","Bas","Space","Espace","Tab","F1","F2","F3","F4","F5","N","E","<-","->","1-9","1-9,0"};
         for(unsigned col=0;cells[col]&&col<40;){
             bool matched=false;
             for(const char* key:keys){char latin[24];displayText(key,latin,sizeof latin);const unsigned len=unsigned(std::strlen(latin));
@@ -1423,6 +1439,7 @@ public:
             if(screen==Screen::Activities&&confirmingDelete){confirmingDelete=false;message.fill(0);render();return;}
             if(screen==Screen::ActivityEdit){screen=Screen::Activities;activityDraft.fill(0);message.fill(0);render();return;}
             if(screen==Screen::MealPlanner){leaveMealPlanner();render();return;}
+            if(screen==Screen::Config){closeConfig();render();return;} // Esc: one level up
             Screen target=Screen::Home;
             if(screen==Screen::Language||screen==Screen::Colors)target=Screen::Config;
             else if(screen==Screen::ReminderEdit)target=Screen::Reminders;
@@ -1431,30 +1448,32 @@ public:
             else if(screen==Screen::RosaryDecade)target=Screen::RosarySet;
             go(target);render();return;
         }
+        // LPS-115-CHG01: TAB closes Config entirely, from any of its screens.
+        if(k==Tab&&inConfig(screen)){closeConfig();render();return;}
         message.fill(0);
         if(screen==Screen::ReminderPopup){go(Screen::Home);
         }else if(screen==Screen::Home){
             // LPS-114-CHG01: SPACE opens the hidden Meal Planner (today only).
             if(k==' '){if(daysBack)readOnly();else go(Screen::MealPlanner);render();return;}
+            // LPS-115-CHG01: TAB opens Config, which has no menu entry any more.
+            if(k==Tab){if(daysBack)readOnly();else openConfig();render();return;}
             if(k==Left){
                 if(daysBack<state.count){++daysBack;selection=0;page=0;}
                 else say(state.count?tr("Oldest saved day","Plus ancien jour conservé"):tr("No archived days","Aucun jour archivé"));
             }
             if(k==Right){daysBack=0;selection=0;page=0;}
-            const unsigned menuCount=daysBack?2:10;
+            const unsigned menuCount=daysBack?2:unsigned(sizeof HomeScreens/sizeof HomeScreens[0]);
             if(k==Up)selection=(selection+menuCount-1)%menuCount;
             if(k==Down)selection=(selection+1)%menuCount;
             if(!daysBack&&k=='0'){selection=0;k=Enter;}
             else if(daysBack&&k>='1'&&k<='2'){selection=unsigned(k-'1');k=Enter;}
-            else if(!daysBack&&k>='1'&&k<='9'){selection=unsigned(k-'0');k=Enter;}
-            if((k=='0'||(k>='3'&&k<='9'))&&daysBack)readOnly();
+            else if(!daysBack&&k>='1'&&unsigned(k-'0')<menuCount){selection=unsigned(k-'0');k=Enter;}
+            if((k=='0'||(k>='3'&&unsigned(k-'0')<sizeof HomeScreens/sizeof HomeScreens[0]))&&daysBack)readOnly();
             if(k==Enter){
-                constexpr Screen currentScreens[]={Screen::Date,Screen::Activities,Screen::Weight,Screen::Kanban,Screen::RosaryMode,Screen::DailyReview,Screen::Config,Screen::Reminders,Screen::TimerSelect,Screen::Finish};
                 constexpr Screen archiveScreens[]={Screen::Activities,Screen::Weight};
-                const Screen target=daysBack?archiveScreens[selection]:currentScreens[selection];
+                const Screen target=daysBack?archiveScreens[selection]:HomeScreens[selection];
                 if(target==Screen::Kanban)kanbanColumn=TaskStatus::Todo;
                 if(target==Screen::Reminders)pruneReminders();
-                if(target==Screen::Config){pendingLanguage=state.language;pendingPalette=state.palette;}
                 go(target);}
         }else if(screen==Screen::TimerSelect){
             if(k==Up)selection=(selection+2)%3;
@@ -1615,7 +1634,7 @@ public:
                 if(selection==0)go(Screen::Language);
                 else if(selection==1)go(Screen::Colors);
                 else {State& next=stage();next.language=pendingLanguage;
-                    if(commit(next)){go(Screen::Home);say(tr("Configuration saved","Configuration enregistrée"));}}
+                    if(commit(next)){closeConfig();say(tr("Configuration saved","Configuration enregistrée"));}}
             }
         }else if(screen==Screen::Language){
             if(k==Up||k==Down)selection=1-selection;
@@ -1627,7 +1646,7 @@ public:
             if(k>='1'&&k<='5')selection=unsigned(k-'1');
             pendingPalette=Palette(selection);
             if(k==Enter){State& next=stage();next.palette=pendingPalette;
-                if(commit(next)){go(Screen::Home);say(tr("Color saved","Couleur enregistrée"));}}
+                if(commit(next)){closeConfig();say(tr("Color saved","Couleur enregistrée"));}}
         }else if(screen==Screen::RosaryMode){
             if(k==Up)selection=(selection+3)%4;
             if(k==Down)selection=(selection+1)%4;
@@ -1696,8 +1715,10 @@ public:
             line(3,daysBack?tr("CLOSED DAY","JOUR TERMINÉ"):tr("TODAY","AUJOURD'HUI"));
             const unsigned marked=daysBack&&day.namedCount?day.namedCount:count(day.flags);
             std::snprintf(b,sizeof b,tr("%u/%u activities","%u/%u activités"),marked,state.activityCount);line(4,b);
-            const char* menu[]={"0  Date",tr("1  Activities","1  Activités"),tr("2  Weight tracker","2  Suivi du poids"),"3  Kanban",tr("4  Christian Rosary","4  Rosaire chrétien"),tr("5  Daily review","5  Revue journalière"),"6  Config",tr("7  Reminders","7  Rappels"),tr("8  Timer","8  Minuteur"),tr("9  Close the day","9  Terminer le jour")};
-            const unsigned first=daysBack?1:0, total=daysBack?2:10;
+            // LPS-115-CHG01: Config left the menu (TAB opens it); entries renumbered 0-8.
+            const char* menu[]={"0  Date",tr("1  Activities","1  Activités"),tr("2  Weight tracker","2  Suivi du poids"),"3  Kanban",tr("4  Christian Rosary","4  Rosaire chrétien"),tr("5  Daily review","5  Revue journalière"),tr("6  Reminders","6  Rappels"),tr("7  Timer","7  Minuteur"),tr("8  Close the day","8  Terminer le jour")};
+            static_assert(sizeof menu/sizeof menu[0]==sizeof HomeScreens/sizeof HomeScreens[0],"one label per home entry");
+            const unsigned first=daysBack?1:0, total=daysBack?2:unsigned(sizeof menu/sizeof menu[0]);
             for(unsigned i=0;i<total;++i)line(6+int(i),menu[first+i],i==selection);
             line(17,tr("<- Previous day   -> Current day","<- Jour précédent   -> Jour actuel"));
         }else if(screen==Screen::TimerSelect){
@@ -1808,6 +1829,7 @@ public:
             line(8,tr("3  Save","3  Enregistrer"),selection==2);
             line(11,tr("Language: select, then Save.","Langue : choisir, puis enregistrer."));
             line(12,tr("Esc: discard changes","Échap : annuler les modifications"));
+            line(13,tr("Tab: close Config","Tab : fermer la configuration"));
         }else if(screen==Screen::Language){
             line(3,tr("LANGUAGE","LANGUE"));
             line(6,"1  English",selection==0);line(7,"2  Français",selection==1);
@@ -1877,6 +1899,7 @@ public:
         if(missingStorage)hw.alert(0,statusRow*16,message.data());else if(message[0])line(statusRow,message.data());
         if(hw.batteryBelow20())hw.alert(0,18*16,tr("[!] Low battery!","[!] Batterie faible !"));
         if(screen==Screen::MealPlanner)line(19,mealPlayPosition(state.meals,mealCursor)?tr("Enter:Put back  Space/Esc:Back","Entrée:Remettre  Espace/Échap:Retour"):tr("Enter:Play  Space/Esc:Back","Entrée:Jouer  Espace/Échap:Retour"),true);
+        else if(screen==Screen::Home)line(19,tr("Up/Down  Enter:OK  Tab:Config","Haut/Bas  Entrée:OK  Tab:Config"),true);
         else if(screen!=Screen::TimerRunning&&screen!=Screen::TimerComplete)line(19,tr("Up/Down  Enter:OK  Esc:Back","Haut/Bas  Entrée:OK  Échap:Retour"),true);
         hw.present();
     }
@@ -1923,7 +1946,7 @@ public:
             for(unsigned char c:cells[i]){if(!c)break;if(c>=128){std::putchar(0xc0|(c>>6));std::putchar(0x80|(c&0x3f));}else std::putchar(c);}
             std::printf("\033[0m\n");
         }
-        std::printf("\nCommands: 1-9, up/down/left/right, enter, esc, space, back,\ntext YOUR TEXT, quit\n> ");std::fflush(stdout);
+        std::printf("\nCommands: 0-8, up/down/left/right, enter, esc, space, tab, back,\ntext YOUR TEXT, quit\n> ");std::fflush(stdout);
     }
     lps::LoadResult load(lps::State& state)override{
         FILE* f=std::fopen("lps_companion.jsn","rb");
@@ -1974,7 +1997,7 @@ int main(){Terminal terminal;lps::App app(terminal);app.start();std::string s;
         else if(s=="up")app.key(lps::Up);else if(s=="down")app.key(lps::Down);
         else if(s=="left")app.key(lps::Left);else if(s=="right")app.key(lps::Right);
         else if(s=="esc")app.key(lps::Escape);else if(s=="back")app.key(lps::Backspace);
-        else if(s=="space")app.key(' ');
+        else if(s=="space")app.key(' ');else if(s=="tab")app.key(lps::Tab);
         else if(s=="enter"||s.empty())app.key(lps::Enter);else if(s.size()==1)app.key(s[0]);
         else {std::cout<<"Unknown command.\n";app.render();}
     }
@@ -2052,7 +2075,7 @@ int main(){
     nav.key(Right);nav.key(Enter);assert(!(nav.data().today.flags&(1u<<10)));
     nav.key(Escape);nav.key('3');assert(nav.currentScreen()==Screen::Kanban);nav.key(Escape);
     nav.key(Escape);nav.key(Up);nav.key(Enter);assert(nav.currentScreen()==Screen::Finish);
-    nav.key(Escape);nav.key('9');assert(nav.currentScreen()==Screen::Finish);nav.key(Escape);nav.key('6');assert(nav.currentScreen()==Screen::Config);nav.key('2');assert(nav.currentScreen()==Screen::Colors);
+    nav.key(Escape);nav.key('8');assert(nav.currentScreen()==Screen::Finish);nav.key(Escape);nav.key(Tab);assert(nav.currentScreen()==Screen::Config);nav.key('2');assert(nav.currentScreen()==Screen::Colors);
     assert(pages.palette==Palette::Green);nav.key(Down);assert(pages.palette==Palette::Blue);nav.key(Escape);assert(pages.palette==Palette::Green);
     nav.key('2');nav.key('1');nav.key(Enter);assert(nav.currentScreen()==Screen::Home&&nav.data().palette==Palette::Red&&pages.palette==Palette::Red);
     App paletteReload(pages);paletteReload.start();assert(paletteReload.data().palette==Palette::Red);

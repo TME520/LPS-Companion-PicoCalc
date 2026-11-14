@@ -10,6 +10,15 @@ It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display
 
 **Status:** v1.2 was confirmed working on the user's PicoCalc. v1.14 adds the Meal Planner, a hidden card deck for the day's meals (Space on the home menu) with a daily CSV export; it needs device testing. See `BUILD-VALIDATION.md` for host checks and physical-test limits.
 
+## Changes in v1.15 (in progress)
+
+- **Tab opens Config** (LPS-115-CHG01): **Config is no longer in the home menu**; press **Tab** on today's home screen to open it. The home menu is renumbered: **0 Date, 1 Activities, 2 Weight tracker, 3 Kanban, 4 Christian Rosary, 5 Daily review, 6 Reminders, 7 Timer, 8 Close the day** (key `9` now does nothing). The home footer shows the hint `Tab:Config`.
+  - **Tab toggles**: pressing Tab again closes Config entirely and returns to the screen you opened it from, with the cursor where you left it, even from the **Language** or **Colors** sub-screen. Unsaved choices are dropped, as with Esc.
+  - **Esc goes up one level**: from Language or Colors it returns to Configuration; from Configuration it returns to the screen you came from.
+  - **Save** in Configuration (and Enter in Colors) saves and then returns to that screen.
+  - From an archived day, Tab shows `Archived day: read-only`, as Config already required today's screen.
+  - Tab works from Home for now. Text editors (Kanban, Reminders, Activities names, Date, Weight) ignore it.
+
 ## Changes in v1.14
 
 - **Title** (LPS-114-CHG03): the title bar reads `LPS COMPANION v1.14`.
@@ -211,14 +220,14 @@ Flashing replaces the current Pico firmware, including any installed interpreter
 3. Open **Weight tracker / Suivi du poids** to enter your expected and actual weight.
 4. Optionally open **Kanban** to create or update persistent tasks.
 5. Optionally open **Christian Rosary / Rosaire chrétien** for a guided prayer session.
-6. At the end of the day, choose **9 Close the day / Terminer le jour** and press Enter to confirm. The ICS export is written automatically.
+6. At the end of the day, choose **8 Close the day / Terminer le jour** and press Enter to confirm. The ICS export is written automatically.
 7. The next day begins.
 
 Days advance manually. Leaving the device switched off does not automatically start a new day.
 
 ### Main menu
 
-Select the language from Config on today's home screen. Accented French labels are supported.
+Press **Tab** on today's home screen to open Config, where you select the language and colour palette (Tab again or Esc closes it). Accented French labels are supported.
 
 | Key | English | Français | Purpose |
 | --- | --- | --- | --- |
@@ -228,10 +237,10 @@ Select the language from Config on today's home screen. Accented French labels a
 | `3` | Kanban | Kanban | Manage persistent user-defined tasks. |
 | `4` | Christian Rosary | Rosaire chrétien | Start a guided Rosary session. |
 | `5` | Daily review | Revue journalière | Show today’s date, selected activities, actual weight, and TODO/DOING tasks. |
-| `6` | Config | Config | Choose language or colour palette. |
-| `7` | Reminders | Rappels | Create, edit, and delete up to three reminders. |
-| `8` | Timer | Minuteur | Start a 5, 30 or 60-minute countdown. |
-| `9` | Close the day | Terminer le jour | Save and close today, then advance. |
+| `6` | Reminders | Rappels | Create, edit, and delete up to three reminders. |
+| `7` | Timer | Minuteur | Start a 5, 30 or 60-minute countdown. |
+| `8` | Close the day | Terminer le jour | Save and close today, then advance. |
+| `Tab` | Config | Config | Choose language or colour palette (not a menu entry since v1.15). |
 
 Use **Up/Down** to select an item, **Enter** to open it, and **Esc** to return to the main menu.
 

@@ -1,3 +1,15 @@
+# Validation v1.15 (in progress) — 14 November 2026
+
+- LPS-115-CHG01: Tab opens/closes Config.
+  - Home menu `HomeScreens[]` (9 entries, static_assert against the labels): 0 Date, 1 Activities, 2 Weight tracker, 3 Kanban, 4 Christian Rosary, 5 Daily review, 6 Reminders, 7 Timer, 8 Close the day. `language_test` checks rows 12–14 in EN/FR (`6  Rappels`, `7  Minuteur`, `8  Terminer le jour`), no `Config` row and no `9` entry, and that key `9` leaves Home unchanged.
+  - Home footer `Up/Down  Enter:OK  Tab:Config` (FR `Haut/Bas  Entrée:OK  Tab:Config`), with `Tab` emphasized and `Config` plain; the Config screen shows `Tab: close Config` / `Tab : fermer la configuration`. All rows still fit 40 cells.
+  - Return target: `openConfig()` records the screen and cursor it was opened from (`configReturn`, `configReturnSelection`); `closeConfig()` goes back there. Tests: Tab from Home with the cursor on Weight opens Config, Tab again returns to Home with Weight still highlighted; Tab from Language and from Colors closes Config entirely (the Colors preview is dropped, palette unchanged, no write); a pending language choice is dropped by Tab; Esc from Colors returns to Config and Esc from Config returns to Home with the cursor restored. Saving Config/Colors returns to Home. Tab on an archived day shows `Archived day: read-only` (`meal_planner_test`).
+  - Tab reaches the app: the PicoCalc `keymap()` already passes code 9; only Home and the Config screens react to it, and the text editors accept only 32–126, so Tab is ignored there. Desktop build: new `tab` command.
+  - Tests updated for the renumbering (Reminders 6, Timer 7, Close the day 8, Config via Tab) in the activities, language, meal planner, migration, reminders, storage and timer suites, plus the built-in `LPS_TEST` run.
+  - Firmware object for 32-bit ARM (Cortex-M0+, `-Os`): +186 bytes total; BSS +8 bytes (return screen and cursor).
+  - All twelve host test suites pass; compiles warning-free for 32-bit ARM (`-Wshorten-64-to-32`). No UF2 built.
+- Pending on device: Tab key reaches the app on the PicoCalc keyboard.
+
 # Validation v1.14 — 14 November 2026
 
 - LPS-114-CHG03: title bar `LPS COMPANION v1.14`; header comment v1.14; language_test asserts the new title. All twelve host test suites pass; compiles warning-free for 32-bit ARM (`-Wshorten-64-to-32`). No UF2 built.
