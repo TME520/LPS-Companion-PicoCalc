@@ -1,4 +1,6 @@
-# Validation v1.15 (in progress) — 14 November 2026
+# Validation v1.15 — 15 November 2026
+
+- LPS-115-CHG06: title bar `LPS COMPANION v1.15`; header comment v1.15 (2026-11-15); README title, status and `Changes in v1.15`; language_test asserts the new title. All fourteen host test suites pass; compiles warning-free for 32-bit ARM (`-Wshorten-64-to-32`). No UF2 built. Previews regenerated (`/workspace/lps/previews/115_*.png`).
 
 - LPS-115-CHG01: Tab opens/closes Config.
   - Home menu `HomeScreens[]` (9 entries, static_assert against the labels): 0 Date, 1 Activities, 2 Weight tracker, 3 Kanban, 4 Christian Rosary, 5 Daily review, 6 Reminders, 7 Timer, 8 Close the day. `language_test` checks rows 12–14 in EN/FR (`6  Rappels`, `7  Minuteur`, `8  Terminer le jour`), no `Config` row and no `9` entry, and that key `9` leaves Home unchanged.

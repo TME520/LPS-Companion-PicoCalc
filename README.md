@@ -1,4 +1,4 @@
-# LPS-Companion v1.14
+# LPS-Companion v1.15
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
@@ -8,10 +8,11 @@ LPS-Companion helps you record daily activities and compare your expected and ac
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries are saved to the SD card.
 
-**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.14 adds the Meal Planner, a hidden card deck for the day's meals (Space on the home menu) with a daily CSV export; it needs device testing. See `BUILD-VALIDATION.md` for host checks and physical-test limits.
+**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.15 opens Config with Tab and the Meal Planner with Space from any screen, and lets you choose which home menu entries are shown (saved with your settings); it needs device testing. See `BUILD-VALIDATION.md` for host checks and physical-test limits.
 
-## Changes in v1.15 (in progress)
+## Changes in v1.15
 
+- **Title** (LPS-115-CHG06): the title bar reads `LPS COMPANION v1.15`.
 - **Tab opens Config** (LPS-115-CHG01): **Config is no longer in the home menu**; press **Tab** on today's home screen to open it. The home menu is renumbered: **0 Date, 1 Activities, 2 Weight tracker, 3 Kanban, 4 Christian Rosary, 5 Daily review, 6 Reminders, 7 Timer, 8 Close the day** (key `9` now does nothing). The home footer shows the hint `Tab:Config`.
   - **Tab toggles**: pressing Tab again closes Config entirely and returns to the screen you opened it from, with the cursor where you left it, even from the **Language** or **Colors** sub-screen. Unsaved choices are dropped, as with Esc.
   - **Esc goes up one level**: from Language or Colors it returns to Configuration; from Configuration it returns to the screen you came from.
