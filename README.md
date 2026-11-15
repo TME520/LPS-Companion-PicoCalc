@@ -2,10 +2,8 @@
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
-![main](./main112.png "Main screen")
-
 <p>
-  <img src="./screenshots/v115_home.jpg" alt="LPS Companion v1.15 home menu on a PicoCalc" title="Home menu (v1.15)" width="48%">
+  <img src="./screenshots/v115_home.jpg" alt="LPS Companion v1.15 home menu on a PicoCalc" title="Home menu (v1.15)" width="48%"><br />
   <img src="./screenshots/v115_meal_planner.jpg" alt="LPS Companion v1.15 Meal Planner on a PicoCalc" title="Meal Planner (v1.15)" width="48%">
 </p>
 
