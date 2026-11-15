@@ -263,8 +263,8 @@ struct State {
     std::array<Activity,ActivityCapacity> activities{};
     MealDeckState meals{};
     // LPS-115-CHG03: home menu entries hidden by the user, bit i = HomeScreens[i].
-    // Date and Close the day are never hidden. Not yet saved in the JSON (CHG05)
-    // and not yet applied to the home menu (CHG04).
+    // Date and Close the day are never hidden. The home menu shows only the
+    // others (CHG04). Not yet saved in the JSON (CHG05).
     uint16_t hiddenHome=0;
     State();
 };
@@ -1073,7 +1073,25 @@ class App {
     // keeps one return point (screen and cursor); there is no stack. Config may
     // be opened from inside the Meal Planner (it then closes back to the
     // planner), never the other way round: SPACE is ignored in Config.
-    struct ReturnPoint { Screen screen=Screen::Home; unsigned selection=0; };
+    // On today's Home the cursor is kept as the entry (HomeScreens index), not
+    // its position, so it survives entries being hidden or shown meanwhile.
+    struct ReturnPoint { Screen screen=Screen::Home; unsigned selection=0; unsigned homeEntry=0; };
+    ReturnPoint here()const{return {screen,selection,screen==Screen::Home&&!daysBack?homeEntryAt(selection):0};}
+    // LPS-115-CHG04: today's home menu lists the entries not hidden, in order,
+    // numbered 0..n-1 by position. Date (first) and Close the day (last) are
+    // locked, so the menu is never empty and always ends with Close the day.
+    uint16_t hiddenHomeMask()const{return uint16_t(state.hiddenHome&HomeAll&~HomeLocked);}
+    unsigned homeVisibleCount()const{unsigned n=0;for(unsigned i=0;i<HomeEntryCount;++i)if(!(hiddenHomeMask()&(1u<<i)))++n;return n;}
+    unsigned homeEntryAt(unsigned position)const{
+        for(unsigned i=0;i<HomeEntryCount;++i)if(!(hiddenHomeMask()&(1u<<i))&&position--==0)return i;
+        return HomeEntryCount-1;
+    }
+    // Position of an entry; a hidden one gives the next visible entry below it.
+    unsigned homePositionOf(unsigned entry)const{
+        unsigned position=0;
+        for(unsigned i=0;i<HomeEntryCount;++i)if(!(hiddenHomeMask()&(1u<<i))){if(i>=entry)return position;++position;}
+        return position?position-1:0;
+    }
     ReturnPoint configReturn{},mealReturn{};
     bool timerActive=false; // counting down (or paused), whichever screen is shown
     static bool inConfig(Screen s){return s==Screen::Config||s==Screen::Language||s==Screen::Colors||s==Screen::HomeEntries;}
@@ -1101,18 +1119,19 @@ class App {
     // Rosary text or the review, so those positions are clamped.
     void returnTo(const ReturnPoint& r){
         screen=r.screen;selection=r.selection;message.fill(0);confirmingDelete=false;
+        if(screen==Screen::Home&&!daysBack)selection=homePositionOf(r.homeEntry);
         if(screen==Screen::RosaryPrayer){const unsigned pages=(displayCells(rosaryText(rosaryView(rosaryStep)))+359)/360;if(pages&&rosaryPage>=pages)rosaryPage=pages-1;}
         if(screen==Screen::DailyReview){const unsigned maximum=reviewRows()>8?reviewRows()-8:0;if(reviewOffset>maximum)reviewOffset=maximum;}
     }
     void openConfig(){
-        configReturn={screen,selection};
+        configReturn=here();
         resetPending();go(Screen::Config);
     }
     // Leaves Config and its sub-screens; pending, unsaved changes are dropped.
     void closeConfig(){
         resetPending();returnTo(configReturn);
     }
-    void openMealPlanner(){mealReturn={screen,selection};go(Screen::MealPlanner);}
+    void openMealPlanner(){mealReturn=here();go(Screen::MealPlanner);}
     unsigned timerSeconds()const{return unsigned((timerRemaining+999)/1000);}
     void startTimer(unsigned option){constexpr unsigned minutes[]={5,30,60};timerRemaining=uint64_t(minutes[option])*60000;timerLast=timerNow;timerPaused=false;timerActive=true;go(Screen::TimerRunning);}
     unsigned extraCount(const Day& d)const{
@@ -1515,7 +1534,7 @@ public:
                 else say(state.count?tr("Oldest saved day","Plus ancien jour conservé"):tr("No archived days","Aucun jour archivé"));
             }
             if(k==Right){daysBack=0;selection=0;page=0;}
-            const unsigned menuCount=daysBack?2:unsigned(sizeof HomeScreens/sizeof HomeScreens[0]);
+            const unsigned menuCount=daysBack?2:homeVisibleCount();
             if(k==Up)selection=(selection+menuCount-1)%menuCount;
             if(k==Down)selection=(selection+1)%menuCount;
             if(!daysBack&&k=='0'){selection=0;k=Enter;}
@@ -1524,7 +1543,7 @@ public:
             if((k=='0'||(k>='3'&&unsigned(k-'0')<sizeof HomeScreens/sizeof HomeScreens[0]))&&daysBack)readOnly();
             if(k==Enter){
                 constexpr Screen archiveScreens[]={Screen::Activities,Screen::Weight};
-                const Screen target=daysBack?archiveScreens[selection]:HomeScreens[selection];
+                const Screen target=daysBack?archiveScreens[selection]:HomeScreens[homeEntryAt(selection)];
                 if(target==Screen::Kanban)kanbanColumn=TaskStatus::Todo;
                 if(target==Screen::Reminders)pruneReminders();
                 go(target);}
@@ -1777,9 +1796,10 @@ public:
             line(3,daysBack?tr("CLOSED DAY","JOUR TERMINÉ"):tr("TODAY","AUJOURD'HUI"));
             const unsigned marked=daysBack&&day.namedCount?day.namedCount:count(day.flags);
             std::snprintf(b,sizeof b,tr("%u/%u activities","%u/%u activités"),marked,state.activityCount);line(4,b);
-            // LPS-115-CHG01: Config left the menu (TAB opens it); entries renumbered 0-8.
-            const unsigned first=daysBack?1:0, total=daysBack?2:HomeEntryCount;
-            for(unsigned i=0;i<total;++i){std::snprintf(b,sizeof b,"%u  %s",first+i,homeLabel(first+i));line(6+int(i),b,i==selection);}
+            // LPS-115-CHG01: Config left the menu (TAB opens it). LPS-115-CHG04: only
+            // the entries shown, renumbered without gaps; the archive keeps 1 and 2.
+            const unsigned total=daysBack?2:homeVisibleCount();
+            for(unsigned i=0;i<total;++i){const unsigned entry=daysBack?1+i:homeEntryAt(i);std::snprintf(b,sizeof b,"%u  %s",daysBack?entry:i,homeLabel(entry));line(6+int(i),b,i==selection);}
             line(17,tr("<- Previous day   -> Current day","<- Jour précédent   -> Jour actuel"));
         }else if(screen==Screen::TimerSelect){
             line(3,tr("TIMER","MINUTEUR"));

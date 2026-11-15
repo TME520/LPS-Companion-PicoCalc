@@ -26,7 +26,10 @@ It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display
   - Archived days are unchanged: Tab and Space show `Archived day: read-only`.
 - **Config → 3 Activities / Activités** (LPS-115-CHG03): a new Config entry lists the nine home menu entries with a checkbox each (`[x]` shown, `[ ]` hidden). **Up/Down** move, **Enter** shows or hides the entry. **Date** and **Close the day** are always shown: they are marked `(locked)` / `(verrouillé)` and Enter only says `Always shown`. No reordering. Configuration now reads **1 Language, 2 Colors, 3 Activities (with the count shown, e.g. `8/9`), 4 Save**: **Save moves from 3 to 4**.
   - Like Language, the choice is pending until **4 Save** in Configuration. Esc goes back up to Configuration and keeps it; Tab (or Esc from Configuration) closes Config and drops it. A finished timer that takes over also drops it.
-  - For now the choice is only kept in memory: the home menu still shows every entry (filtering and renumbering come in CHG04) and it is not written to the save file yet (CHG05), so it is lost on restart.
+  - For now the choice is only kept in memory: it is not written to the save file yet (CHG05), so it is lost on restart.
+- **Home menu shows only the checked entries** (LPS-115-CHG04): today's home menu lists the entries ticked in Config → Activities, in the usual order, **numbered 0..n without gaps**. Example, with Activities and Daily review hidden: **0 Date, 1 Weight tracker, 2 Kanban, 3 Christian Rosary, 4 Reminders, 5 Timer, 6 Close the day**. Number keys follow the numbers shown (keys past the last entry do nothing) and Up/Down move over the shown entries only.
+  - After a Config save the cursor stays on the same entry; if that entry was just hidden, it moves to the next shown entry below it (Close the day is always there).
+  - Hiding only removes the menu line: the data, reminders popup at start-up, ICS/CSV exports, running timer, Tab (Config) and Space (Meal Planner) work as before. The `x/22 activities` line stays on Home. The archived-day menu (1 Activities, 2 Weight tracker) is unchanged.
 
 ## Changes in v1.14
 
@@ -251,7 +254,7 @@ Press **Tab** on today's home screen to open Config, where you select the langua
 | `8` | Close the day | Terminer le jour | Save and close today, then advance. |
 | `Tab` | Config | Config | Choose language or colour palette (not a menu entry since v1.15). |
 
-Use **Up/Down** to select an item, **Enter** to open it, and **Esc** to return to the main menu.
+Entries can be hidden in Config → 3 Activities (v1.15); the menu then shows the remaining ones numbered 0..n without gaps. Use **Up/Down** to select an item, **Enter** to open it, and **Esc** to return to the main menu.
 
 In read-only history, only items 1–3 are available. Press Right on the home screen to return to today before opening Date or Config.
 

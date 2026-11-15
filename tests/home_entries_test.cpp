@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstring>
 #include <string>
+#include <initializer_list>
 using namespace lps;
 class Display final:public Platform {
 public:
@@ -39,9 +40,9 @@ int main(){
     a.key(Escape);assert(a.currentScreen()==Screen::Config&&d.has(8,"3  Activities: 8/9"));
     a.key('4');assert(a.currentScreen()==Screen::Home&&d.has("Configuration saved")&&d.saves==1);
     assert(a.data().hiddenHome==0x002&&d.saved.hiddenHome==0x002);
-    assert(d.has(7,"1  Activities")&&d.has(14,"8  Close the day")); // the home menu is filtered in CHG04, not yet
+    assert(d.has(7,"1  Weight tracker")&&d.has(13,"7  Close the day")&&!d.rows[14][0]); // LPS-115-CHG04: filtered
     // Reopening starts from the saved choice; Tab drops a pending change, from the sub-screen too.
-    a.key('3');const std::string kanban(d.rows[3].data());
+    a.key('2');const std::string kanban(d.rows[3].data());
     a.key(Tab);a.key('3');assert(d.has(7,"[ ] Activities"));a.key(Down);a.key(Enter);assert(d.has(7,"[x] Activities"));
     a.key(Tab);assert(a.currentScreen()==Screen::Kanban&&d.rows[3].data()==kanban&&a.data().hiddenHome==0x002);
     a.key(Tab);a.key('3');assert(d.has(7,"[ ] Activities"));a.key(Escape);a.key(Escape);assert(a.currentScreen()==Screen::Kanban);
@@ -55,9 +56,55 @@ int main(){
     // A failed save keeps the pending choice and the old state.
     d.fail=true;a.key('4');assert(a.currentScreen()==Screen::Config&&a.data().hiddenHome==0x0fc&&d.has(8,"8/9"));
     d.fail=false;a.key('4');assert(a.data().hiddenHome==0x080&&a.currentScreen()==Screen::Kanban); // only Timer hidden
+    // Timer hidden: 7 is now Close the day and 8 does nothing.
+    a.key(Escape);assert(d.has(12,"6  Rappels")&&d.has(13,"7  Terminer le jour"));a.key('8');assert(a.currentScreen()==Screen::Home);
+    a.key('7');assert(a.currentScreen()==Screen::Finish);a.key(Escape);
+    a.key(Tab);a.key('3');a.key(Up);a.key(Up);a.key(Enter);a.key(Escape);a.key('4');assert(a.data().hiddenHome==0&&a.currentScreen()==Screen::Home);
     // The timer finishing over the sub-screen drops the pending choice.
-    a.key(Escape);a.tick(1000);a.key('7');a.key('1');a.key(Tab);a.key('3');a.key(Down);a.key(Enter);
-    a.tick(1000+300000);assert(a.currentScreen()==Screen::TimerComplete&&a.data().hiddenHome==0x080);
-    a.key(Tab);assert(d.has(8,"8/9"));
-    std::puts("PASS: Config Activities entry and count, 9 checkboxes, locked Date/Close the day, pending toggles with Save, Esc one level, Tab and timer drop pending, Space ignored, failed save, language saved together, home menu unchanged until CHG04.");
+    a.tick(1000);a.key('7');a.key('1');a.key(Tab);a.key('3');a.key(Down);a.key(Enter);
+    a.tick(1000+300000);assert(a.currentScreen()==Screen::TimerComplete&&a.data().hiddenHome==0);
+    a.key(Tab);assert(d.has(8,"9/9"));
+    // LPS-115-CHG04: the home menu shows only the checked entries.
+    {Display d;App a(d);a.start();
+        auto hide=[&](std::initializer_list<unsigned> entries){ // toggle entries (HomeScreens indices) and save
+            a.key(Tab);a.key('3');for(unsigned e:entries){for(unsigned i=0;i<e;++i)a.key(Down);a.key(Enter);for(unsigned i=0;i<e;++i)a.key(Up);}
+            a.key(Escape);a.key('4');};
+        a.key('1');a.key('1');a.key(Escape); // tick an activity first: hidden entries keep their data
+        hide({1,5}); // Activities and Daily review
+        const char* expected[]={"0  Date","1  Weight tracker","2  Kanban","3  Christian Rosary","4  Reminders","5  Timer","6  Close the day"};
+        for(int i=0;i<7;++i)assert(!std::strcmp(d.rows[6+i].data(),expected[i]));
+        assert(!d.rows[13][0]&&d.has(17,"<- Previous day")&&d.has(19,"Tab:Config")&&d.has(4,"1/22 activities")&&d.rev[6]);
+        // Digits map to positions; keys past the end do nothing.
+        a.key('1');assert(a.currentScreen()==Screen::Weight);a.key(Escape);
+        a.key('5');assert(a.currentScreen()==Screen::TimerSelect);a.key(Escape);
+        a.key('6');assert(a.currentScreen()==Screen::Finish);a.key(Escape);
+        a.key('7');a.key('8');a.key('9');assert(a.currentScreen()==Screen::Home&&d.rev[6]);
+        // Up/Down move over visible entries only and wrap.
+        a.key(Up);assert(d.rev[12]);a.key(Down);assert(d.rev[6]);a.key(Down);a.key(Enter);assert(a.currentScreen()==Screen::Weight);a.key(Escape);
+        // Cursor kept on the same entry after a Config save...
+        a.key(Down);a.key(Down);assert(d.rev[8]&&d.has(8,"2  Kanban"));
+        a.key(Tab);a.key('3');a.key(Down);a.key(Down);a.key(Enter);a.key(Escape);a.key('4'); // hide Weight tracker
+        assert(d.rev[7]&&d.has(7,"1  Kanban")&&d.has(11,"5  Close the day"));
+        // ...or moved to the next visible entry when its own entry is hidden.
+        hide({3});assert(d.rev[7]&&d.has(7,"1  Christian Rosary"));a.key(Enter);assert(a.currentScreen()==Screen::RosaryMode);a.key(Escape); // Esc from a screen returns to Home on Date
+        a.key(Down);a.key(Down);a.key(Down);assert(d.has(9,"3  Timer")&&d.rev[9]);
+        hide({7});assert(d.has(9,"3  Close the day")&&d.rev[9]); // hiding the last hideable entry lands on Close the day
+        hide({1,2,3,5,7});assert(d.rev[14]&&d.has(13,"7  Timer")&&d.has(14,"8  Close the day")); // all shown again, cursor kept on Close the day
+        // Meal Planner return point: the entry hidden while in Config over the planner.
+        a.key(Up);a.key(Up);assert(d.has(12,"6  Reminders")&&d.rev[12]);
+        a.key(' ');a.key(Tab);a.key('3');for(int i=0;i<6;++i)a.key(Down);a.key(Enter);a.key(Escape);a.key('4');
+        assert(a.currentScreen()==Screen::MealPlanner);a.key(' ');assert(a.currentScreen()==Screen::Home&&d.rev[12]&&d.has(12,"6  Timer"));
+        // Archive day menu unchanged; hidden entries keep working behind the scenes.
+        hide({1,2});assert(d.has(6,"0  Date")&&d.has(7,"1  Kanban"));
+        a.key('0');a.key(Enter);a.key(Escape); // keep the date
+        a.key(Up);a.key(Enter);assert(a.currentScreen()==Screen::Finish);a.key(Enter);assert(a.currentScreen()==Screen::Reward);a.key(Enter);
+        a.key(Left);assert(d.has(6,"1  Activities")&&d.has(7,"2  Weight tracker")&&!d.rows[8][0]);
+        a.key('1');assert(a.currentScreen()==Screen::Activities&&d.has("[x]"));a.key(Escape);a.key(Right);
+        assert(d.has(7,"1  Kanban"));
+        // The timer keeps running while its entry is hidden.
+        assert(d.has(10,"4  Timer"));a.tick(1000);a.key('4');assert(a.currentScreen()==Screen::TimerSelect);a.key('1');
+        hide({7});assert(a.currentScreen()==Screen::TimerRunning);a.tick(1000+300000);assert(a.currentScreen()==Screen::TimerComplete);
+        a.key(Escape);assert(a.currentScreen()==Screen::Home&&d.has(10,"4  Close the day")&&!d.has("Timer"));
+    }
+    std::puts("PASS: Config Activities entry and count, 9 checkboxes, locked Date/Close the day, pending toggles with Save, Esc one level, Tab and timer drop pending, Space ignored, failed save, language saved together, home menu filtered and renumbered, digits/arrows on visible entries, cursor kept or moved to the next entry, Meal Planner return, archive menu and hidden-entry data unchanged, timer behind a hidden entry.");
 }
