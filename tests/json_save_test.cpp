@@ -48,6 +48,7 @@ int main(){
         auto stuff=[](auto& text){text.fill(0);for(std::size_t i=0;i+1<text.size();++i)text[i]=i%2?'"':'\\';};
         stuff(worst.today.note);for(Day& d:worst.history){stuff(d.note);d.flags=ActivityMask;}
         for(Task& t:worst.tasks)stuff(t.name);for(Reminder& r:worst.reminders)stuff(r.text);
+        worst.hiddenHome=uint16_t(HomeAll&~HomeLocked); // LPS-115-CHG05: every hideable home entry
         const JsonStore big=lps_test::encodeJson(worst);State back;
         assert(parse(big.text(),back)==SaveCheck::Valid&&lps_test::sameState(worst,back));
         std::printf("Worst-case save size: %zu bytes\n",big.size);assert(big.size<SaveMaxBytes/2);

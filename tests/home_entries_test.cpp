@@ -1,5 +1,6 @@
-// LPS-115-CHG03: Config > Activities, the show/hide list of home menu entries.
+// LPS-115-CHG03/04/05: Config > Activities, the filtered home menu and its save key.
 #include "../src/lps_companion.cpp"
+#include "save_helpers.h"
 #include <cassert>
 #include <cstring>
 #include <string>
@@ -23,6 +24,30 @@ public:
     bool has(int row,const char* utf8)const{char cells[100];displayText(utf8,cells,sizeof cells);return std::strstr(rows[row].data(),cells)!=nullptr;}
     bool has(const char* utf8)const{for(int r=0;r<20;++r)if(has(r,utf8))return true;return false;}
 };
+// LPS-115-CHG05: a platform with a real JSON save, for restarts.
+class Disk final:public Platform {
+public:
+    lps_test::JsonStore stored{};bool exists=false,fail=false;unsigned saves=0;
+    std::array<std::array<char,41>,20> rows{};std::array<bool,20> rev{};
+    void clear()override{for(auto& r:rows)r.fill(0);rev.fill(false);}
+    void text(int x,int y,const char* s,bool reverse)override{assert(x==0&&std::strlen(s)<=40);std::snprintf(rows[y/16].data(),41,"%s",s);rev[y/16]=reverse;}
+    void alert(int x,int y,const char* s)override{text(x,y,s,true);}
+    void present()override{}void setPalette(Palette)override{}
+    LoadResult load(State& state)override{if(!exists)return LoadResult::Missing;return stored.read(state);}
+    bool save(const State& state)override{if(fail||!stored.write(state))return false;exists=true;++saves;return true;}
+    bool exportIcs(const Day&,uint32_t,uint32_t,Language,const State&)override{return true;}
+    bool exportWeightCsv(const Day&)override{return true;}
+    bool has(int row,const char* utf8)const{char cells[100];displayText(utf8,cells,sizeof cells);return std::strstr(rows[row].data(),cells)!=nullptr;}
+};
+// The JSON with "homeHidden" replaced (or removed when value is null), re-signed.
+std::string withHidden(const std::string& json,const char* value){
+    std::string j=json;const auto at=j.find(",\n\"homeHidden\":");assert(at!=std::string::npos);
+    const auto end=j.find("]",at)+1;j.replace(at,end-at,value?std::string(",\n\"homeHidden\":")+value:std::string());
+    lps_test::JsonStore s;s.assign(j);return s.text();
+}
+std::pair<SaveCheck,uint16_t> load(const std::string& json,const char* value){
+    lps_test::JsonStore probe;probe.assign(withHidden(json,value));State s;const SaveCheck c=probe.check(s);return {c,s.hiddenHome};
+}
 int main(){
     static_assert(HomeLocked==0x101&&HomeAll==0x1ff,"Date and Close the day are locked");
     Display d;App a(d);a.start();
@@ -106,5 +131,43 @@ int main(){
         hide({7});assert(a.currentScreen()==Screen::TimerRunning);a.tick(1000+300000);assert(a.currentScreen()==Screen::TimerComplete);
         a.key(Escape);assert(a.currentScreen()==Screen::Home&&d.has(10,"4  Close the day")&&!d.has("Timer"));
     }
-    std::puts("PASS: Config Activities entry and count, 9 checkboxes, locked Date/Close the day, pending toggles with Save, Esc one level, Tab and timer drop pending, Space ignored, failed save, language saved together, home menu filtered and renumbered, digits/arrows on visible entries, cursor kept or moved to the next entry, Meal Planner return, archive menu and hidden-entry data unchanged, timer behind a hidden entry.");
+    // LPS-115-CHG05: the choice is saved as "homeHidden" with stable ids, after "meals", crc32 last.
+    {Disk d;
+        {App a(d);a.start();a.key('0');a.key(Enter); // first save: nothing hidden
+         assert(d.stored.text().find("\"meals\":{\"played\":[]},\n\"homeHidden\":[]},\n\"crc32\":")!=std::string::npos);
+         a.key(Tab);a.key('3');a.key(Down);a.key(Enter);for(int i=0;i<4;++i)a.key(Down);a.key(Enter);a.key(Escape);a.key('4');}
+        const std::string json=d.stored.text();
+        assert(json.find("\"homeHidden\":[\"activities\",\"daily_review\"]},\n\"crc32\":\"")!=std::string::npos);
+        assert(json.find("\"version\":2,")!=std::string::npos);
+        {State s;assert(d.stored.check(s)==SaveCheck::Valid&&s.hiddenHome==0x022);}
+        // Restart keeps the filtered menu.
+        {App b(d);b.start();assert(b.data().hiddenHome==0x022);
+         const char* expected[]={"0  Date","1  Weight tracker","2  Kanban","3  Christian Rosary","4  Reminders","5  Timer","6  Close the day"};
+         for(int i=0;i<7;++i)assert(!std::strcmp(d.rows[6+i].data(),expected[i]));assert(!d.rows[13][0]);
+         // A failed save keeps the pending choice, the old state and the old file.
+         b.key(Tab);b.key('3');b.key(Down);b.key(Enter);b.key(Escape);assert(d.has(8,"3  Activities: 8/9"));
+         d.fail=true;b.key('4');assert(b.currentScreen()==Screen::Config&&b.data().hiddenHome==0x022&&d.has(8,"8/9")&&d.stored.text()==json);
+         d.fail=false;b.key('4');assert(b.data().hiddenHome==0x020&&d.stored.text().find("\"homeHidden\":[\"daily_review\"]")!=std::string::npos);}
+        {App c(d);c.start();assert(c.data().hiddenHome==0x020&&d.has(7,"1  Activities")&&d.has(11,"5  Reminders"));}
+        // v1.14 save (key absent): everything shown.
+        {lps_test::JsonStore old;old.assign(withHidden(json,nullptr));assert(old.text().find("homeHidden")==std::string::npos);
+         Disk v114;v114.stored=old;v114.exists=true;App a(v114);a.start();assert(a.data().hiddenHome==0&&v114.has(14,"8  Close the day"));}
+        // Ids: all of them, unknown ones ignored, locked ones never hidden, duplicates harmless.
+        assert(load(json,"[\"activities\",\"weight\",\"kanban\",\"rosary\",\"daily_review\",\"reminders\",\"timer\"]")==std::make_pair(SaveCheck::Valid,uint16_t(0x0fe)));
+        assert(load(json,"[\"activities\",\"sauna\",\"DAILY_REVIEW\",\"\",\"timer\",\"timer\"]")==std::make_pair(SaveCheck::Valid,uint16_t(0x082)));
+        assert(load(json,(std::string("[\"")+std::string(300,'x')+"\",\"kanban\"]").c_str())==std::make_pair(SaveCheck::Valid,uint16_t(0x008)));
+        assert(load(json,"[\"date\",\"close_day\",\"reminders\"]")==std::make_pair(SaveCheck::Valid,uint16_t(0x040)));
+        assert(load(json,"[]")==std::make_pair(SaveCheck::Valid,uint16_t(0)));
+        // Wrong shapes are damage, like the rest of the save.
+        assert(load(json,"\"activities\"").first==SaveCheck::Damaged);
+        assert(load(json,"{}").first==SaveCheck::Damaged);
+        assert(load(json,"[1]").first==SaveCheck::Damaged);
+        assert(load(json,"[null]").first==SaveCheck::Damaged);
+        assert(load(json,"[[\"kanban\"]]").first==SaveCheck::Damaged);
+        // A locked bit set in RAM is never written.
+        {State s;s.hiddenHome=0x1ff;lps_test::JsonStore w=lps_test::encodeJson(s);
+         assert(w.text().find("\"homeHidden\":[\"activities\",\"weight\",\"kanban\",\"rosary\",\"daily_review\",\"reminders\",\"timer\"]")!=std::string::npos);
+         State back;assert(w.check(back)==SaveCheck::Valid&&back.hiddenHome==0x0fe);}
+    }
+    std::puts("PASS: Config Activities entry and count, 9 checkboxes, locked Date/Close the day, pending toggles with Save, Esc one level, Tab and timer drop pending, Space ignored, failed save, language saved together, home menu filtered and renumbered, digits/arrows on visible entries, cursor kept or moved to the next entry, Meal Planner return, archive menu and hidden-entry data unchanged, timer behind a hidden entry; homeHidden saved by id after meals with crc32 last, restart keeps the filtered menu, v1.14 save shows all, unknown/overlong ids ignored, locked ids never hidden, wrong shapes damaged, failed save keeps pending and file.");
 }

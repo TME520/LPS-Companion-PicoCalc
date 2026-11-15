@@ -262,12 +262,20 @@ struct State {
     uint16_t nextActivityId=1;
     std::array<Activity,ActivityCapacity> activities{};
     MealDeckState meals{};
-    // LPS-115-CHG03: home menu entries hidden by the user, bit i = HomeScreens[i].
-    // Date and Close the day are never hidden. The home menu shows only the
-    // others (CHG04). Not yet saved in the JSON (CHG05).
+    // LPS-115-CHG03: home menu entries hidden by the user, bit i = home entry i
+    // (HomeEntryIds order). Date and Close the day are never hidden. The home
+    // menu shows only the others (CHG04); saved as "homeHidden" (CHG05).
     uint16_t hiddenHome=0;
     State();
 };
+// LPS-115-CHG05: stable ids of the home menu entries, in menu order. They name
+// the entries in the save ("homeHidden") so other ports can share the key.
+constexpr const char* HomeEntryIds[]={"date","activities","weight","kanban","rosary","daily_review","reminders","timer","close_day"};
+constexpr unsigned HomeEntryCount=sizeof HomeEntryIds/sizeof HomeEntryIds[0];
+// LPS-115-CHG03: Date and Close the day are always shown.
+constexpr uint16_t HomeLocked=uint16_t(1u|(1u<<(HomeEntryCount-1)));
+constexpr uint16_t HomeAll=uint16_t((1u<<HomeEntryCount)-1);
+static_assert(HomeEntryCount<=16,"hiddenHome is 16 bits");
 const char* storedName(const Activity& a){return a.french[0]?a.french.data():a.english.data();}
 const char* displayName(const Activity& a,Language language){
     if(language==Language::French)return a.french[0]?a.french.data():a.english.data();
@@ -484,6 +492,11 @@ bool decode(const uint8_t* bytes,std::size_t size,State& out) {
 // played deck indices in order of play. It is optional (absent = full deck),
 // so the schema stays 2: v1.13 saves load with a full deck, and v1.13 skips
 // the key as unknown.
+// LPS-115-CHG05 adds "homeHidden":["activities","daily_review",...] after
+// "meals": the home menu entries hidden in Config, by stable id (HomeEntryIds).
+// Optional (absent = all shown, as in v1.14 saves). Unknown ids and the locked
+// "date" and "close_day" are ignored on read; a non-array or a non-string
+// element is damage.
 // "crc32" is the CRC-32 (IEEE, lowercase hex) of every byte before the
 // "crc32" key and must be the last member. History is stored oldest first.
 // Each day stores ticked identity names (French if set, otherwise English).
@@ -609,7 +622,9 @@ bool writeSave(const State& s,uint32_t generation,SaveSink& sink,uint32_t& check
     }
     w.raw("],\n");w.key("meals");w.raw("{");w.key("played");w.raw("[");
     for(unsigned i=0;i<s.meals.playedCount;++i){if(i)w.raw(",");w.number(s.meals.order[i]);}
-    w.raw("]}},\n");
+    w.raw("]},\n");w.key("homeHidden");w.raw("[");
+    for(unsigned i=0,n=0;i<HomeEntryCount;++i)if(s.hiddenHome&(1u<<i)&~HomeLocked){if(n++)w.raw(",");w.text(HomeEntryIds[i]);}
+    w.raw("]},\n");
     checksum=w.checksum();
     char hex[12];std::snprintf(hex,sizeof hex,"%08lx",static_cast<unsigned long>(checksum));
     w.key("crc32");w.text(hex);w.raw("}\n");w.flush();
@@ -830,6 +845,7 @@ void resetState(State& s){
     s.reminderCount=0;
     for(Reminder& r:s.reminders)r=Reminder{};
     s.meals=MealDeckState{};
+    s.hiddenHome=0;
     fillDefaultActivities(s);
 }
 bool readState(JsonReader& r,State& s){
@@ -916,6 +932,16 @@ bool readState(JsonReader& r,State& s){
                     if(mealPlayPosition(s.meals,unsigned(r.number)))return false;
                     s.meals.order[s.meals.playedCount++]=uint8_t(r.number);return true;
                 });
+            });
+        }
+        if(!std::strcmp(key,"homeHidden")){
+            if(r.next()!=Token::ArrayBegin)return false;
+            s.hiddenHome=0;
+            return elements(r,[&](Token t){
+                if(t!=Token::String)return false;
+                for(unsigned i=0;i<HomeEntryCount;++i)
+                    if(!r.overflow&&!std::strcmp(r.text.data(),HomeEntryIds[i]))s.hiddenHome=uint16_t(s.hiddenHome|((1u<<i)&~HomeLocked));
+                return true; // unknown ids are ignored
             });
         }
         return r.skip(r.next());
@@ -1027,11 +1053,7 @@ enum class Screen { TimerSelect, TimerRunning, TimerComplete, Home, ReminderPopu
                     RosaryMode, RosarySet, RosaryDecade, RosaryPrayer, RosaryComplete, MealPlanner, HomeEntries };
 // Home menu entries 0..8, in order (LPS-115-CHG01: Config is opened with TAB).
 constexpr Screen HomeScreens[]={Screen::Date,Screen::Activities,Screen::Weight,Screen::Kanban,Screen::RosaryMode,Screen::DailyReview,Screen::Reminders,Screen::TimerSelect,Screen::Finish};
-constexpr unsigned HomeEntryCount=sizeof HomeScreens/sizeof HomeScreens[0];
-// LPS-115-CHG03: Date and Close the day are always shown.
-constexpr uint16_t HomeLocked=uint16_t(1u|(1u<<(HomeEntryCount-1)));
-constexpr uint16_t HomeAll=uint16_t((1u<<HomeEntryCount)-1);
-static_assert(HomeEntryCount<=16,"hiddenHome is 16 bits");
+static_assert(sizeof HomeScreens/sizeof HomeScreens[0]==HomeEntryCount,"one id per home entry");
 class App {
     Platform& hw;
     State state{};
