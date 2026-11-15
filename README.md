@@ -3,10 +3,8 @@
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
 <p>
-  <center>
-    <img src="./screenshots/v115_home.jpg" alt="LPS Companion v1.15 home menu on a PicoCalc" title="Home menu (v1.15)" width="48%"><br />
-    <img src="./screenshots/v115_meal_planner.jpg" alt="LPS Companion v1.15 Meal Planner on a PicoCalc" title="Meal Planner (v1.15)" width="48%">
-  </center>
+  <img src="./screenshots/v115_home.jpg" alt="LPS Companion v1.15 home menu on a PicoCalc" title="Home menu (v1.15)" width="48%"><br />
+  <img src="./screenshots/v115_meal_planner.jpg" alt="LPS Companion v1.15 Meal Planner on a PicoCalc" title="Meal Planner (v1.15)" width="48%">
 </p>
 
 LPS-Companion helps you record daily activities and compare your expected and actual weight.
