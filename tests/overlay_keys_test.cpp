@@ -79,9 +79,20 @@ int main(){
         a.key(Escape);a.key('6');a.key('n');a.key(Down);a.key(Down);a.key('p');a.key(' ');a.key(Tab);a.key('q');assert(a.currentScreen()==Screen::ReminderEdit&&d.has("p q"));
         a.key(Escape);a.key(Escape);
         a.key('0');a.key(' ');a.key(Tab);assert(a.currentScreen()==Screen::Date&&d.has("2026-11-15"));a.key(Escape);
-        // Weight keeps TAB as its field switch (conflict kept on purpose).
-        a.key('2');a.key('1');a.key(Tab);a.key('2');a.key(' ');assert(a.currentScreen()==Screen::Weight);a.key(Enter);
-        assert(a.data().today.expected==1000&&a.data().today.actual==2000);
+        // LPS-115-CHG02b: on Weight (numeric entry) TAB opens Config and returns
+        // with the field and the digits typed so far; SPACE stays ignored.
+        a.key('2');a.key('1');a.key(Down);a.key('2');a.key('.');assert(d.rev[9]&&d.has(9,"Actual   : 2."));
+        const std::string typed=d.frame();
+        a.key(' ');assert(a.currentScreen()==Screen::Weight&&d.frame()==typed);
+        a.key(Tab);assert(a.currentScreen()==Screen::Config);a.key(Tab);assert(a.currentScreen()==Screen::Weight&&d.frame()==typed);
+        a.key(Tab);a.key('1');a.key(Escape);a.key(Escape);assert(a.currentScreen()==Screen::Weight&&d.frame()==typed);
+        a.key(Tab);a.key('2');a.key(Tab);assert(d.frame()==typed);
+        a.key('5');a.key(Enter);assert(a.currentScreen()==Screen::Home&&a.data().today.expected==1000&&a.data().today.actual==2500);
+        // Saving a language from Weight keeps the drafts too.
+        a.key('2');for(int i=0;i<8;++i)a.key(Backspace);a.key('9');
+        a.key(Tab);a.key('1');a.key('2');a.key('3');assert(a.currentScreen()==Screen::Weight&&d.has(6,"Attendu  : 9")&&d.rev[6]&&d.has("Configuration enregistrée"));
+        a.key(Enter);assert(a.data().today.expected==9000&&a.data().today.actual==2500);
+        a.key(Tab);a.key('1');a.key('1');a.key('3');
         assert(d.mealExports==0);
     }
     // 3. Confirmations: TAB/SPACE change nothing; the reminder popup is dismissed by any key.
@@ -121,6 +132,8 @@ int main(){
         a.key(Left);a.key(Tab);assert(a.currentScreen()==Screen::Home&&d.has("Archived day: read-only"));
         a.key(Down);a.key(' ');assert(a.currentScreen()==Screen::Home&&d.has("Archived day: read-only"));
         a.key('1');assert(a.currentScreen()==Screen::Activities);a.key(Tab);assert(a.currentScreen()==Screen::Activities&&d.has("Archived day: read-only"));
+        a.key(Escape);a.key('2');assert(a.currentScreen()==Screen::Weight);a.key(Tab);assert(a.currentScreen()==Screen::Weight&&d.has("Archived day: read-only"));
+        a.key(Escape);a.key('1');
         a.key(' ');assert(a.currentScreen()==Screen::Activities&&d.mealExports==0);
     }
     // 6. The timer keeps counting behind Config and the planner, and its alert takes over.
@@ -142,5 +155,5 @@ int main(){
         // Reminders are unaffected: the popup still comes at start-up.
         App later(d);later.start();assert(later.currentScreen()==Screen::ReminderPopup&&d.has("Water plants"));
     }
-    std::puts("PASS: TAB/SPACE from menus, lists, views, Timer, Rosary and Reward with identical return; text editors and Weight keep SPACE/TAB; confirmations and reminder popup untouched; planner/Config cross-open and one-level Esc; CSV on every planner exit; archive read-only; timer runs, pauses and alerts behind overlays; reminders at start-up.");
+    std::puts("PASS: TAB/SPACE from menus, lists, views, Timer, Rosary and Reward with identical return; text editors keep SPACE/TAB; Weight: TAB opens Config keeping field and digits, SPACE ignored; confirmations and reminder popup untouched; planner/Config cross-open and one-level Esc; CSV on every planner exit; archive read-only; timer runs, pauses and alerts behind overlays; reminders at start-up.");
 }

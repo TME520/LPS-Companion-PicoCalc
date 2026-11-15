@@ -1068,10 +1068,12 @@ class App {
     bool timerActive=false; // counting down (or paused), whichever screen is shown
     static bool inConfig(Screen s){return s==Screen::Config||s==Screen::Language||s==Screen::Colors;}
     // Screens where TAB/SPACE keep their own meaning: text entry (SPACE is a
-    // character, TAB switches the Weight field) and confirmations.
-    bool overlayKeysAllowed()const{
+    // character) and confirmations. Weight is numeric entry: TAB opens Config
+    // there (LPS-115-CHG02b) and SPACE stays ignored.
+    bool overlayKeysAllowed(int k)const{
         switch(screen){
-            case Screen::Date:case Screen::Weight:case Screen::ActivityEdit:case Screen::TaskEdit:case Screen::ReminderEdit:
+            case Screen::Weight:return k==Tab;
+            case Screen::Date:case Screen::ActivityEdit:case Screen::TaskEdit:case Screen::ReminderEdit:
             case Screen::Finish:case Screen::ReminderPopup:return false;
             case Screen::Activities:return !confirmingDelete;
             default:return true;
@@ -1483,7 +1485,7 @@ public:
             if(inConfig(screen)){if(k==Tab)closeConfig();render();return;}
             if(screen==Screen::MealPlanner&&k==' '){leaveMealPlanner();render();return;}
             // LPS-115-CHG02: TAB/SPACE from any screen that does not use them.
-            if(overlayKeysAllowed()){message.fill(0);
+            if(overlayKeysAllowed(k)){message.fill(0);
                 if(daysBack)readOnly();else if(k==Tab)openConfig();else openMealPlanner();
                 render();return;
             }
@@ -1620,7 +1622,7 @@ public:
             }else edit(activityDraft,k);
         }else if(screen==Screen::Weight){
             if(daysBack){if(k==Enter)go(Screen::Home);else readOnly();}
-            else if(k==Up||k==Down||k==9)field=1-field;
+            else if(k==Up||k==Down)field=1-field;
             else if(k==Enter){State& next=stage();
                 if(!parseWeight(weights[0].data(),next.today.expected)||!parseWeight(weights[1].data(),next.today.actual))say(tr("Invalid weight (example: 110.500)","Poids invalide (exemple : 110,500)"));
                 else if(commit(next))go(Screen::Home);
