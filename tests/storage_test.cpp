@@ -129,6 +129,7 @@ int main(){
     {
         auto file=[](const char* name){std::string out;FILE* f=std::fopen(name,"rb");if(!f)return std::string("<missing>");char b[512];size_t n;while((n=std::fread(b,1,sizeof b,f))>0)out.append(b,n);std::fclose(f);return out;};
         std::remove("MP280302.CSV");assert(dated.data().today.date.day==2&&dated.data().today.date.month==3);
+        assert(dated.currentScreen()==Screen::Reward);dated.key(Enter); // LPS-115-CHG02: SPACE would now open the planner from Reward too
         dated.key(' ');dated.key(Escape);assert(file("MP280302.CSV")=="<missing>"); // nothing played: no file created
         dated.key(' ');dated.key(Enter);dated.key(Down);dated.key(Right);dated.key(Right);dated.key(Enter);dated.key(Down);dated.key(Enter);dated.key(' ');
         assert(dated.currentScreen()==Screen::Home);

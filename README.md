@@ -17,7 +17,12 @@ It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display
   - **Esc goes up one level**: from Language or Colors it returns to Configuration; from Configuration it returns to the screen you came from.
   - **Save** in Configuration (and Enter in Colors) saves and then returns to that screen.
   - From an archived day, Tab shows `Archived day: read-only`, as Config already required today's screen.
-  - Tab works from Home for now. Text editors (Kanban, Reminders, Activities names, Date, Weight) ignore it.
+- **Tab and Space from any screen** (LPS-115-CHG02): on today's day, **Tab** opens/closes Config and **Space** opens/closes the Meal Planner from every screen except text entry and confirmations. Closing either one (with the same key, or Esc from its top level) returns to the exact screen and cursor you came from: same page, Kanban column, review scroll or Rosary prayer.
+  - **Not available** while typing (Date, Weight, Kanban task, activity name, reminder editor), where Space stays a space character, and on confirmations (`Delete X?` on Activities, Close the day). On **Weight**, Tab keeps switching between Expected and Actual. The reminder popup at start-up is still dismissed by any key, Tab and Space included.
+  - **Tab inside the Meal Planner** opens Config; closing Config returns to the planner on the same card, and closing the planner then returns to where you were before it. **Space inside Config** (or Language/Colors) does nothing.
+  - Leaving the Meal Planner always rewrites `MPYYMMDD.CSV`, wherever it returns to; an export error is shown on that screen.
+  - The **timer keeps counting** (or stays paused) while Config or the Meal Planner is open over it. If it ends there, the `TIMER FINISHED!` screen takes over: Config closes without saving and the Meal Planner is left with its CSV written. Esc on the running timer still cancels it.
+  - Archived days are unchanged: Tab and Space show `Archived day: read-only`.
 
 ## Changes in v1.14
 

@@ -1058,22 +1058,44 @@ class App {
     uint64_t timerNow=0,timerLast=0,timerRemaining=0;
     bool timerPaused=false;
     unsigned mealCursor=0; // deck index of the card shown in the Meal Planner
-    // LPS-115-CHG01: Config is opened with TAB and closes back to where it was
-    // opened (screen and cursor). CHG02 will open it from other screens too.
-    Screen configReturn=Screen::Home;
-    unsigned configReturnSelection=0;
+    // LPS-115-CHG01/CHG02: TAB opens Config and SPACE the Meal Planner from any
+    // screen of today that is not a text entry or a confirmation. Each overlay
+    // keeps one return point (screen and cursor); there is no stack. Config may
+    // be opened from inside the Meal Planner (it then closes back to the
+    // planner), never the other way round: SPACE is ignored in Config.
+    struct ReturnPoint { Screen screen=Screen::Home; unsigned selection=0; };
+    ReturnPoint configReturn{},mealReturn{};
+    bool timerActive=false; // counting down (or paused), whichever screen is shown
     static bool inConfig(Screen s){return s==Screen::Config||s==Screen::Language||s==Screen::Colors;}
+    // Screens where TAB/SPACE keep their own meaning: text entry (SPACE is a
+    // character, TAB switches the Weight field) and confirmations.
+    bool overlayKeysAllowed()const{
+        switch(screen){
+            case Screen::Date:case Screen::Weight:case Screen::ActivityEdit:case Screen::TaskEdit:case Screen::ReminderEdit:
+            case Screen::Finish:case Screen::ReminderPopup:return false;
+            case Screen::Activities:return !confirmingDelete;
+            default:return true;
+        }
+    }
+    // Back to a screen without go(): its drafts, page, column, scroll and
+    // Rosary position are untouched. A language saved meanwhile can shorten the
+    // Rosary text or the review, so those positions are clamped.
+    void returnTo(const ReturnPoint& r){
+        screen=r.screen;selection=r.selection;message.fill(0);confirmingDelete=false;
+        if(screen==Screen::RosaryPrayer){const unsigned pages=(displayCells(rosaryText(rosaryView(rosaryStep)))+359)/360;if(pages&&rosaryPage>=pages)rosaryPage=pages-1;}
+        if(screen==Screen::DailyReview){const unsigned maximum=reviewRows()>8?reviewRows()-8:0;if(reviewOffset>maximum)reviewOffset=maximum;}
+    }
     void openConfig(){
-        configReturn=screen;configReturnSelection=selection;
+        configReturn={screen,selection};
         pendingLanguage=state.language;pendingPalette=state.palette;go(Screen::Config);
     }
     // Leaves Config and its sub-screens; pending, unsaved changes are dropped.
     void closeConfig(){
-        go(configReturn);selection=configReturnSelection;
-        pendingLanguage=state.language;pendingPalette=state.palette;
+        pendingLanguage=state.language;pendingPalette=state.palette;returnTo(configReturn);
     }
+    void openMealPlanner(){mealReturn={screen,selection};go(Screen::MealPlanner);}
     unsigned timerSeconds()const{return unsigned((timerRemaining+999)/1000);}
-    void startTimer(unsigned option){constexpr unsigned minutes[]={5,30,60};timerRemaining=uint64_t(minutes[option])*60000;timerLast=timerNow;timerPaused=false;go(Screen::TimerRunning);}
+    void startTimer(unsigned option){constexpr unsigned minutes[]={5,30,60};timerRemaining=uint64_t(minutes[option])*60000;timerLast=timerNow;timerPaused=false;timerActive=true;go(Screen::TimerRunning);}
     unsigned extraCount(const Day& d)const{
         if(!daysBack)return 0;
         unsigned n=0;for(unsigned i=0;i<d.namedCount;++i)if(indexByStoredName(state,d.names[i].data())>=state.activityCount)++n;
@@ -1395,9 +1417,10 @@ class App {
         confirmingDelete=false;
     }
     // LPS-114-CHG02: leaving the Meal Planner (Space or Esc) rewrites the
-    // day's CSV. A failure is reported on Home; the deck itself is already saved.
-    void leaveMealPlanner(){
-        go(Screen::Home);
+    // day's CSV. A failure is reported on the screen the planner returns to
+    // (LPS-115-CHG02); the deck itself is already saved.
+    void leaveMealPlanner(){returnTo(mealReturn);exportMeals();}
+    void exportMeals(){
         if(missingStorage)return; // the red missing-SD warning already explains it
         if(!validDate(state.today.date)){say(tr("Set Date to export meals","Renseignez Date pour exporter les repas"));return;}
         if(!hw.exportMealCsv(state.today.date,state.meals))say(tr("Meal CSV export failed","Export CSV repas échoué"));
@@ -1411,12 +1434,17 @@ public:
     explicit App(Platform& platform):hw(platform){}
     void tick(uint64_t milliseconds){
         timerNow=milliseconds;
-        if(screen!=Screen::TimerRunning)return;
+        if(!timerActive)return; // LPS-115-CHG02: counts down behind Config and the Meal Planner too
         const unsigned before=timerSeconds();
         if(!timerPaused){const uint64_t elapsed=timerNow-timerLast;timerRemaining=elapsed>=timerRemaining?0:timerRemaining-elapsed;}
         timerLast=timerNow;
-        if(!timerRemaining){go(Screen::TimerComplete);render();}
-        else if(before!=timerSeconds())render();
+        if(!timerRemaining){timerActive=false;
+            // The alert takes over: Config closes without saving, and a Meal
+            // Planner left this way still writes its CSV.
+            const bool meals=screen==Screen::MealPlanner||(inConfig(screen)&&configReturn.screen==Screen::MealPlanner);
+            if(inConfig(screen)){pendingLanguage=state.language;pendingPalette=state.palette;}
+            go(Screen::TimerComplete);if(meals)exportMeals();render();
+        }else if(screen==Screen::TimerRunning&&before!=timerSeconds())render();
     }
     const State& data()const{return state;}
     Screen currentScreen()const{return screen;}
@@ -1440,6 +1468,7 @@ public:
             if(screen==Screen::ActivityEdit){screen=Screen::Activities;activityDraft.fill(0);message.fill(0);render();return;}
             if(screen==Screen::MealPlanner){leaveMealPlanner();render();return;}
             if(screen==Screen::Config){closeConfig();render();return;} // Esc: one level up
+            if(screen==Screen::TimerRunning)timerActive=false; // Esc still cancels the countdown
             Screen target=Screen::Home;
             if(screen==Screen::Language||screen==Screen::Colors)target=Screen::Config;
             else if(screen==Screen::ReminderEdit)target=Screen::Reminders;
@@ -1448,15 +1477,20 @@ public:
             else if(screen==Screen::RosaryDecade)target=Screen::RosarySet;
             go(target);render();return;
         }
-        // LPS-115-CHG01: TAB closes Config entirely, from any of its screens.
-        if(k==Tab&&inConfig(screen)){closeConfig();render();return;}
+        if(k==Tab||k==' '){
+            // LPS-115-CHG01: TAB closes Config entirely, from any of its screens;
+            // SPACE does nothing there (LPS-115-CHG02).
+            if(inConfig(screen)){if(k==Tab)closeConfig();render();return;}
+            if(screen==Screen::MealPlanner&&k==' '){leaveMealPlanner();render();return;}
+            // LPS-115-CHG02: TAB/SPACE from any screen that does not use them.
+            if(overlayKeysAllowed()){message.fill(0);
+                if(daysBack)readOnly();else if(k==Tab)openConfig();else openMealPlanner();
+                render();return;
+            }
+        }
         message.fill(0);
         if(screen==Screen::ReminderPopup){go(Screen::Home);
         }else if(screen==Screen::Home){
-            // LPS-114-CHG01: SPACE opens the hidden Meal Planner (today only).
-            if(k==' '){if(daysBack)readOnly();else go(Screen::MealPlanner);render();return;}
-            // LPS-115-CHG01: TAB opens Config, which has no menu entry any more.
-            if(k==Tab){if(daysBack)readOnly();else openConfig();render();return;}
             if(k==Left){
                 if(daysBack<state.count){++daysBack;selection=0;page=0;}
                 else say(state.count?tr("Oldest saved day","Plus ancien jour conservé"):tr("No archived days","Aucun jour archivé"));
@@ -1694,8 +1728,7 @@ public:
             // back the card and saves at once, like an activity tick.
             unsigned row=unsigned(MealDeck[mealCursor].row);
             const unsigned first=MealRowFirst[row],n=MealRowFirst[row+1]-first,column=mealCursor-first;
-            if(k==' ')leaveMealPlanner();
-            else if(k==Left)mealCursor=first+(column+n-1)%n;
+            if(k==Left)mealCursor=first+(column+n-1)%n;
             else if(k==Right)mealCursor=first+(column+1)%n;
             else if(k==Up||k==Down){
                 row=(row+(k==Up?MealRowCount-1:1))%MealRowCount;

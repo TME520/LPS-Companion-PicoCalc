@@ -82,10 +82,10 @@ int main(){
         app.key('1');assert(app.currentScreen()==Screen::Activities);app.key(Escape);
         app.key(Down);app.key(Down);app.key(Enter);assert(app.currentScreen()==Screen::Weight);app.key(Escape);
         app.key('8');assert(app.currentScreen()==Screen::Finish);app.key(Escape);
-        // SPACE elsewhere keeps its meaning (text entry, other screens).
+        // SPACE in a text entry stays a space; elsewhere it opens the planner (LPS-115-CHG02).
         app.key('3');app.key('n');app.key('a');app.key(' ');app.key('b');assert(app.currentScreen()==Screen::TaskEdit);
         app.key(Enter);assert(!std::strcmp(app.data().tasks[0].name.data(),"a b"));app.key(Escape);
-        app.key('1');app.key(' ');assert(app.currentScreen()==Screen::Activities);app.key(Escape);
+        app.key('1');app.key(' ');assert(app.currentScreen()==Screen::MealPlanner);app.key(' ');assert(app.currentScreen()==Screen::Activities);app.key(Escape);
         assert(d.saves==1); // only the Kanban task was saved; visiting the planner writes nothing
     }
     // Navigation: Left/Right wrap inside a row; Up/Down wrap between rows and keep the column.

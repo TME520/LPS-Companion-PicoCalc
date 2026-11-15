@@ -8,7 +8,15 @@
   - Tests updated for the renumbering (Reminders 6, Timer 7, Close the day 8, Config via Tab) in the activities, language, meal planner, migration, reminders, storage and timer suites, plus the built-in `LPS_TEST` run.
   - Firmware object for 32-bit ARM (Cortex-M0+, `-Os`): +186 bytes total; BSS +8 bytes (return screen and cursor).
   - All twelve host test suites pass; compiles warning-free for 32-bit ARM (`-Wshorten-64-to-32`). No UF2 built.
-- Pending on device: Tab key reaches the app on the PicoCalc keyboard.
+- LPS-115-CHG02: Tab and Space from any screen.
+  - One return point per overlay (`configReturn`, `mealReturn`: screen + cursor), no stack. `returnTo()` restores the screen without `go()`, so drafts, Activities page, Kanban column, review scroll, Rosary step/page and the Meal Planner card are kept; the Rosary page and review scroll are clamped in case a newly saved language shortened them.
+  - Screen audit. Opens Config/Meal Planner: Home, Activities (list), Kanban, Daily review, Reminders (list), Timer select/running/finished, Rosary mode/set/decade/prayer/complete, Reward, Meal Planner (Tab only). Keeps its own keys: Date, Weight, Activity name editor, Kanban task editor, Reminder editor (text entry), Activities `Delete X?` and Close the day (confirmations), reminder popup (any key dismisses). Only conflict found: Weight already used Tab (code 9) to switch Expected/Actual; kept. No screen used Space other than the text editors and the Meal Planner.
+  - Cross-open: Tab in the planner opens Config, which closes back to the planner; Space is ignored in Config, Language and Colors.
+  - Timer: `tick()` now runs while a countdown is active on any screen (`timerActive`), not only on the timer screen; Esc on the running timer clears it (cancel, as before).
+  - New `tests/overlay_keys_test.cpp` (13th suite): Tab/Esc/Tab-from-Language and Space/Esc round trips return the identical frame on 14 screens (Home, Kanban Doing column, Activities page 2, Daily review, Reminders, Timer select, Rosary mode/set/decade/prayer/complete, Reward); Space typed and Tab ignored in the task, activity and reminder editors and Date; Weight Tab switches field; Delete confirmation, Close the day and reminder popup; planner ⇄ Config cross-open, Space ignored in Config/Colors, Esc one level at a time; CSV written on every planner exit and its failure shown on Kanban; Config save returns to Kanban in French; archive Home and Activities read-only; timer counts behind Config and the planner (04:00, 02:59), stays paused, expires into `TIMER FINISHED!` from the planner (CSV written), from Config (pending language dropped, no save) and from Config over the planner (CSV written); Esc cancels; reminder popup at the next start-up. `meal_planner_test` (Space on Activities now opens the planner) and `storage_test` (leaves the Reward screen first) were adjusted.
+  - Firmware object for 32-bit ARM: +376 bytes total over CHG01; BSS +16 bytes.
+  - All thirteen host test suites pass; compiles warning-free for 32-bit ARM (`-Wshorten-64-to-32`). No UF2 built.
+- Pending on device: Tab and Space reach the app on the PicoCalc keyboard from every screen; the timer keeps running behind Config and the Meal Planner.
 
 # Validation v1.14 — 14 November 2026
 
