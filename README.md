@@ -24,6 +24,9 @@ It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display
   - Leaving the Meal Planner always rewrites `MPYYMMDD.CSV`, wherever it returns to; an export error is shown on that screen.
   - The **timer keeps counting** (or stays paused) while Config or the Meal Planner is open over it. If it ends there, the `TIMER FINISHED!` screen takes over: Config closes without saving and the Meal Planner is left with its CSV written. Esc on the running timer still cancels it.
   - Archived days are unchanged: Tab and Space show `Archived day: read-only`.
+- **Config → 3 Activities / Activités** (LPS-115-CHG03): a new Config entry lists the nine home menu entries with a checkbox each (`[x]` shown, `[ ]` hidden). **Up/Down** move, **Enter** shows or hides the entry. **Date** and **Close the day** are always shown: they are marked `(locked)` / `(verrouillé)` and Enter only says `Always shown`. No reordering. Configuration now reads **1 Language, 2 Colors, 3 Activities (with the count shown, e.g. `8/9`), 4 Save**: **Save moves from 3 to 4**.
+  - Like Language, the choice is pending until **4 Save** in Configuration. Esc goes back up to Configuration and keeps it; Tab (or Esc from Configuration) closes Config and drops it. A finished timer that takes over also drops it.
+  - For now the choice is only kept in memory: the home menu still shows every entry (filtering and renumbering come in CHG04) and it is not written to the save file yet (CHG05), so it is lost on restart.
 
 ## Changes in v1.14
 
@@ -233,7 +236,7 @@ Days advance manually. Leaving the device switched off does not automatically st
 
 ### Main menu
 
-Press **Tab** on today's home screen to open Config, where you select the language and colour palette (Tab again or Esc closes it). Accented French labels are supported.
+Press **Tab** on today's home screen to open Config, where you select the language, colour palette and the home menu entries shown (Tab again or Esc closes it). Accented French labels are supported.
 
 | Key | English | Français | Purpose |
 | --- | --- | --- | --- |

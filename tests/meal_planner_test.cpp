@@ -54,7 +54,7 @@ struct StringSink final:SaveSink {
 };
 std::string mealCsv(const MealDeckState& m){StringSink sink;assert(writeMealCsv(m,sink));return sink.text;}
 bool grey(uint32_t c){return (c>>16)==((c>>8)&255)&&((c>>8)&255)==(c&255);}
-void choose(App& app,Language language){app.key(Tab);app.key('1');app.key(language==Language::French?'2':'1');app.key('3');}
+void choose(App& app,Language language){app.key(Tab);app.key('1');app.key(language==Language::French?'2':'1');app.key('4');}
 std::vector<unsigned> order(const State& s){return std::vector<unsigned>(s.meals.order.begin(),s.meals.order.begin()+s.meals.playedCount);}
 int main(){
     // The deck: 16 cards in three rows, in the agreed order, duplicates separate.

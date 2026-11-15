@@ -33,3 +33,5 @@ g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/meal_planner_test.cpp -o b
 ./build-host/meal_planner_test
 g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/overlay_keys_test.cpp -o build-host/overlay_keys_test
 ./build-host/overlay_keys_test
+g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror tests/home_entries_test.cpp -o build-host/home_entries_test
+./build-host/home_entries_test

@@ -78,10 +78,18 @@ void checkMenus(Display& d,App& a,bool fr){
     a.key('8');assert(a.currentScreen()==Screen::Finish);a.key(Escape);a.key('9');assert(a.currentScreen()==Screen::Home);
     a.key('4');assert(a.currentScreen()==Screen::RosaryMode);assert(d.has(3,fr?"MODE DU ROSAIRE":"ROSARY MODE"));
     a.key(Enter);a.key(Enter);assert(a.currentScreen()==Screen::RosaryDecade);a.key(Escape);a.key(Escape);a.key(Escape);
-    a.key(Tab);assert(d.has(6,fr?"1  Langue":"1  Language"));assert(d.has(7,fr?"2  Couleurs":"2  Colors"));assert(d.has(8,fr?"3  Enregistrer":"3  Save"));
+    a.key(Tab);assert(d.has(6,fr?"1  Langue":"1  Language"));assert(d.has(7,fr?"2  Couleurs":"2  Colors"));assert(d.has(8,fr?"3  Activités: 9/9":"3  Activities: 9/9")&&d.has(9,fr?"4  Enregistrer":"4  Save"));
     a.key('2');assert(d.has(6,fr?"1  PAL1  rouge":"1  PAL1  red"));assert(d.has(7,fr?"2  PAL2  vert":"2  PAL2  green"));assert(d.has(8,fr?"3  PAL3  bleu":"3  PAL3  blue"));
     assert(d.has(9,"4  PAL4  Orange")&&d.has(10,fr?"5  PAL5  Rose":"5  PAL5  Pink"));a.key(Escape);
-    a.key('1');assert(d.has(7,"Français"));a.key(Escape);a.key(Escape);
+    a.key('1');assert(d.has(7,"Français"));a.key(Escape);
+    // LPS-115-CHG03: the home entries sub-screen in both languages, every row within 40 cells.
+    a.key('3');assert(d.has(3,fr?"ACTIVITÉS":"ACTIVITIES")&&d.has(4,fr?"Entrées affichées dans le menu":"Home menu entries shown"));
+    assert(d.has(6,"[x] Date")&&d.has(6,fr?"(verrouillé)":"(locked)")&&d.rev[6]);
+    assert(d.has(7,fr?"[x] Activités":"[x] Activities")&&!d.has(7,"(")&&d.has(10,fr?"[x] Rosaire chrétien":"[x] Christian Rosary"));
+    assert(d.has(11,fr?"[x] Revue journalière":"[x] Daily review")&&d.has(13,fr?"[x] Minuteur":"[x] Timer"));
+    assert(d.has(14,fr?"[x] Terminer le jour":"[x] Close the day")&&d.has(14,fr?"(verrouillé)":"(locked)"));
+    assert(d.has(15,fr?"Entrée : afficher/masquer":"Enter: show/hide"));
+    a.key(Escape);a.key(Escape);
 }
 int main(){
     { Display activityDisplay;App activityApp(activityDisplay);activityApp.start();activityApp.key('1');activityApp.key(Right);
@@ -90,7 +98,7 @@ int main(){
     // LPS-113-CHG08: 22 activities on three pages (10, 10, 2), in both languages.
     for(bool fr:{false,true}){
       Display dd;App app(dd);app.start();
-      if(fr)choose(app,Language::French),app.key('3');
+      if(fr)choose(app,Language::French),app.key('4');
       assert(dd.has(4,fr?"0/22 activités":"0/22 activities"));
       app.key('1');assert(dd.has(3,"1/3")&&dd.has(5,fr?"1  Marche":"1  Walk")&&dd.has(14,fr?"0  Congé":"0  Day off"));
       // Same "1  Name" spacing as the home menu; every checkbox sits in the same column.
@@ -121,7 +129,7 @@ int main(){
     // LPS-113-CHG08b: Activities always opens on page 1, first row; 1-9 and 0 act on the current page.
     for(bool fr:{false,true}){
       Display dd;App app(dd);app.start();
-      if(fr)choose(app,Language::French),app.key('3');
+      if(fr)choose(app,Language::French),app.key('4');
       app.key('1');assert(dd.has(3,"1/3")&&dd.has(5,fr?"1  Marche":"1  Walk"));
       app.key('2'); // Tick Régime/Diet (row 2 of page 1).
       assert(app.data().today.flags==(1u<<1)&&dd.has(6,"[x]")&&dd.has(3,"1/3"));
@@ -158,9 +166,9 @@ int main(){
     a.key(Escape);assert(a.data().language==Language::English&&d.writes==0);
     choose(a,Language::French);assert(d.has(6,"Français"));assert(a.data().language==Language::English&&d.writes==0);
     a.key(Escape);assert(a.data().language==Language::English); // Discard before Save.
-    choose(a,Language::French);d.fail=true;a.key('3');assert(a.currentScreen()==Screen::Config);
+    choose(a,Language::French);d.fail=true;a.key('4');assert(a.currentScreen()==Screen::Config);
     assert(a.data().language==Language::English&&d.writes==0&&d.has(17,"Save failed"));
-    d.fail=false;a.key('3');assert(a.currentScreen()==Screen::Home&&d.writes==1);
+    d.fail=false;a.key('4');assert(a.currentScreen()==Screen::Home&&d.writes==1);
     assert(a.data().language==Language::French&&d.has(18,"Configuration enregistrée"));
     checkMenus(d,a,true);
     a.key(Tab);a.key('2');a.key('4');assert(d.shown==Palette::Orange);a.key(Enter);
@@ -171,14 +179,14 @@ int main(){
     App reboot(d);reboot.start();assert(reboot.data().language==Language::French);checkMenus(d,reboot,true);
     // Proper names and user text are invariant; save settings never changes XP/days.
     reboot.key('1');reboot.key('1');reboot.key('2');reboot.key('3');reboot.key(Escape);
-    choose(reboot,Language::English);reboot.key('3');
+    choose(reboot,Language::English);reboot.key('4');
     assert(reboot.data().xp==0&&reboot.data().today.flags==7&&reboot.data().today.number==1);
     assert(!reboot.data().today.note[0]);
     reboot.key('7');reboot.key(Escape);reboot.key(Up);reboot.key(Enter);assert(d.has(3,"CLOSE THE DAY?")&&d.has(6,"Activities: 3")&&!d.anyXp());
     reboot.key(Enter);assert(d.has(3,"DAY SAVED")&&!d.anyXp());
     assert(!d.has(8,"NEW KEEPSAKE")&&!d.has(9,"Pocket notebook"));reboot.key(Enter);
     assert(d.has(1,"Friday 18 September 2026 (week 38)")&&!d.anyXp());
-    choose(reboot,Language::French);reboot.key('3');
+    choose(reboot,Language::French);reboot.key('4');
     reboot.key(Left);assert(d.has(6,"1  Activités")&&d.has(7,"2  Suivi du poids"));reboot.key('2');assert(reboot.currentScreen()==Screen::Weight);reboot.key(Escape);
     auto saved=d.stored;auto writes=d.writes;
     reboot.key('4');assert(d.has(18,"lecture seule"));reboot.key('5');assert(reboot.currentScreen()==Screen::Home);
@@ -199,6 +207,6 @@ int main(){
     for(unsigned i=0;i<4;++i)legacy.bytes[legacy.size-4+i]=uint8_t(crc>>(8*i));
     assert(!decode(legacy.bytes.data(),legacy.size,decoded));
     d.stored=malformed;App corrupt(d);corrupt.start();assert(d.has(18,"Read error"));
-    choose(corrupt,Language::French);corrupt.key('3');assert(d.has(17,"writes blocked"));
+    choose(corrupt,Language::French);corrupt.key('4');assert(d.has(17,"writes blocked"));
     std::puts("PASS: EN/FR menus, all screen widths, accents, save/cancel/failure, reboot, unchanged user data, history, rewards and invalid-language protection.");
 }

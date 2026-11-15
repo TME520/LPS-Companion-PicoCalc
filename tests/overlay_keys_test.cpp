@@ -90,9 +90,9 @@ int main(){
         a.key('5');a.key(Enter);assert(a.currentScreen()==Screen::Home&&a.data().today.expected==1000&&a.data().today.actual==2500);
         // Saving a language from Weight keeps the drafts too.
         a.key('2');for(int i=0;i<8;++i)a.key(Backspace);a.key('9');
-        a.key(Tab);a.key('1');a.key('2');a.key('3');assert(a.currentScreen()==Screen::Weight&&d.has(6,"Attendu  : 9")&&d.rev[6]&&d.has("Configuration enregistrée"));
+        a.key(Tab);a.key('1');a.key('2');a.key('4');assert(a.currentScreen()==Screen::Weight&&d.has(6,"Attendu  : 9")&&d.rev[6]&&d.has("Configuration enregistrée"));
         a.key(Enter);assert(a.data().today.expected==9000&&a.data().today.actual==2500);
-        a.key(Tab);a.key('1');a.key('1');a.key('3');
+        a.key(Tab);a.key('1');a.key('1');a.key('4');
         assert(d.mealExports==0);
     }
     // 3. Confirmations: TAB/SPACE change nothing; the reminder popup is dismissed by any key.
@@ -117,13 +117,13 @@ int main(){
         a.key(Enter);assert(a.data().meals.playedCount==1);a.key(Escape);assert(a.currentScreen()==Screen::Kanban&&d.frame()==kanban);
         assert(d.mealExports==1&&d.lastDeck.playedCount==1);
         // Saving Config returns to the screen it was opened from, in the new language.
-        a.key(Tab);a.key('1');a.key('2');a.key('3');assert(a.currentScreen()==Screen::Kanban&&a.data().language==Language::French&&d.has("Configuration enregistrée")&&d.has("delta"));
+        a.key(Tab);a.key('1');a.key('2');a.key('4');assert(a.currentScreen()==Screen::Kanban&&a.data().language==Language::French&&d.has("Configuration enregistrée")&&d.has("delta"));
         // A CSV failure is reported on the screen the planner returns to.
         d.failMealCsv=true;a.key(' ');a.key(' ');assert(a.currentScreen()==Screen::Kanban&&d.has("Export CSV repas échoué")&&d.has("delta"));
         // A Rosary page past the end of the new language's text is clamped on return.
         d.failMealCsv=false;a.key(Escape);a.key('4');a.key(Enter);a.key(Enter);a.key(Enter);
         for(int i=0;i<6;++i)a.key(Right);
-        a.key(Tab);a.key('1');a.key('1');a.key('3');assert(a.currentScreen()==Screen::RosaryPrayer&&a.data().language==Language::English);
+        a.key(Tab);a.key('1');a.key('1');a.key('4');assert(a.currentScreen()==Screen::RosaryPrayer&&a.data().language==Language::English);
         a.key(Left);a.key(Right);assert(a.currentScreen()==Screen::RosaryPrayer);
     }
     // 5. Archived days keep the read-only message.

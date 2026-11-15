@@ -24,7 +24,7 @@ public:
     bool has(int row,const char* utf8)const{char cells[100];displayText(utf8,cells,sizeof cells);return std::strstr(rows[row].data(),cells)!=nullptr;}
     bool has(const char* utf8)const{for(int r=0;r<20;++r)if(has(r,utf8))return true;return false;}
 };
-void choose(App& app,Language language){app.key(Tab);app.key('1');app.key(language==Language::French?'2':'1');app.key('3');}
+void choose(App& app,Language language){app.key(Tab);app.key('1');app.key(language==Language::French?'2':'1');app.key('4');}
 void clearDraft(App& app,unsigned n){for(unsigned i=0;i<n;++i)app.key(Backspace);}
 std::vector<std::string> exported(const State& s,const Day& d,Language language){
     std::vector<std::string> names;

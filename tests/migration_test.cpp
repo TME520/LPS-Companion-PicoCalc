@@ -59,7 +59,7 @@ int main(int argc,char** argv){
         PicoCalc disk;disk.init();App app(disk);app.start();checkData(app);
         assert(app.data().language==Language::English);
         app.key(Left);assert(app.viewedDay().number==2&&app.viewedDay().actual==111500);
-        app.key(Right);app.key(Tab);app.key('1');app.key('2');app.key('3');
+        app.key(Right);app.key(Tab);app.key('1');app.key('2');app.key('4');
         checkData(app);assert(app.data().language==Language::French);
         // First save writes SAVE_A.JSN (generation continues); BIN files are untouched.
         assert(slot(0).status==Slot::Valid&&slot(0).generation==51&&slot(1).status==Slot::Missing);
@@ -70,8 +70,8 @@ int main(int argc,char** argv){
         writeText(jsns[0],"{\"format\":\"lps-comp");
         {PicoCalc reboot;reboot.init();App a(reboot);a.start();checkData(a);
          assert(a.data().language==Language::English);
-         a.key(Tab);a.key('1');a.key('2');a.key('3');
-         a.key(Tab);a.key('3'); // Second save fills the other JSON slot.
+         a.key(Tab);a.key('1');a.key('2');a.key('4');
+         a.key(Tab);a.key('4'); // Second save fills the other JSON slot.
          assert(slot(0).status==Slot::Valid&&slot(1).status==Slot::Valid);}
         {PicoCalc reboot;reboot.init();App a(reboot);a.start();checkData(a);assert(a.data().language==Language::French);}
         assert(fileBytes(bins[old])==original);

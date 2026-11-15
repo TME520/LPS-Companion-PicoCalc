@@ -262,6 +262,10 @@ struct State {
     uint16_t nextActivityId=1;
     std::array<Activity,ActivityCapacity> activities{};
     MealDeckState meals{};
+    // LPS-115-CHG03: home menu entries hidden by the user, bit i = HomeScreens[i].
+    // Date and Close the day are never hidden. Not yet saved in the JSON (CHG05)
+    // and not yet applied to the home menu (CHG04).
+    uint16_t hiddenHome=0;
     State();
 };
 const char* storedName(const Activity& a){return a.french[0]?a.french.data():a.english.data();}
@@ -1020,9 +1024,14 @@ void drawMealCard(Canvas& c,const MealCardView& v){
     centredLabel(c,ry,portion,ink,ribbon);
 }
 enum class Screen { TimerSelect, TimerRunning, TimerComplete, Home, ReminderPopup, Reminders, ReminderEdit, Date, Activities, ActivityEdit, Weight, Kanban, TaskEdit, DailyReview, Finish, Reward, Config, Language, Colors,
-                    RosaryMode, RosarySet, RosaryDecade, RosaryPrayer, RosaryComplete, MealPlanner };
+                    RosaryMode, RosarySet, RosaryDecade, RosaryPrayer, RosaryComplete, MealPlanner, HomeEntries };
 // Home menu entries 0..8, in order (LPS-115-CHG01: Config is opened with TAB).
 constexpr Screen HomeScreens[]={Screen::Date,Screen::Activities,Screen::Weight,Screen::Kanban,Screen::RosaryMode,Screen::DailyReview,Screen::Reminders,Screen::TimerSelect,Screen::Finish};
+constexpr unsigned HomeEntryCount=sizeof HomeScreens/sizeof HomeScreens[0];
+// LPS-115-CHG03: Date and Close the day are always shown.
+constexpr uint16_t HomeLocked=uint16_t(1u|(1u<<(HomeEntryCount-1)));
+constexpr uint16_t HomeAll=uint16_t((1u<<HomeEntryCount)-1);
+static_assert(HomeEntryCount<=16,"hiddenHome is 16 bits");
 class App {
     Platform& hw;
     State state{};
@@ -1036,6 +1045,7 @@ class App {
     bool blocked=false;
     Language pendingLanguage=Language::English;
     Palette pendingPalette=Palette::Green;
+    uint16_t pendingHidden=0; // LPS-115-CHG03: home entries ticked off, saved with Config's Save
     std::array<char,11> dateDraft{};
     std::array<char,TaskNameLength+1> taskDraft{};
     std::array<std::array<char,8>,2> weights{};
@@ -1066,7 +1076,14 @@ class App {
     struct ReturnPoint { Screen screen=Screen::Home; unsigned selection=0; };
     ReturnPoint configReturn{},mealReturn{};
     bool timerActive=false; // counting down (or paused), whichever screen is shown
-    static bool inConfig(Screen s){return s==Screen::Config||s==Screen::Language||s==Screen::Colors;}
+    static bool inConfig(Screen s){return s==Screen::Config||s==Screen::Language||s==Screen::Colors||s==Screen::HomeEntries;}
+    void resetPending(){pendingLanguage=state.language;pendingPalette=state.palette;pendingHidden=state.hiddenHome;}
+    // Home entry name without its number, in the active language.
+    const char* homeLabel(unsigned i)const{
+        static constexpr const char* en[HomeEntryCount]={"Date","Activities","Weight tracker","Kanban","Christian Rosary","Daily review","Reminders","Timer","Close the day"};
+        static constexpr const char* fr[HomeEntryCount]={"Date","Activités","Suivi du poids","Kanban","Rosaire chrétien","Revue journalière","Rappels","Minuteur","Terminer le jour"};
+        return state.language==Language::French?fr[i]:en[i];
+    }
     // Screens where TAB/SPACE keep their own meaning: text entry (SPACE is a
     // character) and confirmations. Weight is numeric entry: TAB opens Config
     // there (LPS-115-CHG02b) and SPACE stays ignored.
@@ -1089,11 +1106,11 @@ class App {
     }
     void openConfig(){
         configReturn={screen,selection};
-        pendingLanguage=state.language;pendingPalette=state.palette;go(Screen::Config);
+        resetPending();go(Screen::Config);
     }
     // Leaves Config and its sub-screens; pending, unsaved changes are dropped.
     void closeConfig(){
-        pendingLanguage=state.language;pendingPalette=state.palette;returnTo(configReturn);
+        resetPending();returnTo(configReturn);
     }
     void openMealPlanner(){mealReturn={screen,selection};go(Screen::MealPlanner);}
     unsigned timerSeconds()const{return unsigned((timerRemaining+999)/1000);}
@@ -1444,7 +1461,7 @@ public:
             // The alert takes over: Config closes without saving, and a Meal
             // Planner left this way still writes its CSV.
             const bool meals=screen==Screen::MealPlanner||(inConfig(screen)&&configReturn.screen==Screen::MealPlanner);
-            if(inConfig(screen)){pendingLanguage=state.language;pendingPalette=state.palette;}
+            if(inConfig(screen))resetPending();
             go(Screen::TimerComplete);if(meals)exportMeals();render();
         }else if(screen==Screen::TimerRunning&&before!=timerSeconds())render();
     }
@@ -1472,7 +1489,7 @@ public:
             if(screen==Screen::Config){closeConfig();render();return;} // Esc: one level up
             if(screen==Screen::TimerRunning)timerActive=false; // Esc still cancels the countdown
             Screen target=Screen::Home;
-            if(screen==Screen::Language||screen==Screen::Colors)target=Screen::Config;
+            if(screen==Screen::Language||screen==Screen::Colors||screen==Screen::HomeEntries)target=Screen::Config;
             else if(screen==Screen::ReminderEdit)target=Screen::Reminders;
             else if(screen==Screen::TaskEdit)target=Screen::Kanban;
             else if(screen==Screen::RosarySet)target=Screen::RosaryMode;
@@ -1663,14 +1680,24 @@ public:
             else if(k==Right)reviewOffset=(reviewOffset+8<maximum)?reviewOffset+8:maximum;
             else if(k==Left)reviewOffset=reviewOffset>8?reviewOffset-8:0;
         }else if(screen==Screen::Config){
-            if(k==Up)selection=(selection+2)%3;
-            if(k==Down)selection=(selection+1)%3;
-            if(k>='1'&&k<='3'){selection=unsigned(k-'1');k=Enter;}
+            if(k==Up)selection=(selection+3)%4;
+            if(k==Down)selection=(selection+1)%4;
+            if(k>='1'&&k<='4'){selection=unsigned(k-'1');k=Enter;}
             if(k==Enter){
                 if(selection==0)go(Screen::Language);
                 else if(selection==1)go(Screen::Colors);
-                else {State& next=stage();next.language=pendingLanguage;
+                else if(selection==2)go(Screen::HomeEntries);
+                else {State& next=stage();next.language=pendingLanguage;next.hiddenHome=pendingHidden;
                     if(commit(next)){closeConfig();say(tr("Configuration saved","Configuration enregistrée"));}}
+            }
+        }else if(screen==Screen::HomeEntries){
+            // LPS-115-CHG03: show/hide home entries; like Language, the choice is
+            // pending until Save in Configuration (Esc keeps it, Tab drops it).
+            if(k==Up)selection=(selection+HomeEntryCount-1)%HomeEntryCount;
+            if(k==Down)selection=(selection+1)%HomeEntryCount;
+            if(k==Enter){
+                if(HomeLocked&(1u<<selection))say(tr("Always shown","Toujours affiché"));
+                else pendingHidden=uint16_t((pendingHidden^(1u<<selection))&HomeAll&~HomeLocked);
             }
         }else if(screen==Screen::Language){
             if(k==Up||k==Down)selection=1-selection;
@@ -1751,10 +1778,8 @@ public:
             const unsigned marked=daysBack&&day.namedCount?day.namedCount:count(day.flags);
             std::snprintf(b,sizeof b,tr("%u/%u activities","%u/%u activités"),marked,state.activityCount);line(4,b);
             // LPS-115-CHG01: Config left the menu (TAB opens it); entries renumbered 0-8.
-            const char* menu[]={"0  Date",tr("1  Activities","1  Activités"),tr("2  Weight tracker","2  Suivi du poids"),"3  Kanban",tr("4  Christian Rosary","4  Rosaire chrétien"),tr("5  Daily review","5  Revue journalière"),tr("6  Reminders","6  Rappels"),tr("7  Timer","7  Minuteur"),tr("8  Close the day","8  Terminer le jour")};
-            static_assert(sizeof menu/sizeof menu[0]==sizeof HomeScreens/sizeof HomeScreens[0],"one label per home entry");
-            const unsigned first=daysBack?1:0, total=daysBack?2:unsigned(sizeof menu/sizeof menu[0]);
-            for(unsigned i=0;i<total;++i)line(6+int(i),menu[first+i],i==selection);
+            const unsigned first=daysBack?1:0, total=daysBack?2:HomeEntryCount;
+            for(unsigned i=0;i<total;++i){std::snprintf(b,sizeof b,"%u  %s",first+i,homeLabel(first+i));line(6+int(i),b,i==selection);}
             line(17,tr("<- Previous day   -> Current day","<- Jour précédent   -> Jour actuel"));
         }else if(screen==Screen::TimerSelect){
             line(3,tr("TIMER","MINUTEUR"));
@@ -1861,10 +1886,24 @@ public:
             line(3,tr("CONFIGURATION","CONFIGURATION"));
             std::snprintf(b,sizeof b,"%s: %s",tr("1  Language","1  Langue"),pendingLanguage==Language::English?"English":"Français");line(6,b,selection==0);
             std::snprintf(b,sizeof b,"%s: PAL%u",tr("2  Colors","2  Couleurs"),unsigned(state.palette)+1);line(7,b,selection==1);
-            line(8,tr("3  Save","3  Enregistrer"),selection==2);
-            line(11,tr("Language: select, then Save.","Langue : choisir, puis enregistrer."));
+            unsigned shown=0;for(unsigned i=0;i<HomeEntryCount;++i)if(!(pendingHidden&(1u<<i)))++shown;
+            std::snprintf(b,sizeof b,"%s: %u/%u",tr("3  Activities","3  Activités"),shown,HomeEntryCount);line(8,b,selection==2);
+            line(9,tr("4  Save","4  Enregistrer"),selection==3);
+            line(11,tr("Language, Activities: then Save.","Langue, Activités : puis enregistrer."));
             line(12,tr("Esc: discard changes","Échap : annuler les modifications"));
             line(13,tr("Tab: close Config","Tab : fermer la configuration"));
+        }else if(screen==Screen::HomeEntries){
+            line(3,tr("ACTIVITIES","ACTIVITÉS"));
+            line(4,tr("Home menu entries shown","Entrées affichées dans le menu"));
+            for(unsigned i=0;i<HomeEntryCount;++i){
+                const bool locked=HomeLocked&(1u<<i),hidden=pendingHidden&(1u<<i);
+                const char* label=homeLabel(i);const char* tag=locked?tr("(locked)","(verrouillé)"):"";
+                const unsigned used=4+displayWidth(label)+displayWidth(tag);
+                std::snprintf(b,sizeof b,"[%c] %s%*s%s",hidden?' ':'x',label,int(used<39?39-used:1),"",tag);
+                line(6+int(i),b,i==selection);
+            }
+            line(15,tr("Enter: show/hide","Entrée : afficher/masquer"));
+            line(16,tr("Then Save in Configuration.","Puis enregistrer dans Configuration."));
         }else if(screen==Screen::Language){
             line(3,tr("LANGUAGE","LANGUE"));
             line(6,"1  English",selection==0);line(7,"2  Français",selection==1);
