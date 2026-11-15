@@ -4,6 +4,11 @@
 
 ![main](./main112.png "Main screen")
 
+<p>
+  <img src="./screenshots/v115_home.jpg" alt="LPS Companion v1.15 home menu on a PicoCalc" title="Home menu (v1.15)" width="48%">
+  <img src="./screenshots/v115_meal_planner.jpg" alt="LPS Companion v1.15 Meal Planner on a PicoCalc" title="Meal Planner (v1.15)" width="48%">
+</p>
+
 LPS-Companion helps you record daily activities and compare your expected and actual weight.
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries are saved to the SD card.
