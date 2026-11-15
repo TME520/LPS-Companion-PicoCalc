@@ -89,7 +89,7 @@ int main(){
     // Replace default date using the exact Date screen, including fixed-width edit.
     dated.key('0');for(int i=0;i<10;++i)dated.key(Backspace);for(char c:std::string("2028-02-29"))dated.key(c);dated.key(Enter);
     dated.key('1');dated.key('1');dated.key('2');dated.key(Escape);
-    dated.key('8');dated.key(Escape);dated.key(Up);dated.key(Enter);dated.key(Enter);assert(dated.data().today.date.year==2028&&dated.data().today.date.month==3&&dated.data().today.date.day==1);
+    dated.key('7');dated.key(Escape);dated.key(Up);dated.key(Enter);dated.key(Enter);assert(dated.data().today.date.year==2028&&dated.data().today.date.month==3&&dated.data().today.date.day==1);
     FILE* ics=std::fopen("2028-02-29_LPS-Companion.ics","rb");assert(ics);char content[1024]{};const auto used=std::fread(content,1,sizeof(content)-1,ics);assert(std::fclose(ics)==0&&used>0);
     assert(std::strstr(content,"BEGIN:VCALENDAR\r\nVERSION:2.0\r\n"));
     assert(std::strstr(content,"DTSTART;VALUE=DATE:20280229"));assert(std::strstr(content,"DTEND;VALUE=DATE:20280301"));
@@ -105,7 +105,7 @@ int main(){
     const auto generationAfterLeap=slot(0).generation>slot(1).generation?slot(0).generation:slot(1).generation;
     // Invalid dates and export failure never advance the day or A/B generation.
     dated.key('0');for(int i=0;i<10;++i)dated.key(Backspace);for(char c:std::string("2027-02-29"))dated.key(c);dated.key(Enter);assert(dated.data().today.date.year==2028);
-    dated.key(Escape);dated.key('8');dated.key(Escape);dated.key(Up);dated.key(Enter);std::remove("2028-03-01_LPS-Companion.ics");
+    dated.key(Escape);dated.key('7');dated.key(Escape);dated.key(Up);dated.key(Enter);std::remove("2028-03-01_LPS-Companion.ics");
     mockWriteError=true;dated.key(Enter);assert(dated.data().today.date.day==1);FILE* missing=std::fopen("2028-03-01_LPS-Companion.ics","rb");assert(!missing);
     mockWriteError=false;dated.key(Enter);assert(dated.data().today.date.day==2);
     const auto generationAfterRetry=slot(0).generation>slot(1).generation?slot(0).generation:slot(1).generation;
@@ -129,6 +129,7 @@ int main(){
     {
         auto file=[](const char* name){std::string out;FILE* f=std::fopen(name,"rb");if(!f)return std::string("<missing>");char b[512];size_t n;while((n=std::fread(b,1,sizeof b,f))>0)out.append(b,n);std::fclose(f);return out;};
         std::remove("MP280302.CSV");assert(dated.data().today.date.day==2&&dated.data().today.date.month==3);
+        assert(dated.currentScreen()==Screen::Reward);dated.key(Enter); // LPS-115-CHG02: SPACE would now open the planner from Reward too
         dated.key(' ');dated.key(Escape);assert(file("MP280302.CSV")=="<missing>"); // nothing played: no file created
         dated.key(' ');dated.key(Enter);dated.key(Down);dated.key(Right);dated.key(Right);dated.key(Enter);dated.key(Down);dated.key(Enter);dated.key(' ');
         assert(dated.currentScreen()==Screen::Home);

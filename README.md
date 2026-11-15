@@ -1,4 +1,4 @@
-# LPS-Companion v1.14
+# LPS-Companion v1.15
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
@@ -8,7 +8,29 @@ LPS-Companion helps you record daily activities and compare your expected and ac
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries are saved to the SD card.
 
-**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.14 adds the Meal Planner, a hidden card deck for the day's meals (Space on the home menu) with a daily CSV export; it needs device testing. See `BUILD-VALIDATION.md` for host checks and physical-test limits.
+**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.15 opens Config with Tab and the Meal Planner with Space from any screen, and lets you choose which home menu entries are shown (saved with your settings); it needs device testing. See `BUILD-VALIDATION.md` for host checks and physical-test limits.
+
+## Changes in v1.15
+
+- **Title** (LPS-115-CHG06): the title bar reads `LPS COMPANION v1.15`.
+- **Tab opens Config** (LPS-115-CHG01): **Config is no longer in the home menu**; press **Tab** on today's home screen to open it. The home menu is renumbered: **0 Date, 1 Activities, 2 Weight tracker, 3 Kanban, 4 Christian Rosary, 5 Daily review, 6 Reminders, 7 Timer, 8 Close the day** (key `9` now does nothing). The home footer shows the hint `Tab:Config`.
+  - **Tab toggles**: pressing Tab again closes Config entirely and returns to the screen you opened it from, with the cursor where you left it, even from the **Language** or **Colors** sub-screen. Unsaved choices are dropped, as with Esc.
+  - **Esc goes up one level**: from Language or Colors it returns to Configuration; from Configuration it returns to the screen you came from.
+  - **Save** in Configuration (and Enter in Colors) saves and then returns to that screen.
+  - From an archived day, Tab shows `Archived day: read-only`, as Config already required today's screen.
+- **Tab and Space from any screen** (LPS-115-CHG02): on today's day, **Tab** opens/closes Config and **Space** opens/closes the Meal Planner from every screen except text entry and confirmations. Closing either one (with the same key, or Esc from its top level) returns to the exact screen and cursor you came from: same page, Kanban column, review scroll or Rosary prayer.
+  - **Not available** while typing (Date, Kanban task, activity name, reminder editor), where Space stays a space character, and on confirmations (`Delete X?` on Activities, Close the day). The reminder popup at start-up is still dismissed by any key, Tab and Space included.
+  - **Weight** (LPS-115-CHG02b): Tab opens Config like everywhere else; it no longer switches between Expected and Actual (Up/Down do). Closing Config returns to Weight on the same field with the digits typed so far, still unsaved; Enter then saves both weights as before. Space stays ignored on Weight.
+  - **Tab inside the Meal Planner** opens Config; closing Config returns to the planner on the same card, and closing the planner then returns to where you were before it. **Space inside Config** (or Language/Colors) does nothing.
+  - Leaving the Meal Planner always rewrites `MPYYMMDD.CSV`, wherever it returns to; an export error is shown on that screen.
+  - The **timer keeps counting** (or stays paused) while Config or the Meal Planner is open over it. If it ends there, the `TIMER FINISHED!` screen takes over: Config closes without saving and the Meal Planner is left with its CSV written. Esc on the running timer still cancels it.
+  - Archived days are unchanged: Tab and Space show `Archived day: read-only`.
+- **Config → 3 Activities / Activités** (LPS-115-CHG03): a new Config entry lists the nine home menu entries with a checkbox each (`[x]` shown, `[ ]` hidden). **Up/Down** move, **Enter** shows or hides the entry. **Date** and **Close the day** are always shown: they are marked `(locked)` / `(verrouillé)` and Enter only says `Always shown`. No reordering. Configuration now reads **1 Language, 2 Colors, 3 Activities (with the count shown, e.g. `8/9`), 4 Save**: **Save moves from 3 to 4**.
+  - Like Language, the choice is pending until **4 Save** in Configuration. Esc goes back up to Configuration and keeps it; Tab (or Esc from Configuration) closes Config and drops it. A finished timer that takes over also drops it.
+- **Home menu shows only the checked entries** (LPS-115-CHG04): today's home menu lists the entries ticked in Config → Activities, in the usual order, **numbered 0..n without gaps**. Example, with Activities and Daily review hidden: **0 Date, 1 Weight tracker, 2 Kanban, 3 Christian Rosary, 4 Reminders, 5 Timer, 6 Close the day**. Number keys follow the numbers shown (keys past the last entry do nothing) and Up/Down move over the shown entries only.
+  - After a Config save the cursor stays on the same entry; if that entry was just hidden, it moves to the next shown entry below it (Close the day is always there).
+  - Hiding only removes the menu line: the data, reminders popup at start-up, ICS/CSV exports, running timer, Tab (Config) and Space (Meal Planner) work as before. The `x/22 activities` line stays on Home. The archived-day menu (1 Activities, 2 Weight tracker) is unchanged.
+- **Home menu choice saved** (LPS-115-CHG05): Config's Save writes the hidden entries to `SAVE_A.JSN`/`SAVE_B.JSN` together with the language, so the filtered menu survives a restart. The optional key `"homeHidden"` lists them by stable id (`activities`, `weight`, `kanban`, `rosary`, `daily_review`, `reminders`, `timer`; `date` and `close_day` are locked), for example `"homeHidden":["activities","daily_review"]`. Saves without the key (v1.14 and earlier) show every entry; unknown ids are ignored, and `date`/`close_day` are never hidden even if listed. The schema version stays 2.
 
 ## Changes in v1.14
 
@@ -211,14 +233,14 @@ Flashing replaces the current Pico firmware, including any installed interpreter
 3. Open **Weight tracker / Suivi du poids** to enter your expected and actual weight.
 4. Optionally open **Kanban** to create or update persistent tasks.
 5. Optionally open **Christian Rosary / Rosaire chrétien** for a guided prayer session.
-6. At the end of the day, choose **9 Close the day / Terminer le jour** and press Enter to confirm. The ICS export is written automatically.
+6. At the end of the day, choose **8 Close the day / Terminer le jour** and press Enter to confirm. The ICS export is written automatically.
 7. The next day begins.
 
 Days advance manually. Leaving the device switched off does not automatically start a new day.
 
 ### Main menu
 
-Select the language from Config on today's home screen. Accented French labels are supported.
+Press **Tab** on today's home screen to open Config, where you select the language, colour palette and the home menu entries shown (Tab again or Esc closes it). Accented French labels are supported.
 
 | Key | English | Français | Purpose |
 | --- | --- | --- | --- |
@@ -228,12 +250,12 @@ Select the language from Config on today's home screen. Accented French labels a
 | `3` | Kanban | Kanban | Manage persistent user-defined tasks. |
 | `4` | Christian Rosary | Rosaire chrétien | Start a guided Rosary session. |
 | `5` | Daily review | Revue journalière | Show today’s date, selected activities, actual weight, and TODO/DOING tasks. |
-| `6` | Config | Config | Choose language or colour palette. |
-| `7` | Reminders | Rappels | Create, edit, and delete up to three reminders. |
-| `8` | Timer | Minuteur | Start a 5, 30 or 60-minute countdown. |
-| `9` | Close the day | Terminer le jour | Save and close today, then advance. |
+| `6` | Reminders | Rappels | Create, edit, and delete up to three reminders. |
+| `7` | Timer | Minuteur | Start a 5, 30 or 60-minute countdown. |
+| `8` | Close the day | Terminer le jour | Save and close today, then advance. |
+| `Tab` | Config | Config | Choose language or colour palette (not a menu entry since v1.15). |
 
-Use **Up/Down** to select an item, **Enter** to open it, and **Esc** to return to the main menu.
+Entries can be hidden in Config → 3 Activities (v1.15); the menu then shows the remaining ones numbered 0..n without gaps. Use **Up/Down** to select an item, **Enter** to open it, and **Esc** to return to the main menu.
 
 In read-only history, only items 1–3 are available. Press Right on the home screen to return to today before opening Date or Config.
 
@@ -418,7 +440,7 @@ Since v1.13 each file is a single JSON object (schema `version` 2 since CHG07; v
 "crc32":"825db3bc"}
 ```
 
-`generation` increases with every save; the higher valid one wins. `crc32` is the standard CRC-32 (the same as Python's `zlib.crc32`) of every byte before `"crc32"`, and must be the last member. History is stored oldest first. Weights are integer grams, or `null` when not recorded. The top-level `activities` array is the editable list (id plus French and English names). Each day still stores only the names that were ticked that day, so renaming or deleting an activity later does not rewrite past days. Unknown keys are ignored, so later versions can add fields.
+`generation` increases with every save; the higher valid one wins. `crc32` is the standard CRC-32 (the same as Python's `zlib.crc32`) of every byte before `"crc32"`, and must be the last member. History is stored oldest first. Weights are integer grams, or `null` when not recorded. The top-level `activities` array is the editable list (id plus French and English names). Each day still stores only the names that were ticked that day, so renaming or deleting an activity later does not rewrite past days. Since v1.14 `state` may end with `"meals":{"played":[…]}` and since v1.15 with `"homeHidden":[…]` (hidden home menu entries by id); both are optional. Unknown keys are ignored, so later versions can add fields.
 
 Day navigation uses the history from that loaded snapshot in RAM. It indexes backwards from the history ring's next-write position, so the correct day is selected even after the 31 slots wrap. It does not reload the card at every arrow press, switch between A and B to change days, or write while browsing. Back up the **whole `LPS` directory** to preserve your data.
 

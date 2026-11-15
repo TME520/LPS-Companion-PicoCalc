@@ -1,5 +1,5 @@
 /*
- LPS Companion - v1.14, 2026-11-14.
+ LPS Companion - v1.15, 2026-11-15.
  Screen: 320x320, 8x16 bitmap font, 40 columns x 20 rows.
 
  Desktop build (Fedora/Linux):
@@ -13,7 +13,7 @@
  In this package src/main.cpp supplies the LCD, keyboard and SD implementation.
  Run bash build.sh from the project root to create build/lps_companion.uf2.
  Target: original RP2040 PicoCalc, standalone BOOTSEL firmware.
- v1.2 confirmed on the user's PicoCalc; v1.14 needs device testing.
+ v1.2 confirmed on the user's PicoCalc; v1.15 needs device testing.
  The portable application remains independent of the Pico SDK; desktop and
  built-in tests below remain available for checking the UI/state machine.
 
@@ -40,7 +40,7 @@
    A/B recovery chooses the highest-generation intact record. No dynamic allocation in
    application code. SD adapter must provide atomic/durable replacement.
 
- Desktop commands are line-based: enter/up/down/left/right/esc/space/back, digits 1-9,
+ Desktop commands are line-based: enter/up/down/left/right/esc/space/tab/back, digits 0-8,
  text YOUR TEXT, quit. To edit a field, use back, or enter an empty field as-is.
  Desktop save is lps_companion.jsn in the current working directory
  (an older lps_companion.sav is read once and left untouched).
@@ -82,7 +82,7 @@ unsigned displayWidth(const char* utf8){
 }
 constexpr int Width=320, Height=320, Columns=40, Rows=20;
 constexpr std::size_t NoteLength=96, HistoryLength=31, TaskNameLength=32, TaskCapacity=24, ReminderCapacity=3, ReminderTextLength=32, BlobCapacity=6144;
-enum Key { Enter=13, Backspace=8, Escape=27, Up=1000, Down, Left, Right, DeleteKey, F1, F2, F3, F4, F5 };
+enum Key { Tab=9, Enter=13, Backspace=8, Escape=27, Up=1000, Down, Left, Right, DeleteKey, F1, F2, F3, F4, F5 };
 enum class LoadResult { Missing, Ok, NoStorage, Error };
 struct Day;
 struct State;
@@ -262,8 +262,20 @@ struct State {
     uint16_t nextActivityId=1;
     std::array<Activity,ActivityCapacity> activities{};
     MealDeckState meals{};
+    // LPS-115-CHG03: home menu entries hidden by the user, bit i = home entry i
+    // (HomeEntryIds order). Date and Close the day are never hidden. The home
+    // menu shows only the others (CHG04); saved as "homeHidden" (CHG05).
+    uint16_t hiddenHome=0;
     State();
 };
+// LPS-115-CHG05: stable ids of the home menu entries, in menu order. They name
+// the entries in the save ("homeHidden") so other ports can share the key.
+constexpr const char* HomeEntryIds[]={"date","activities","weight","kanban","rosary","daily_review","reminders","timer","close_day"};
+constexpr unsigned HomeEntryCount=sizeof HomeEntryIds/sizeof HomeEntryIds[0];
+// LPS-115-CHG03: Date and Close the day are always shown.
+constexpr uint16_t HomeLocked=uint16_t(1u|(1u<<(HomeEntryCount-1)));
+constexpr uint16_t HomeAll=uint16_t((1u<<HomeEntryCount)-1);
+static_assert(HomeEntryCount<=16,"hiddenHome is 16 bits");
 const char* storedName(const Activity& a){return a.french[0]?a.french.data():a.english.data();}
 const char* displayName(const Activity& a,Language language){
     if(language==Language::French)return a.french[0]?a.french.data():a.english.data();
@@ -480,6 +492,11 @@ bool decode(const uint8_t* bytes,std::size_t size,State& out) {
 // played deck indices in order of play. It is optional (absent = full deck),
 // so the schema stays 2: v1.13 saves load with a full deck, and v1.13 skips
 // the key as unknown.
+// LPS-115-CHG05 adds "homeHidden":["activities","daily_review",...] after
+// "meals": the home menu entries hidden in Config, by stable id (HomeEntryIds).
+// Optional (absent = all shown, as in v1.14 saves). Unknown ids and the locked
+// "date" and "close_day" are ignored on read; a non-array or a non-string
+// element is damage.
 // "crc32" is the CRC-32 (IEEE, lowercase hex) of every byte before the
 // "crc32" key and must be the last member. History is stored oldest first.
 // Each day stores ticked identity names (French if set, otherwise English).
@@ -605,7 +622,9 @@ bool writeSave(const State& s,uint32_t generation,SaveSink& sink,uint32_t& check
     }
     w.raw("],\n");w.key("meals");w.raw("{");w.key("played");w.raw("[");
     for(unsigned i=0;i<s.meals.playedCount;++i){if(i)w.raw(",");w.number(s.meals.order[i]);}
-    w.raw("]}},\n");
+    w.raw("]},\n");w.key("homeHidden");w.raw("[");
+    for(unsigned i=0,n=0;i<HomeEntryCount;++i)if(s.hiddenHome&(1u<<i)&~HomeLocked){if(n++)w.raw(",");w.text(HomeEntryIds[i]);}
+    w.raw("]},\n");
     checksum=w.checksum();
     char hex[12];std::snprintf(hex,sizeof hex,"%08lx",static_cast<unsigned long>(checksum));
     w.key("crc32");w.text(hex);w.raw("}\n");w.flush();
@@ -826,6 +845,7 @@ void resetState(State& s){
     s.reminderCount=0;
     for(Reminder& r:s.reminders)r=Reminder{};
     s.meals=MealDeckState{};
+    s.hiddenHome=0;
     fillDefaultActivities(s);
 }
 bool readState(JsonReader& r,State& s){
@@ -912,6 +932,16 @@ bool readState(JsonReader& r,State& s){
                     if(mealPlayPosition(s.meals,unsigned(r.number)))return false;
                     s.meals.order[s.meals.playedCount++]=uint8_t(r.number);return true;
                 });
+            });
+        }
+        if(!std::strcmp(key,"homeHidden")){
+            if(r.next()!=Token::ArrayBegin)return false;
+            s.hiddenHome=0;
+            return elements(r,[&](Token t){
+                if(t!=Token::String)return false;
+                for(unsigned i=0;i<HomeEntryCount;++i)
+                    if(!r.overflow&&!std::strcmp(r.text.data(),HomeEntryIds[i]))s.hiddenHome=uint16_t(s.hiddenHome|((1u<<i)&~HomeLocked));
+                return true; // unknown ids are ignored
             });
         }
         return r.skip(r.next());
@@ -1020,7 +1050,10 @@ void drawMealCard(Canvas& c,const MealCardView& v){
     centredLabel(c,ry,portion,ink,ribbon);
 }
 enum class Screen { TimerSelect, TimerRunning, TimerComplete, Home, ReminderPopup, Reminders, ReminderEdit, Date, Activities, ActivityEdit, Weight, Kanban, TaskEdit, DailyReview, Finish, Reward, Config, Language, Colors,
-                    RosaryMode, RosarySet, RosaryDecade, RosaryPrayer, RosaryComplete, MealPlanner };
+                    RosaryMode, RosarySet, RosaryDecade, RosaryPrayer, RosaryComplete, MealPlanner, HomeEntries };
+// Home menu entries 0..8, in order (LPS-115-CHG01: Config is opened with TAB).
+constexpr Screen HomeScreens[]={Screen::Date,Screen::Activities,Screen::Weight,Screen::Kanban,Screen::RosaryMode,Screen::DailyReview,Screen::Reminders,Screen::TimerSelect,Screen::Finish};
+static_assert(sizeof HomeScreens/sizeof HomeScreens[0]==HomeEntryCount,"one id per home entry");
 class App {
     Platform& hw;
     State state{};
@@ -1034,6 +1067,7 @@ class App {
     bool blocked=false;
     Language pendingLanguage=Language::English;
     Palette pendingPalette=Palette::Green;
+    uint16_t pendingHidden=0; // LPS-115-CHG03: home entries ticked off, saved with Config's Save
     std::array<char,11> dateDraft{};
     std::array<char,TaskNameLength+1> taskDraft{};
     std::array<std::array<char,8>,2> weights{};
@@ -1056,8 +1090,72 @@ class App {
     uint64_t timerNow=0,timerLast=0,timerRemaining=0;
     bool timerPaused=false;
     unsigned mealCursor=0; // deck index of the card shown in the Meal Planner
+    // LPS-115-CHG01/CHG02: TAB opens Config and SPACE the Meal Planner from any
+    // screen of today that is not a text entry or a confirmation. Each overlay
+    // keeps one return point (screen and cursor); there is no stack. Config may
+    // be opened from inside the Meal Planner (it then closes back to the
+    // planner), never the other way round: SPACE is ignored in Config.
+    // On today's Home the cursor is kept as the entry (HomeScreens index), not
+    // its position, so it survives entries being hidden or shown meanwhile.
+    struct ReturnPoint { Screen screen=Screen::Home; unsigned selection=0; unsigned homeEntry=0; };
+    ReturnPoint here()const{return {screen,selection,screen==Screen::Home&&!daysBack?homeEntryAt(selection):0};}
+    // LPS-115-CHG04: today's home menu lists the entries not hidden, in order,
+    // numbered 0..n-1 by position. Date (first) and Close the day (last) are
+    // locked, so the menu is never empty and always ends with Close the day.
+    uint16_t hiddenHomeMask()const{return uint16_t(state.hiddenHome&HomeAll&~HomeLocked);}
+    unsigned homeVisibleCount()const{unsigned n=0;for(unsigned i=0;i<HomeEntryCount;++i)if(!(hiddenHomeMask()&(1u<<i)))++n;return n;}
+    unsigned homeEntryAt(unsigned position)const{
+        for(unsigned i=0;i<HomeEntryCount;++i)if(!(hiddenHomeMask()&(1u<<i))&&position--==0)return i;
+        return HomeEntryCount-1;
+    }
+    // Position of an entry; a hidden one gives the next visible entry below it.
+    unsigned homePositionOf(unsigned entry)const{
+        unsigned position=0;
+        for(unsigned i=0;i<HomeEntryCount;++i)if(!(hiddenHomeMask()&(1u<<i))){if(i>=entry)return position;++position;}
+        return position?position-1:0;
+    }
+    ReturnPoint configReturn{},mealReturn{};
+    bool timerActive=false; // counting down (or paused), whichever screen is shown
+    static bool inConfig(Screen s){return s==Screen::Config||s==Screen::Language||s==Screen::Colors||s==Screen::HomeEntries;}
+    void resetPending(){pendingLanguage=state.language;pendingPalette=state.palette;pendingHidden=state.hiddenHome;}
+    // Home entry name without its number, in the active language.
+    const char* homeLabel(unsigned i)const{
+        static constexpr const char* en[HomeEntryCount]={"Date","Activities","Weight tracker","Kanban","Christian Rosary","Daily review","Reminders","Timer","Close the day"};
+        static constexpr const char* fr[HomeEntryCount]={"Date","Activités","Suivi du poids","Kanban","Rosaire chrétien","Revue journalière","Rappels","Minuteur","Terminer le jour"};
+        return state.language==Language::French?fr[i]:en[i];
+    }
+    // Screens where TAB/SPACE keep their own meaning: text entry (SPACE is a
+    // character) and confirmations. Weight is numeric entry: TAB opens Config
+    // there (LPS-115-CHG02b) and SPACE stays ignored.
+    bool overlayKeysAllowed(int k)const{
+        switch(screen){
+            case Screen::Weight:return k==Tab;
+            case Screen::Date:case Screen::ActivityEdit:case Screen::TaskEdit:case Screen::ReminderEdit:
+            case Screen::Finish:case Screen::ReminderPopup:return false;
+            case Screen::Activities:return !confirmingDelete;
+            default:return true;
+        }
+    }
+    // Back to a screen without go(): its drafts, page, column, scroll and
+    // Rosary position are untouched. A language saved meanwhile can shorten the
+    // Rosary text or the review, so those positions are clamped.
+    void returnTo(const ReturnPoint& r){
+        screen=r.screen;selection=r.selection;message.fill(0);confirmingDelete=false;
+        if(screen==Screen::Home&&!daysBack)selection=homePositionOf(r.homeEntry);
+        if(screen==Screen::RosaryPrayer){const unsigned pages=(displayCells(rosaryText(rosaryView(rosaryStep)))+359)/360;if(pages&&rosaryPage>=pages)rosaryPage=pages-1;}
+        if(screen==Screen::DailyReview){const unsigned maximum=reviewRows()>8?reviewRows()-8:0;if(reviewOffset>maximum)reviewOffset=maximum;}
+    }
+    void openConfig(){
+        configReturn=here();
+        resetPending();go(Screen::Config);
+    }
+    // Leaves Config and its sub-screens; pending, unsaved changes are dropped.
+    void closeConfig(){
+        resetPending();returnTo(configReturn);
+    }
+    void openMealPlanner(){mealReturn=here();go(Screen::MealPlanner);}
     unsigned timerSeconds()const{return unsigned((timerRemaining+999)/1000);}
-    void startTimer(unsigned option){constexpr unsigned minutes[]={5,30,60};timerRemaining=uint64_t(minutes[option])*60000;timerLast=timerNow;timerPaused=false;go(Screen::TimerRunning);}
+    void startTimer(unsigned option){constexpr unsigned minutes[]={5,30,60};timerRemaining=uint64_t(minutes[option])*60000;timerLast=timerNow;timerPaused=false;timerActive=true;go(Screen::TimerRunning);}
     unsigned extraCount(const Day& d)const{
         if(!daysBack)return 0;
         unsigned n=0;for(unsigned i=0;i<d.namedCount;++i)if(indexByStoredName(state,d.names[i].data())>=state.activityCount)++n;
@@ -1250,7 +1348,7 @@ class App {
     void line(int row,const char* text,bool reverse=false){
         char cells[100];displayText(text,cells,sizeof cells);hw.text(0,row*16,cells,reverse);
         constexpr const char* keys[]={"Enter","Esc","Delete","Del","Backspace","Up","Down","Left","Right",
-            "Entrée","Échap","Suppr","Haut","Bas","Space","Espace","F1","F2","F3","F4","F5","N","E","<-","->","1-9","1-9,0"};
+            "Entrée","Échap","Suppr","Haut","Bas","Space","Espace","Tab","F1","F2","F3","F4","F5","N","E","<-","->","1-9","1-9,0"};
         for(unsigned col=0;cells[col]&&col<40;){
             bool matched=false;
             for(const char* key:keys){char latin[24];displayText(key,latin,sizeof latin);const unsigned len=unsigned(std::strlen(latin));
@@ -1379,9 +1477,10 @@ class App {
         confirmingDelete=false;
     }
     // LPS-114-CHG02: leaving the Meal Planner (Space or Esc) rewrites the
-    // day's CSV. A failure is reported on Home; the deck itself is already saved.
-    void leaveMealPlanner(){
-        go(Screen::Home);
+    // day's CSV. A failure is reported on the screen the planner returns to
+    // (LPS-115-CHG02); the deck itself is already saved.
+    void leaveMealPlanner(){returnTo(mealReturn);exportMeals();}
+    void exportMeals(){
         if(missingStorage)return; // the red missing-SD warning already explains it
         if(!validDate(state.today.date)){say(tr("Set Date to export meals","Renseignez Date pour exporter les repas"));return;}
         if(!hw.exportMealCsv(state.today.date,state.meals))say(tr("Meal CSV export failed","Export CSV repas échoué"));
@@ -1395,12 +1494,17 @@ public:
     explicit App(Platform& platform):hw(platform){}
     void tick(uint64_t milliseconds){
         timerNow=milliseconds;
-        if(screen!=Screen::TimerRunning)return;
+        if(!timerActive)return; // LPS-115-CHG02: counts down behind Config and the Meal Planner too
         const unsigned before=timerSeconds();
         if(!timerPaused){const uint64_t elapsed=timerNow-timerLast;timerRemaining=elapsed>=timerRemaining?0:timerRemaining-elapsed;}
         timerLast=timerNow;
-        if(!timerRemaining){go(Screen::TimerComplete);render();}
-        else if(before!=timerSeconds())render();
+        if(!timerRemaining){timerActive=false;
+            // The alert takes over: Config closes without saving, and a Meal
+            // Planner left this way still writes its CSV.
+            const bool meals=screen==Screen::MealPlanner||(inConfig(screen)&&configReturn.screen==Screen::MealPlanner);
+            if(inConfig(screen))resetPending();
+            go(Screen::TimerComplete);if(meals)exportMeals();render();
+        }else if(screen==Screen::TimerRunning&&before!=timerSeconds())render();
     }
     const State& data()const{return state;}
     Screen currentScreen()const{return screen;}
@@ -1423,38 +1527,47 @@ public:
             if(screen==Screen::Activities&&confirmingDelete){confirmingDelete=false;message.fill(0);render();return;}
             if(screen==Screen::ActivityEdit){screen=Screen::Activities;activityDraft.fill(0);message.fill(0);render();return;}
             if(screen==Screen::MealPlanner){leaveMealPlanner();render();return;}
+            if(screen==Screen::Config){closeConfig();render();return;} // Esc: one level up
+            if(screen==Screen::TimerRunning)timerActive=false; // Esc still cancels the countdown
             Screen target=Screen::Home;
-            if(screen==Screen::Language||screen==Screen::Colors)target=Screen::Config;
+            if(screen==Screen::Language||screen==Screen::Colors||screen==Screen::HomeEntries)target=Screen::Config;
             else if(screen==Screen::ReminderEdit)target=Screen::Reminders;
             else if(screen==Screen::TaskEdit)target=Screen::Kanban;
             else if(screen==Screen::RosarySet)target=Screen::RosaryMode;
             else if(screen==Screen::RosaryDecade)target=Screen::RosarySet;
             go(target);render();return;
         }
+        if(k==Tab||k==' '){
+            // LPS-115-CHG01: TAB closes Config entirely, from any of its screens;
+            // SPACE does nothing there (LPS-115-CHG02).
+            if(inConfig(screen)){if(k==Tab)closeConfig();render();return;}
+            if(screen==Screen::MealPlanner&&k==' '){leaveMealPlanner();render();return;}
+            // LPS-115-CHG02: TAB/SPACE from any screen that does not use them.
+            if(overlayKeysAllowed(k)){message.fill(0);
+                if(daysBack)readOnly();else if(k==Tab)openConfig();else openMealPlanner();
+                render();return;
+            }
+        }
         message.fill(0);
         if(screen==Screen::ReminderPopup){go(Screen::Home);
         }else if(screen==Screen::Home){
-            // LPS-114-CHG01: SPACE opens the hidden Meal Planner (today only).
-            if(k==' '){if(daysBack)readOnly();else go(Screen::MealPlanner);render();return;}
             if(k==Left){
                 if(daysBack<state.count){++daysBack;selection=0;page=0;}
                 else say(state.count?tr("Oldest saved day","Plus ancien jour conservé"):tr("No archived days","Aucun jour archivé"));
             }
             if(k==Right){daysBack=0;selection=0;page=0;}
-            const unsigned menuCount=daysBack?2:10;
+            const unsigned menuCount=daysBack?2:homeVisibleCount();
             if(k==Up)selection=(selection+menuCount-1)%menuCount;
             if(k==Down)selection=(selection+1)%menuCount;
             if(!daysBack&&k=='0'){selection=0;k=Enter;}
             else if(daysBack&&k>='1'&&k<='2'){selection=unsigned(k-'1');k=Enter;}
-            else if(!daysBack&&k>='1'&&k<='9'){selection=unsigned(k-'0');k=Enter;}
-            if((k=='0'||(k>='3'&&k<='9'))&&daysBack)readOnly();
+            else if(!daysBack&&k>='1'&&unsigned(k-'0')<menuCount){selection=unsigned(k-'0');k=Enter;}
+            if((k=='0'||(k>='3'&&unsigned(k-'0')<sizeof HomeScreens/sizeof HomeScreens[0]))&&daysBack)readOnly();
             if(k==Enter){
-                constexpr Screen currentScreens[]={Screen::Date,Screen::Activities,Screen::Weight,Screen::Kanban,Screen::RosaryMode,Screen::DailyReview,Screen::Config,Screen::Reminders,Screen::TimerSelect,Screen::Finish};
                 constexpr Screen archiveScreens[]={Screen::Activities,Screen::Weight};
-                const Screen target=daysBack?archiveScreens[selection]:currentScreens[selection];
+                const Screen target=daysBack?archiveScreens[selection]:HomeScreens[homeEntryAt(selection)];
                 if(target==Screen::Kanban)kanbanColumn=TaskStatus::Todo;
                 if(target==Screen::Reminders)pruneReminders();
-                if(target==Screen::Config){pendingLanguage=state.language;pendingPalette=state.palette;}
                 go(target);}
         }else if(screen==Screen::TimerSelect){
             if(k==Up)selection=(selection+2)%3;
@@ -1567,7 +1680,7 @@ public:
             }else edit(activityDraft,k);
         }else if(screen==Screen::Weight){
             if(daysBack){if(k==Enter)go(Screen::Home);else readOnly();}
-            else if(k==Up||k==Down||k==9)field=1-field;
+            else if(k==Up||k==Down)field=1-field;
             else if(k==Enter){State& next=stage();
                 if(!parseWeight(weights[0].data(),next.today.expected)||!parseWeight(weights[1].data(),next.today.actual))say(tr("Invalid weight (example: 110.500)","Poids invalide (exemple : 110,500)"));
                 else if(commit(next))go(Screen::Home);
@@ -1608,14 +1721,24 @@ public:
             else if(k==Right)reviewOffset=(reviewOffset+8<maximum)?reviewOffset+8:maximum;
             else if(k==Left)reviewOffset=reviewOffset>8?reviewOffset-8:0;
         }else if(screen==Screen::Config){
-            if(k==Up)selection=(selection+2)%3;
-            if(k==Down)selection=(selection+1)%3;
-            if(k>='1'&&k<='3'){selection=unsigned(k-'1');k=Enter;}
+            if(k==Up)selection=(selection+3)%4;
+            if(k==Down)selection=(selection+1)%4;
+            if(k>='1'&&k<='4'){selection=unsigned(k-'1');k=Enter;}
             if(k==Enter){
                 if(selection==0)go(Screen::Language);
                 else if(selection==1)go(Screen::Colors);
-                else {State& next=stage();next.language=pendingLanguage;
-                    if(commit(next)){go(Screen::Home);say(tr("Configuration saved","Configuration enregistrée"));}}
+                else if(selection==2)go(Screen::HomeEntries);
+                else {State& next=stage();next.language=pendingLanguage;next.hiddenHome=pendingHidden;
+                    if(commit(next)){closeConfig();say(tr("Configuration saved","Configuration enregistrée"));}}
+            }
+        }else if(screen==Screen::HomeEntries){
+            // LPS-115-CHG03: show/hide home entries; like Language, the choice is
+            // pending until Save in Configuration (Esc keeps it, Tab drops it).
+            if(k==Up)selection=(selection+HomeEntryCount-1)%HomeEntryCount;
+            if(k==Down)selection=(selection+1)%HomeEntryCount;
+            if(k==Enter){
+                if(HomeLocked&(1u<<selection))say(tr("Always shown","Toujours affiché"));
+                else pendingHidden=uint16_t((pendingHidden^(1u<<selection))&HomeAll&~HomeLocked);
             }
         }else if(screen==Screen::Language){
             if(k==Up||k==Down)selection=1-selection;
@@ -1627,7 +1750,7 @@ public:
             if(k>='1'&&k<='5')selection=unsigned(k-'1');
             pendingPalette=Palette(selection);
             if(k==Enter){State& next=stage();next.palette=pendingPalette;
-                if(commit(next)){go(Screen::Home);say(tr("Color saved","Couleur enregistrée"));}}
+                if(commit(next)){closeConfig();say(tr("Color saved","Couleur enregistrée"));}}
         }else if(screen==Screen::RosaryMode){
             if(k==Up)selection=(selection+3)%4;
             if(k==Down)selection=(selection+1)%4;
@@ -1675,8 +1798,7 @@ public:
             // back the card and saves at once, like an activity tick.
             unsigned row=unsigned(MealDeck[mealCursor].row);
             const unsigned first=MealRowFirst[row],n=MealRowFirst[row+1]-first,column=mealCursor-first;
-            if(k==' ')leaveMealPlanner();
-            else if(k==Left)mealCursor=first+(column+n-1)%n;
+            if(k==Left)mealCursor=first+(column+n-1)%n;
             else if(k==Right)mealCursor=first+(column+1)%n;
             else if(k==Up||k==Down){
                 row=(row+(k==Up?MealRowCount-1:1))%MealRowCount;
@@ -1689,16 +1811,17 @@ public:
     void render(){
         hw.setPalette(displayedPalette());hw.clear();char b[128];const Day& day=viewedDay();char date[11]{};
         if(validDate(day.date))dateText(day.date,date,sizeof date);else std::snprintf(date,sizeof date,"%s%lu",tr("D","J"),static_cast<unsigned long>(day.number));
-        std::snprintf(b,sizeof b,"LPS COMPANION v1.14    %s",date);line(0,b,true);
+        std::snprintf(b,sizeof b,"LPS COMPANION v1.15    %s",date);line(0,b,true);
         if(validDate(day.date)){longDateText(day.date,b,sizeof b);line(1,b);}
         if(daysBack)line(2,tr("ARCHIVED DAY - READ ONLY","JOUR ARCHIVÉ - LECTURE SEULE"));
         if(screen==Screen::Home){
             line(3,daysBack?tr("CLOSED DAY","JOUR TERMINÉ"):tr("TODAY","AUJOURD'HUI"));
             const unsigned marked=daysBack&&day.namedCount?day.namedCount:count(day.flags);
             std::snprintf(b,sizeof b,tr("%u/%u activities","%u/%u activités"),marked,state.activityCount);line(4,b);
-            const char* menu[]={"0  Date",tr("1  Activities","1  Activités"),tr("2  Weight tracker","2  Suivi du poids"),"3  Kanban",tr("4  Christian Rosary","4  Rosaire chrétien"),tr("5  Daily review","5  Revue journalière"),"6  Config",tr("7  Reminders","7  Rappels"),tr("8  Timer","8  Minuteur"),tr("9  Close the day","9  Terminer le jour")};
-            const unsigned first=daysBack?1:0, total=daysBack?2:10;
-            for(unsigned i=0;i<total;++i)line(6+int(i),menu[first+i],i==selection);
+            // LPS-115-CHG01: Config left the menu (TAB opens it). LPS-115-CHG04: only
+            // the entries shown, renumbered without gaps; the archive keeps 1 and 2.
+            const unsigned total=daysBack?2:homeVisibleCount();
+            for(unsigned i=0;i<total;++i){const unsigned entry=daysBack?1+i:homeEntryAt(i);std::snprintf(b,sizeof b,"%u  %s",daysBack?entry:i,homeLabel(entry));line(6+int(i),b,i==selection);}
             line(17,tr("<- Previous day   -> Current day","<- Jour précédent   -> Jour actuel"));
         }else if(screen==Screen::TimerSelect){
             line(3,tr("TIMER","MINUTEUR"));
@@ -1805,9 +1928,24 @@ public:
             line(3,tr("CONFIGURATION","CONFIGURATION"));
             std::snprintf(b,sizeof b,"%s: %s",tr("1  Language","1  Langue"),pendingLanguage==Language::English?"English":"Français");line(6,b,selection==0);
             std::snprintf(b,sizeof b,"%s: PAL%u",tr("2  Colors","2  Couleurs"),unsigned(state.palette)+1);line(7,b,selection==1);
-            line(8,tr("3  Save","3  Enregistrer"),selection==2);
-            line(11,tr("Language: select, then Save.","Langue : choisir, puis enregistrer."));
+            unsigned shown=0;for(unsigned i=0;i<HomeEntryCount;++i)if(!(pendingHidden&(1u<<i)))++shown;
+            std::snprintf(b,sizeof b,"%s: %u/%u",tr("3  Activities","3  Activités"),shown,HomeEntryCount);line(8,b,selection==2);
+            line(9,tr("4  Save","4  Enregistrer"),selection==3);
+            line(11,tr("Language, Activities: then Save.","Langue, Activités : puis enregistrer."));
             line(12,tr("Esc: discard changes","Échap : annuler les modifications"));
+            line(13,tr("Tab: close Config","Tab : fermer la configuration"));
+        }else if(screen==Screen::HomeEntries){
+            line(3,tr("ACTIVITIES","ACTIVITÉS"));
+            line(4,tr("Home menu entries shown","Entrées affichées dans le menu"));
+            for(unsigned i=0;i<HomeEntryCount;++i){
+                const bool locked=HomeLocked&(1u<<i),hidden=pendingHidden&(1u<<i);
+                const char* label=homeLabel(i);const char* tag=locked?tr("(locked)","(verrouillé)"):"";
+                const unsigned used=4+displayWidth(label)+displayWidth(tag);
+                std::snprintf(b,sizeof b,"[%c] %s%*s%s",hidden?' ':'x',label,int(used<39?39-used:1),"",tag);
+                line(6+int(i),b,i==selection);
+            }
+            line(15,tr("Enter: show/hide","Entrée : afficher/masquer"));
+            line(16,tr("Then Save in Configuration.","Puis enregistrer dans Configuration."));
         }else if(screen==Screen::Language){
             line(3,tr("LANGUAGE","LANGUE"));
             line(6,"1  English",selection==0);line(7,"2  Français",selection==1);
@@ -1877,6 +2015,7 @@ public:
         if(missingStorage)hw.alert(0,statusRow*16,message.data());else if(message[0])line(statusRow,message.data());
         if(hw.batteryBelow20())hw.alert(0,18*16,tr("[!] Low battery!","[!] Batterie faible !"));
         if(screen==Screen::MealPlanner)line(19,mealPlayPosition(state.meals,mealCursor)?tr("Enter:Put back  Space/Esc:Back","Entrée:Remettre  Espace/Échap:Retour"):tr("Enter:Play  Space/Esc:Back","Entrée:Jouer  Espace/Échap:Retour"),true);
+        else if(screen==Screen::Home)line(19,tr("Up/Down  Enter:OK  Tab:Config","Haut/Bas  Entrée:OK  Tab:Config"),true);
         else if(screen!=Screen::TimerRunning&&screen!=Screen::TimerComplete)line(19,tr("Up/Down  Enter:OK  Esc:Back","Haut/Bas  Entrée:OK  Échap:Retour"),true);
         hw.present();
     }
@@ -1923,7 +2062,7 @@ public:
             for(unsigned char c:cells[i]){if(!c)break;if(c>=128){std::putchar(0xc0|(c>>6));std::putchar(0x80|(c&0x3f));}else std::putchar(c);}
             std::printf("\033[0m\n");
         }
-        std::printf("\nCommands: 1-9, up/down/left/right, enter, esc, space, back,\ntext YOUR TEXT, quit\n> ");std::fflush(stdout);
+        std::printf("\nCommands: 0-8, up/down/left/right, enter, esc, space, tab, back,\ntext YOUR TEXT, quit\n> ");std::fflush(stdout);
     }
     lps::LoadResult load(lps::State& state)override{
         FILE* f=std::fopen("lps_companion.jsn","rb");
@@ -1974,7 +2113,7 @@ int main(){Terminal terminal;lps::App app(terminal);app.start();std::string s;
         else if(s=="up")app.key(lps::Up);else if(s=="down")app.key(lps::Down);
         else if(s=="left")app.key(lps::Left);else if(s=="right")app.key(lps::Right);
         else if(s=="esc")app.key(lps::Escape);else if(s=="back")app.key(lps::Backspace);
-        else if(s=="space")app.key(' ');
+        else if(s=="space")app.key(' ');else if(s=="tab")app.key(lps::Tab);
         else if(s=="enter"||s.empty())app.key(lps::Enter);else if(s.size()==1)app.key(s[0]);
         else {std::cout<<"Unknown command.\n";app.render();}
     }
@@ -2052,7 +2191,7 @@ int main(){
     nav.key(Right);nav.key(Enter);assert(!(nav.data().today.flags&(1u<<10)));
     nav.key(Escape);nav.key('3');assert(nav.currentScreen()==Screen::Kanban);nav.key(Escape);
     nav.key(Escape);nav.key(Up);nav.key(Enter);assert(nav.currentScreen()==Screen::Finish);
-    nav.key(Escape);nav.key('9');assert(nav.currentScreen()==Screen::Finish);nav.key(Escape);nav.key('6');assert(nav.currentScreen()==Screen::Config);nav.key('2');assert(nav.currentScreen()==Screen::Colors);
+    nav.key(Escape);nav.key('8');assert(nav.currentScreen()==Screen::Finish);nav.key(Escape);nav.key(Tab);assert(nav.currentScreen()==Screen::Config);nav.key('2');assert(nav.currentScreen()==Screen::Colors);
     assert(pages.palette==Palette::Green);nav.key(Down);assert(pages.palette==Palette::Blue);nav.key(Escape);assert(pages.palette==Palette::Green);
     nav.key('2');nav.key('1');nav.key(Enter);assert(nav.currentScreen()==Screen::Home&&nav.data().palette==Palette::Red&&pages.palette==Palette::Red);
     App paletteReload(pages);paletteReload.start();assert(paletteReload.data().palette==Palette::Red);

@@ -24,7 +24,7 @@ public:
     bool has(int row,const char* utf8)const{char cells[100];displayText(utf8,cells,sizeof cells);return std::strstr(rows[row].data(),cells)!=nullptr;}
     bool has(const char* utf8)const{for(int r=0;r<20;++r)if(has(r,utf8))return true;return false;}
 };
-void choose(App& app,Language language){app.key('6');app.key('1');app.key(language==Language::French?'2':'1');app.key('3');}
+void choose(App& app,Language language){app.key(Tab);app.key('1');app.key(language==Language::French?'2':'1');app.key('4');}
 void clearDraft(App& app,unsigned n){for(unsigned i=0;i<n;++i)app.key(Backspace);}
 std::vector<std::string> exported(const State& s,const Day& d,Language language){
     std::vector<std::string> names;
@@ -141,7 +141,7 @@ int main(){
         app.key('1');app.key(Enter); // Walk / Marche
         app.key(Right);app.key(Down);app.key(Down);app.key(Down);app.key(Down);app.key(Down);app.key(Down);app.key(Enter); // Sport (page 2, key 7)
         assert(app.data().today.flags&((1u<<0)|(1u<<16)));
-        app.key(Escape);app.key('9');app.key(Enter);app.key(Enter);
+        app.key(Escape);app.key('8');app.key(Enter);app.key(Enter);
         assert(app.data().today.flags==0&&app.data().count==1);
         assert(app.data().history[0].namedCount==2);
         assert(std::strcmp(app.data().history[0].names[0].data(),"Marche")==0);
