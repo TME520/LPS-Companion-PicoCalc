@@ -55,7 +55,10 @@ int main(){
             // Attempt edits in every archived screen; no writes or XP changes.
             app.key('1');app.key('1');app.key(Enter);app.key(Right);app.key(Escape);
             app.key('2');app.key('9');app.key(Backspace);app.key(Enter);
-            app.key('3');assert(app.currentScreen()==Screen::Home);
+            app.key('3');assert(app.currentScreen()==Screen::DailyReview);
+            app.key(Tab);assert(app.currentScreen()==Screen::DailyReview);
+            app.key(Escape);assert(app.currentScreen()==Screen::Home);
+            app.key('4');assert(app.currentScreen()==Screen::Home);
             checkDay(app.viewedDay(),n);assert(app.data().xp==400);
         }
         app.key(Left);checkDay(app.viewedDay(),10); // Oldest retained boundary.

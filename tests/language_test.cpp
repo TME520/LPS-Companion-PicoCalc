@@ -191,7 +191,7 @@ int main(){
     assert(!d.has(8,"NEW KEEPSAKE")&&!d.has(9,"Pocket notebook"));reboot.key(Enter);
     assert(d.has(1,"Friday 18 September 2026 (week 38)")&&!d.anyXp());
     choose(reboot,Language::French);reboot.key('4');
-    reboot.key(Left);assert(d.has(6,"1  Activités")&&d.has(7,"2  Suivi du poids"));reboot.key('2');assert(reboot.currentScreen()==Screen::Weight);reboot.key(Escape);
+    reboot.key(Left);assert(d.has(6,"1  Activités")&&d.has(7,"2  Suivi du poids")&&d.has(8,"3  Revue journalière"));reboot.key('2');assert(reboot.currentScreen()==Screen::Weight);reboot.key(Escape);
     auto saved=d.stored;auto writes=d.writes;
     reboot.key('4');assert(d.has(18,"lecture seule"));reboot.key('5');assert(reboot.currentScreen()==Screen::Home);
     assert(d.writes==writes&&d.stored.bytes==saved.bytes);

@@ -1249,6 +1249,15 @@ enum class Screen { TimerSelect, TimerRunning, TimerComplete, Home, ReminderPopu
 // Home menu entries 0..8, in order (LPS-115-CHG01: Config is opened with TAB).
 constexpr Screen HomeScreens[]={Screen::Date,Screen::Activities,Screen::Weight,Screen::Kanban,Screen::RosaryMode,Screen::DailyReview,Screen::Reminders,Screen::TimerSelect,Screen::Finish};
 static_assert(sizeof HomeScreens/sizeof HomeScreens[0]==HomeEntryCount,"one id per home entry");
+// LPSC116-FEAT02-CHG06: archived-day menu is 1 Activities, 2 Weight, 3 Daily review.
+// It is not filtered by hiddenHome. Entry ids are the same as today's home labels.
+constexpr unsigned ArchiveMenuCount=3;
+constexpr unsigned ArchiveEntries[ArchiveMenuCount]={1,2,5};
+constexpr Screen ArchiveScreens[ArchiveMenuCount]={Screen::Activities,Screen::Weight,Screen::DailyReview};
+unsigned archiveMenuIndex(Screen s){
+    for(unsigned i=0;i<ArchiveMenuCount;++i)if(ArchiveScreens[i]==s)return i;
+    return 0;
+}
 class App {
     Platform& hw;
     State state{};
@@ -1724,7 +1733,15 @@ public:
             else if(screen==Screen::TaskEdit)target=Screen::Kanban;
             else if(screen==Screen::RosarySet)target=Screen::RosaryMode;
             else if(screen==Screen::RosaryDecade)target=Screen::RosarySet;
-            go(target);render();return;
+            // LPSC116-FEAT02-CHG06: Esc from an archived Activities / Weight /
+            // Daily Review returns to the archive menu with the cursor on that entry.
+            int restore=-1;
+            if(daysBack&&target==Screen::Home
+                &&(screen==Screen::Activities||screen==Screen::Weight||screen==Screen::DailyReview))
+                restore=int(archiveMenuIndex(screen));
+            go(target);
+            if(restore>=0)selection=unsigned(restore);
+            render();return;
         }
         if(k==Tab||k==' '){
             // LPS-115-CHG01: TAB closes Config entirely, from any of its screens;
@@ -1745,16 +1762,15 @@ public:
                 else say(state.count?tr("Oldest saved day","Plus ancien jour conservé"):tr("No archived days","Aucun jour archivé"));
             }
             if(k==Right){daysBack=0;selection=0;page=0;}
-            const unsigned menuCount=daysBack?2:homeVisibleCount();
+            const unsigned menuCount=daysBack?ArchiveMenuCount:homeVisibleCount();
             if(k==Up)selection=(selection+menuCount-1)%menuCount;
             if(k==Down)selection=(selection+1)%menuCount;
             if(!daysBack&&k=='0'){selection=0;k=Enter;}
-            else if(daysBack&&k>='1'&&k<='2'){selection=unsigned(k-'1');k=Enter;}
+            else if(daysBack&&k>='1'&&k<'1'+int(ArchiveMenuCount)){selection=unsigned(k-'1');k=Enter;}
             else if(!daysBack&&k>='1'&&unsigned(k-'0')<menuCount){selection=unsigned(k-'0');k=Enter;}
-            if((k=='0'||(k>='3'&&unsigned(k-'0')<sizeof HomeScreens/sizeof HomeScreens[0]))&&daysBack)readOnly();
+            if(daysBack&&k>='0'&&k<='9'&&(k<'1'||k>='1'+int(ArchiveMenuCount)))readOnly();
             if(k==Enter){
-                constexpr Screen archiveScreens[]={Screen::Activities,Screen::Weight};
-                const Screen target=daysBack?archiveScreens[selection]:HomeScreens[homeEntryAt(selection)];
+                const Screen target=daysBack?ArchiveScreens[selection]:HomeScreens[homeEntryAt(selection)];
                 if(target==Screen::Kanban)kanbanColumn=TaskStatus::Todo;
                 if(target==Screen::Reminders)pruneReminders();
                 go(target);}
@@ -2025,9 +2041,12 @@ public:
             const unsigned marked=daysBack&&day.namedCount?day.namedCount:count(day.flags);
             std::snprintf(b,sizeof b,tr("%u/%u activities","%u/%u activités"),marked,state.activityCount);line(4,b);
             // LPS-115-CHG01: Config left the menu (TAB opens it). LPS-115-CHG04: only
-            // the entries shown, renumbered without gaps; the archive keeps 1 and 2.
-            const unsigned total=daysBack?2:homeVisibleCount();
-            for(unsigned i=0;i<total;++i){const unsigned entry=daysBack?1+i:homeEntryAt(i);std::snprintf(b,sizeof b,"%u  %s",daysBack?entry:i,homeLabel(entry));line(6+int(i),b,i==selection);}
+            // the entries shown, renumbered without gaps. LPSC116-FEAT02-CHG06: archive is 1-3.
+            const unsigned total=daysBack?ArchiveMenuCount:homeVisibleCount();
+            for(unsigned i=0;i<total;++i){
+                const unsigned entry=daysBack?ArchiveEntries[i]:homeEntryAt(i);
+                std::snprintf(b,sizeof b,"%u  %s",daysBack?1u+i:i,homeLabel(entry));line(6+int(i),b,i==selection);
+            }
             line(17,tr("<- Previous day   -> Current day","<- Jour précédent   -> Jour actuel"));
         }else if(screen==Screen::TimerSelect){
             line(3,tr("TIMER","MINUTEUR"));
@@ -2379,10 +2398,12 @@ int main(){
     historyState.next=1;historyState.count=1;history.put(historyState);
     App browsing(history);browsing.start();browsing.key(Left);
     assert(browsing.viewedDay().number==1);
-    // LPS-112-CHG05: the archived-day menu is 1 Activities, 2 Weight; no notepad.
-    assert(std::strstr(history.rows[6].data(),"1  Activities")&&std::strstr(history.rows[7].data(),"2  Weight tracker"));
+    // LPSC116-FEAT02-CHG06: the archived-day menu is 1 Activities, 2 Weight, 3 Daily review; no notepad.
+    assert(std::strstr(history.rows[6].data(),"1  Activities")&&std::strstr(history.rows[7].data(),"2  Weight tracker")&&std::strstr(history.rows[8].data(),"3  Daily review"));
     for(const auto& row:history.rows)assert(!std::strstr(row.data(),"Notepad"));
-    browsing.key('3');assert(browsing.currentScreen()==Screen::Home);
+    browsing.key('4');assert(browsing.currentScreen()==Screen::Home);
+    browsing.key('3');assert(browsing.currentScreen()==Screen::DailyReview);
+    browsing.key(Escape);assert(browsing.currentScreen()==Screen::Home&&std::strstr(history.rows[8].data(),"3  Daily review"));
     browsing.key('2');
     assert(std::strstr(history.rows[6].data(),"110.500"));
     assert(std::strstr(history.rows[9].data(),"111.200"));

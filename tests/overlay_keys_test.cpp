@@ -133,7 +133,12 @@ int main(){
         a.key(Down);a.key(' ');assert(a.currentScreen()==Screen::Home&&d.has("Archived day: read-only"));
         a.key('1');assert(a.currentScreen()==Screen::Activities);a.key(Tab);assert(a.currentScreen()==Screen::Activities&&d.has("Archived day: read-only"));
         a.key(Escape);a.key('2');assert(a.currentScreen()==Screen::Weight);a.key(Tab);assert(a.currentScreen()==Screen::Weight&&d.has("Archived day: read-only"));
-        a.key(Escape);a.key('1');
+        a.key(Escape);assert(a.currentScreen()==Screen::Home&&d.has(7,"2  Weight tracker")&&d.rev[7]);
+        a.key('3');assert(a.currentScreen()==Screen::DailyReview&&d.has("ARCHIVED DAY - READ ONLY")&&!d.has("KANBAN"));
+        a.key(Tab);assert(a.currentScreen()==Screen::DailyReview&&d.has("Archived day: read-only"));
+        a.key(' ');assert(a.currentScreen()==Screen::DailyReview&&d.has("Archived day: read-only")&&d.mealExports==0);
+        a.key(Escape);assert(a.currentScreen()==Screen::Home&&d.has(8,"3  Daily review")&&d.rev[8]);
+        a.key('1');
         a.key(' ');assert(a.currentScreen()==Screen::Activities&&d.mealExports==0);
     }
     // 6. The timer keeps counting behind Config and the planner, and its alert takes over.

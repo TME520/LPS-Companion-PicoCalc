@@ -10,8 +10,9 @@ class ReviewDisplay final:public Platform {
 public:
     lps_test::JsonStore stored{};
     std::array<std::array<char,100>,20> rows{};
-    void clear()override{for(auto& row:rows)row.fill(0);}
-    void text(int,int y,const char* value,bool)override{assert(y>=0&&y%16==0&&y<320);std::snprintf(rows[y/16].data(),100,"%s",value);}
+    std::array<bool,20> rev{};
+    void clear()override{for(auto& row:rows)row.fill(0);rev.fill(false);}
+    void text(int,int y,const char* value,bool inverse)override{assert(y>=0&&y%16==0&&y<320);std::snprintf(rows[y/16].data(),100,"%s",value);rev[y/16]=inverse;}
     void alert(int,int,const char*)override{}
     void present()override{}
     void setPalette(Palette)override{}
@@ -176,7 +177,7 @@ int main(){
     }
 
     // Archived day: no KANBAN, meal lines "--", stored activity names, viewed weight.
-    // Not in the archive menu yet (CHG06); the list is tested through the builders.
+    // Builders first; on-screen menu coverage is in CHG06 below.
     {
         State s;s.language=Language::French;s.today.date={2026,9,18};
         Day archived{};archived.date={2026,9,17};archived.actual=81200;archived.namedCount=3;
@@ -327,5 +328,83 @@ int main(){
         formatReviewFooter(Language::English,0,16,b,sizeof b);
         assert(!std::strcmp(b,"1-16/16  Esc back"));
     }
-    std::printf("PASS: daily review layout, 16-line scroll, markers, range footer, Home/End/Pg, overlays, French. sizeof(State)=%zu\n",sizeof(State));
+
+    // LPSC116-FEAT02-CHG06: entry 3 on the archived-day menu, read-only review.
+    auto closeDay=[&](App& app){
+        app.key('8');assert(app.currentScreen()==Screen::Finish);
+        app.key(Enter);assert(app.currentScreen()==Screen::Reward);
+        app.key(Enter);assert(app.currentScreen()==Screen::Home);
+        app.key(Left);
+    };
+    {
+        ReviewDisplay d;State s;s.today.date={2026,9,17};
+        s.taskCount=1;s.tasks[0].focus=true;std::snprintf(s.tasks[0].name.data(),33,"Write docs");
+        toggleMealCard(s.meals,0);
+        d.stored=lps_test::encodeJson(s);App a(d);a.start();
+        closeDay(a);
+        assert(d.has(3,"CLOSED DAY")&&d.has(2,"ARCHIVED DAY - READ ONLY"));
+        assert(d.has(6,"1  Activities")&&d.has(7,"2  Weight tracker")&&d.has(8,"3  Daily review")&&!d.rows[9][0]);
+        a.key('4');assert(a.currentScreen()==Screen::Home&&d.has("Archived day: read-only"));
+        a.key('0');assert(a.currentScreen()==Screen::Home&&d.has("Archived day: read-only"));
+        a.key('3');assert(a.currentScreen()==Screen::DailyReview);
+        assert(a.reviewLineCount()==15);
+        assert(d.has(1,"Thursday 17 September 2026 - Week 38"));
+        assert(d.has("ARCHIVED DAY - READ ONLY")&&d.has("DAILY REVIEW"));
+        assert(d.has("Actual weight: -- Kg"));
+        assert(!d.has("KANBAN")&&!d.has("Write docs")&&!d.has("0/6"));
+        assert(d.has("Drinks: --")&&d.has("Food: --")&&d.has("Blank: --"));
+        assert(d.has("Next:")&&d.has("--")&&!d.has("-- (--)"));
+        assert(d.has("ACTIVITIES")&&d.has("No activity"));
+        assert(d.has(19,"1-15/15  Esc back"));
+        assert(!d.mark(1,'\x18')&&!d.mark(16,'\x19'));
+        a.key(Tab);assert(a.currentScreen()==Screen::DailyReview&&d.has(17,"Archived day: read-only"));
+        a.key(' ');assert(a.currentScreen()==Screen::DailyReview&&d.has(17,"Archived day: read-only"));
+        a.key(Escape);assert(a.currentScreen()==Screen::Home&&d.has(8,"3  Daily review")&&d.rev[8]);
+        a.key('2');assert(a.currentScreen()==Screen::Weight);
+        a.key(Escape);assert(a.currentScreen()==Screen::Home&&d.has(7,"2  Weight tracker")&&d.rev[7]);
+        a.key(Down);a.key(Down);a.key(Enter);assert(a.currentScreen()==Screen::Activities); // wrap 2 -> 3 -> 1
+        a.key(Escape);assert(a.currentScreen()==Screen::Home&&d.has(6,"1  Activities")&&d.rev[6]);
+    }
+    {
+        ReviewDisplay d;State s;s.today.date={2026,9,17};s.today.actual=81200;
+        for(unsigned i=0;i<s.activityCount;++i)s.today.flags|=ActivityFlags(1u)<<i;
+        s.taskCount=2;s.tasks[0].focus=true;std::snprintf(s.tasks[0].name.data(),33,"Write docs");
+        s.tasks[1].focus=true;std::snprintf(s.tasks[1].name.data(),33,"Fix bike");
+        toggleMealCard(s.meals,0);toggleMealCard(s.meals,1);toggleMealCard(s.meals,6);
+        d.stored=lps_test::encodeJson(s);App a(d);a.start();
+        closeDay(a);
+        a.key('3');assert(a.currentScreen()==Screen::DailyReview);
+        assert(!d.has("KANBAN")&&!d.has("Write docs")&&!d.has("Fix bike"));
+        assert(d.has("Actual weight: 81.200 Kg"));
+        assert(d.has("Drinks: --")&&d.has("Food: --")&&d.has("Blank: --")&&d.has("Next:"));
+        assert(d.has("  Walk")&&!d.has("No activity"));
+        const unsigned n=a.reviewLineCount();assert(n==36); // 14 fixed + 22 stored names
+        assert(d.has(19,"Up/Down: scroll  1-16/36  Esc back"));
+        assert(!d.mark(1,'\x18')&&d.mark(16,'\x19'));
+        a.key(End);assert(a.reviewScroll()==n-ReviewPage);
+        assert(d.has(19,"Up/Down: scroll  21-36/36  Esc back"));
+        assert(d.mark(1,'\x18')&&!d.mark(16,'\x19'));
+        a.key(Tab);assert(a.currentScreen()==Screen::DailyReview&&a.reviewScroll()==n-ReviewPage);
+        assert(d.has(17,"Archived day: read-only")&&d.has(19,"Up/Down: scroll  21-36/36  Esc back")&&d.mark(1,'\x18'));
+        a.key(' ');assert(a.currentScreen()==Screen::DailyReview&&a.reviewScroll()==n-ReviewPage);
+        a.key(Escape);assert(a.currentScreen()==Screen::Home&&d.rev[8]&&d.has(8,"3  Daily review"));
+    }
+    {
+        ReviewDisplay d;State s;s.language=Language::French;s.today.date={2026,9,17};s.today.actual=81200;
+        s.today.flags=(1u<<0)|(1u<<2)|(1u<<16);
+        d.stored=lps_test::encodeJson(s);App fr(d);fr.start();
+        closeDay(fr);
+        assert(d.has(6,"1  Activités")&&d.has(7,"2  Suivi du poids")&&d.has(8,"3  Revue journalière"));
+        fr.key('3');assert(fr.currentScreen()==Screen::DailyReview);
+        assert(d.has("Jeudi 17 septembre 2026 - Semaine 38"));
+        assert(d.has("JOUR ARCHIVÉ - LECTURE SEULE")&&d.has("REVUE JOURNALIÈRE"));
+        assert(d.has("Poids effectif : 81.200 Kg"));
+        assert(!d.has("KANBAN")&&d.has("Boissons : --")&&d.has("Nourriture : --")&&d.has("Blank : --"));
+        assert(d.has("Prochain :")&&d.has("  Marche")&&d.has("  Bible"));
+        assert(fr.reviewLineCount()==17); // Sport sits on the last line, just below the first page
+        fr.key(End);assert(d.has("  Sport")&&d.has("  Bible")&&d.has("  Marche"));
+        fr.key(Tab);assert(fr.currentScreen()==Screen::DailyReview&&d.has(17,"Jour archivé : lecture seule"));
+        fr.key(Escape);assert(fr.currentScreen()==Screen::Home&&d.rev[8]&&d.has(8,"3  Revue journalière"));
+    }
+    std::printf("PASS: daily review layout, archive menu entry 3, read-only review, 16-line scroll, markers, range footer, Home/End/Pg, overlays, French. sizeof(State)=%zu\n",sizeof(State));
 }
