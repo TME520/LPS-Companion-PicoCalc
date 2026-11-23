@@ -16,7 +16,7 @@ public:
         assert(x==0&&y>=0&&y%16==0&&y+16<=320);
         assert(std::strlen(text)<=40); // Fail on untranslated byte widths or clipped hints.
         for(const unsigned char* p=reinterpret_cast<const unsigned char*>(text);*p;++p){
-            const bool ok=(*p>=32&&*p<=126)||*p==0xe9||*p==0xe8||*p==0xea||*p==0xe0||*p==0xe2||*p==0xee||*p==0xf4||*p==0xf9||*p==0xfb||*p==0xe7||*p==0xc0||*p==0xc8||*p==0xc9;
+            const bool ok=(*p>=32&&*p<=126)||*p==0x18||*p==0x19||*p==0xe9||*p==0xe8||*p==0xea||*p==0xe0||*p==0xe2||*p==0xee||*p==0xf4||*p==0xf9||*p==0xfb||*p==0xe7||*p==0xc0||*p==0xc8||*p==0xc9; // 0x18/0x19: review scroll arrows (CHG05)
             if(!ok)std::fprintf(stderr,"Unsupported byte %02x in: %s\n",*p,text);
             assert(ok);
         }
@@ -63,7 +63,7 @@ void checkMenus(Display& d,App& a,bool fr){
     if(fr){char back[24];displayText("Retour",back,sizeof back);const char* plain=std::strstr(footer,back);assert(plain);for(unsigned i=0;i<std::strlen(back);++i)assert(!d.bold[19][unsigned(plain-footer)+i]);}
     a.key(Tab);assert(a.currentScreen()==Screen::Home);
     assert(d.has(17,fr?"Jour précédent":"Previous day"));
-    assert(d.has(0,"v1.15    2026-09-17"));
+    assert(d.has(0,"v1.16    2026-09-17"));
     // LPS-112-CHG03: no XP anywhere; line 1 shows the long date and ISO week.
     assert(d.has(1,fr?"Jeudi 17 Septembre 2026 (semaine 38)":"Thursday 17 September 2026 (week 38)")&&!d.anyXp());
     a.key('0');assert(d.has(3,"DATE"));assert(d.has(6,"2026-09-17"));
@@ -118,7 +118,11 @@ int main(){
       app.key(Escape);assert(dd.has(4,fr?"2/22 activités":"2/22 activities"));
       // Reboot from the JSON save keeps the new activities; the review lists them.
       App again(dd);again.start();assert(again.data().today.flags==app.data().today.flags);
-      again.key('5');{auto any=[&](const char* t){for(int r=0;r<20;++r)if(dd.has(r,t))return true;return false;};assert(any(fr?"  Amis":"  Friends")&&any(fr?"  Méditation":"  Meditation")&&any(fr?"ACTIVITÉS (2)":"ACTIVITIES (2)"));}again.key(Escape);
+      // LPSC116-FEAT02-CHG04: activities sit at the bottom of the new list (no count in the title).
+      again.key('5');again.key(Right);again.key(Down);again.key(Down);
+      {auto any=[&](const char* t){for(int r=0;r<20;++r)if(dd.has(r,t))return true;return false;};
+       assert(any(fr?"  Amis":"  Friends")&&any(fr?"  Méditation":"  Meditation")&&any(fr?"ACTIVITÉS":"ACTIVITIES")&&!any(fr?"ACTIVITÉS (2)":"ACTIVITIES (2)"));}
+      again.key(Escape);
       // Close the day: Finish counts 2; the archived day shows Méditation ticked on page 3.
       again.key('8');assert(dd.has(6,fr?"Activités : 2":"Activities: 2"));again.key(Enter);again.key(Enter);
       assert(again.data().today.flags==0&&again.data().history[0].flags==app.data().today.flags);
@@ -187,7 +191,7 @@ int main(){
     assert(!d.has(8,"NEW KEEPSAKE")&&!d.has(9,"Pocket notebook"));reboot.key(Enter);
     assert(d.has(1,"Friday 18 September 2026 (week 38)")&&!d.anyXp());
     choose(reboot,Language::French);reboot.key('4');
-    reboot.key(Left);assert(d.has(6,"1  Activités")&&d.has(7,"2  Suivi du poids"));reboot.key('2');assert(reboot.currentScreen()==Screen::Weight);reboot.key(Escape);
+    reboot.key(Left);assert(d.has(6,"1  Activités")&&d.has(7,"2  Suivi du poids")&&d.has(8,"3  Revue journalière"));reboot.key('2');assert(reboot.currentScreen()==Screen::Weight);reboot.key(Escape);
     auto saved=d.stored;auto writes=d.writes;
     reboot.key('4');assert(d.has(18,"lecture seule"));reboot.key('5');assert(reboot.currentScreen()==Screen::Home);
     assert(d.writes==writes&&d.stored.bytes==saved.bytes);

@@ -123,7 +123,7 @@ int main(){
         hide({1,2});assert(d.has(6,"0  Date")&&d.has(7,"1  Kanban"));
         a.key('0');a.key(Enter);a.key(Escape); // keep the date
         a.key(Up);a.key(Enter);assert(a.currentScreen()==Screen::Finish);a.key(Enter);assert(a.currentScreen()==Screen::Reward);a.key(Enter);
-        a.key(Left);assert(d.has(6,"1  Activities")&&d.has(7,"2  Weight tracker")&&!d.rows[8][0]);
+        a.key(Left);assert(d.has(6,"1  Activities")&&d.has(7,"2  Weight tracker")&&d.has(8,"3  Daily review")&&!d.rows[9][0]);
         a.key('1');assert(a.currentScreen()==Screen::Activities&&d.has("[x]"));a.key(Escape);a.key(Right);
         assert(d.has(7,"1  Kanban"));
         // The timer keeps running while its entry is hidden.

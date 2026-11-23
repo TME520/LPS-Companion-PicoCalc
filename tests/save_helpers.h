@@ -75,7 +75,7 @@ inline bool sameState(const lps::State& a,const lps::State& b){
     for(unsigned i=0;i<a.activityCount;++i)
         if(a.activities[i].id!=b.activities[i].id||a.activities[i].french!=b.activities[i].french||a.activities[i].english!=b.activities[i].english)return false;
     for(unsigned i=0;i<a.count;++i)if(!sameDay(archived(a,i),archived(b,i)))return false;
-    for(unsigned i=0;i<a.taskCount;++i)if(a.tasks[i].status!=b.tasks[i].status||a.tasks[i].name!=b.tasks[i].name)return false;
+    for(unsigned i=0;i<a.taskCount;++i)if(a.tasks[i].status!=b.tasks[i].status||a.tasks[i].focus!=b.tasks[i].focus||a.tasks[i].name!=b.tasks[i].name)return false;
     for(unsigned i=0;i<a.reminderCount;++i){
         const auto& x=a.reminders[i];const auto& y=b.reminders[i];
         if(x.from.year!=y.from.year||x.from.month!=y.from.month||x.from.day!=y.from.day||x.duration!=y.duration||x.text!=y.text)return false;

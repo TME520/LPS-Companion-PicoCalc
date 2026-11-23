@@ -1,5 +1,5 @@
 /*
- LPS Companion - v1.15, 2026-11-15.
+ LPS Companion - v1.16, 2026-11-23.
  Screen: 320x320, 8x16 bitmap font, 40 columns x 20 rows.
 
  Desktop build (Fedora/Linux):
@@ -13,7 +13,7 @@
  In this package src/main.cpp supplies the LCD, keyboard and SD implementation.
  Run bash build.sh from the project root to create build/lps_companion.uf2.
  Target: original RP2040 PicoCalc, standalone BOOTSEL firmware.
- v1.2 confirmed on the user's PicoCalc; v1.15 needs device testing.
+ v1.2 confirmed on the user's PicoCalc; v1.16 needs device testing.
  The portable application remains independent of the Pico SDK; desktop and
  built-in tests below remain available for checking the UI/state machine.
 
@@ -82,7 +82,7 @@ unsigned displayWidth(const char* utf8){
 }
 constexpr int Width=320, Height=320, Columns=40, Rows=20;
 constexpr std::size_t NoteLength=96, HistoryLength=31, TaskNameLength=32, TaskCapacity=24, ReminderCapacity=3, ReminderTextLength=32, BlobCapacity=6144;
-enum Key { Tab=9, Enter=13, Backspace=8, Escape=27, Up=1000, Down, Left, Right, DeleteKey, F1, F2, F3, F4, F5 };
+enum Key { Tab=9, Enter=13, Backspace=8, Escape=27, Up=1000, Down, Left, Right, DeleteKey, F1, F2, F3, F4, F5, Home, End, PageUp, PageDown };
 enum class LoadResult { Missing, Ok, NoStorage, Error };
 struct Day;
 struct State;
@@ -187,6 +187,46 @@ bool parseDate(const char* text,Date& d){
     d.year=uint16_t((text[0]-'0')*1000+(text[1]-'0')*100+(text[2]-'0')*10+text[3]-'0');
     d.month=uint8_t((text[5]-'0')*10+text[6]-'0');d.day=uint8_t((text[8]-'0')*10+text[9]-'0');return validDate(d);
 }
+unsigned weekday(Date d){
+    // Gregorian calendar, 0=Sunday. Dates in LPS are restricted to 2000-2099.
+    static constexpr unsigned offsets[]={0,3,2,5,0,3,5,1,4,6,2,4};
+    unsigned y=d.year;if(d.month<3)--y;
+    return (y+y/4-y/100+y/400+offsets[d.month-1]+d.day)%7;
+}
+unsigned isoWeek(Date d){
+    // ISO 8601: weeks start on Monday; week 1 contains the year's first Thursday.
+    auto jan1=[](unsigned y){unsigned p=y-1;return (p+1+p/4-p/100+p/400)%7;}; // 0=Sunday
+    auto weeks=[&](unsigned y){unsigned j=jan1(y);return j==4||(leap(uint16_t(y))&&j==3)?53u:52u;};
+    unsigned ordinal=d.day;for(unsigned m=1;m<d.month;++m)ordinal+=daysInMonth(d.year,uint8_t(m));
+    const unsigned iso=(weekday(d)+6)%7+1;const int week=(int(ordinal)-int(iso)+10)/7;
+    if(week<1)return weeks(d.year-1u);
+    return unsigned(week)>weeks(d.year)?1u:unsigned(week);
+}
+// LPSC116-FEAT02-CHG03: Daily Review line 1.
+// EN: "Monday 16 November 2026 - Week 47"
+// FR: "Lundi 16 novembre 2026 - Semaine 47" (capitalised weekday, lowercase month).
+// Day and week have no leading zero; the ISO year is omitted even when the
+// week belongs to the previous or next calendar year.
+// Longest FR: "Mercredi 30 septembre 2026 - Semaine 40" = 39 cells, which
+// fits the PicoCalc's 40 columns with one cell to spare.
+void fullDateText(Date d,Language language,char* out,std::size_t n){
+    static constexpr const char* enDays[]={"Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"};
+    static constexpr const char* frDays[]={"Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"};
+    static constexpr const char* enMonths[]={"January","February","March","April","May","June","July","August","September","October","November","December"};
+    static constexpr const char* frMonths[]={"Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"};
+    const bool fr=language==Language::French;const unsigned w=weekday(d);
+    const char* month=fr?frMonths[d.month-1]:enMonths[d.month-1];
+    char lowered[16];
+    if(fr){
+        unsigned i=0;
+        while(month[i]&&i<sizeof(lowered)-1){lowered[i]=month[i];++i;}
+        lowered[i]=0;
+        if(lowered[0]>='A'&&lowered[0]<='Z')lowered[0]=char(lowered[0]+('a'-'A'));
+        month=lowered;
+    }
+    std::snprintf(out,n,fr?"%s %u %s %u - Semaine %u":"%s %u %s %u - Week %u",
+        fr?frDays[w]:enDays[w],unsigned(d.day),month,unsigned(d.year),isoWeek(d));
+}
 struct Day {
     Date date=DefaultDate; // Old-format decoder explicitly clears this.
     uint32_t number=1;
@@ -201,6 +241,7 @@ struct Day {
 enum class TaskStatus : uint8_t { Todo, Doing, Done };
 struct Task {
     TaskStatus status=TaskStatus::Todo;
+    bool focus=false; // LPSC116-FEAT01-CHG01: memory only; JSON is CHG02
     std::array<char,TaskNameLength+1> name{};
 };
 struct Reminder { Date from{};uint16_t duration=1;std::array<char,ReminderTextLength+1> text{}; };
@@ -246,6 +287,15 @@ void toggleMealCard(MealDeckState& d,unsigned card){
         for(unsigned i=position-1;i+1<d.playedCount;++i)d.order[i]=d.order[i+1];
         d.order[--d.playedCount]=0;
     }else if(d.playedCount<MealCardCount)d.order[d.playedCount++]=uint8_t(card);
+}
+unsigned mealRowTotal(unsigned row){return unsigned(MealRowFirst[row+1]-MealRowFirst[row]);}
+unsigned mealRowPlayed(const MealDeckState& d,unsigned row){
+    unsigned n=0;for(unsigned i=0;i<d.playedCount;++i)if(d.order[i]<MealCardCount&&unsigned(MealDeck[d.order[i]].row)==row)++n;return n;
+}
+int mealFirstUnplayed(const MealDeckState& d,MealRow row){
+    const unsigned first=MealRowFirst[unsigned(row)],last=MealRowFirst[unsigned(row)+1];
+    for(unsigned i=first;i<last;++i)if(!mealPlayPosition(d,i))return int(i);
+    return -1;
 }
 struct State {
     Language language=Language::English;
@@ -486,7 +536,9 @@ bool decode(const uint8_t* bytes,std::size_t size,State& out) {
 //    "crc32":"xxxxxxxx"}
 //   DAY      {"date":"YYYY-MM-DD"|null,"number":N,"activities":["Marche",...],
 //             "expected":grams|null,"actual":grams|null,"note":"..."}
-//   TASK     {"status":"todo"|"doing"|"done","name":"..."}
+//   TASK     {"status":"todo"|"doing"|"done","name":"..."} and, when focused,
+//            "focus":true after name (LPSC116-FEAT01-CHG02). Absent or false:
+//            not focused. A focus on a DONE card is dropped on load.
 //   REMINDER {"from":"YYYY-MM-DD","days":N,"text":"..."}
 // LPS-114-CHG01 adds "meals":{"played":[3,0,...]} at the end of "state": the
 // played deck indices in order of play. It is optional (absent = full deck),
@@ -611,7 +663,10 @@ bool writeSave(const State& s,uint32_t generation,SaveSink& sink,uint32_t& check
     for(unsigned i=0;i<s.taskCount;++i){
         if(i)w.raw(",");
         w.raw("\n{");w.key("status");w.text(StatusNames[unsigned(s.tasks[i].status)]);
-        w.raw(",");w.key("name");w.text(s.tasks[i].name.data());w.raw("}");
+        w.raw(",");w.key("name");w.text(s.tasks[i].name.data());
+        /* LPSC116-FEAT01-CHG02: "focus":true only on a focused, non-DONE card. */
+        if(s.tasks[i].focus&&s.tasks[i].status!=TaskStatus::Done){w.raw(",");w.key("focus");w.raw("true");}
+        w.raw("}");
     }
     w.raw("],\n");w.key("reminders");w.raw("[");
     for(unsigned i=0;i<s.reminderCount;++i){
@@ -817,6 +872,14 @@ bool readChoice(JsonReader& r,const char* const* names,unsigned count,unsigned& 
     for(unsigned i=0;i<count;++i)if(!std::strcmp(r.text.data(),names[i])){out=i;return true;}
     return false;
 }
+/* LPSC116-FEAT01-CHG02: true/false only; any other value damages the save,
+ * as a bad "status" string does. */
+bool readBool(JsonReader& r,bool& out){
+    const Token t=r.next();
+    if(t==Token::True){out=true;return true;}
+    if(t==Token::False){out=false;return true;}
+    return false;
+}
 bool readDay(JsonReader& r,Token first,Day& d){
     if(first!=Token::ObjectBegin)return false;
     d=Day{};d.date={};
@@ -897,9 +960,11 @@ bool readState(JsonReader& r,State& s){
                     unsigned status=0;
                     if(!std::strcmp(field,"status")){if(!readChoice(r,StatusNames,3,status))return false;task.status=TaskStatus(status);return true;}
                     if(!std::strcmp(field,"name"))return named=readText(r,task.name,true);
+                    if(!std::strcmp(field,"focus"))return readBool(r,task.focus);
                     return r.skip(r.next());
                 });
                 if(!ok||!named)return false;
+                if(task.status==TaskStatus::Done)task.focus=false; /* DONE is never focused */
                 ++s.taskCount;return true;
             });
         }
@@ -1049,11 +1114,150 @@ void drawMealCard(Canvas& c,const MealCardView& v){
     for(int j=0;j<16;++j){const int notch=5-(j<8?7-j:j-8)*5/7;if(notch>0){c.fill(rx,ry+j,notch,1,body);c.fill(rx+rw-notch,ry+j,notch,1,body);}}
     centredLabel(c,ry,portion,ink,ribbon);
 }
+// LPSC116-FEAT02-CHG04/CHG05: Daily Review is a list of lines, drawn from
+// reviewOffset in a 16-line window (rows 1-16). Up/Down move one line, no wrap;
+// Left/Right and PgUp/PgDn move one page; Home/End jump to the ends.
+// The "Prochain :" label sits alone, then "Food (Drink)" on the next line
+// (user decision 23 Nov 2026). CHG07c: a blank line before the meal-planner title.
+constexpr unsigned ReviewCapacity=80, ReviewPage=16;
+void formatReviewFooter(Language language,unsigned offset,unsigned total,char* out,std::size_t size){
+    const bool fr=language==Language::French;
+    if(total>ReviewPage)
+        std::snprintf(out,size,fr?"Haut/Bas : défiler %u-%u/%u Échap retour":"Up/Down: scroll  %u-%u/%u  Esc back",
+            offset+1,(offset+ReviewPage<total?offset+ReviewPage:total),total);
+    else
+        std::snprintf(out,size,fr?"%u-%u/%u  Échap retour":"%u-%u/%u  Esc back",
+            total?offset+1:0,total,total);
+}
+enum class ReviewKind : uint8_t {
+    Date, Archive, Blank, Title, Weight, Kanban, Card, NoFocus,
+    Meals, Count, NextLabel, Next, Act, Activity, Stored, NoAct
+};
+struct ReviewItem { ReviewKind kind; uint8_t arg; };
+bool reviewCentered(ReviewKind k){
+    return k==ReviewKind::Date||k==ReviewKind::Archive||k==ReviewKind::Title
+        ||k==ReviewKind::Kanban||k==ReviewKind::Meals||k==ReviewKind::Act;
+}
+unsigned buildDailyReview(ReviewItem* out,unsigned cap,const State& s,const Day& day,bool archived){
+    unsigned n=0;
+    auto add=[&](ReviewKind k,uint8_t arg=0){if(n<cap){out[n].kind=k;out[n].arg=arg;++n;}};
+    add(ReviewKind::Date);
+    if(archived)add(ReviewKind::Archive);
+    add(ReviewKind::Blank);
+    add(ReviewKind::Title);
+    add(ReviewKind::Weight);
+    add(ReviewKind::Blank);
+    if(!archived){
+        add(ReviewKind::Kanban);
+        unsigned focused=0;
+        for(unsigned i=0;i<s.taskCount;++i)if(s.tasks[i].focus&&s.tasks[i].status!=TaskStatus::Done){
+            add(ReviewKind::Card,uint8_t(i));++focused;
+        }
+        if(!focused)add(ReviewKind::NoFocus);
+        add(ReviewKind::Blank); // LPS116-CHG07c: blank before MEAL PLANNER
+    }
+    add(ReviewKind::Meals);
+    add(ReviewKind::Count,uint8_t(MealRow::Drinks));
+    add(ReviewKind::Count,uint8_t(MealRow::Food));
+    add(ReviewKind::Count,uint8_t(MealRow::Blank));
+    add(ReviewKind::NextLabel);
+    add(ReviewKind::Next);
+    add(ReviewKind::Blank);
+    add(ReviewKind::Act);
+    unsigned got=0;
+    if(archived&&day.namedCount){
+        for(unsigned i=0;i<day.namedCount;++i){
+            const unsigned k=indexByStoredName(s,day.names[i].data());
+            if(k<s.activityCount)add(ReviewKind::Activity,uint8_t(k));
+            else add(ReviewKind::Stored,uint8_t(i));
+            ++got;
+        }
+    }else{
+        for(unsigned i=0;i<s.activityCount;++i)if(day.flags&(ActivityFlags(1u)<<i)){add(ReviewKind::Activity,uint8_t(i));++got;}
+    }
+    if(!got)add(ReviewKind::NoAct);
+    return n;
+}
+void formatDailyReviewLine(const State& s,const Day& day,bool archived,const ReviewItem& it,char* out,std::size_t size){
+    const bool fr=s.language==Language::French;
+    auto tr=[&](const char* en,const char* french){return fr?french:en;};
+    out[0]=0;
+    char weight[16],food[48],drink[48];
+    switch(it.kind){
+    case ReviewKind::Date:
+        if(validDate(day.date))fullDateText(day.date,s.language,out,size);
+        break;
+    case ReviewKind::Archive:
+        std::snprintf(out,size,"%s",tr("ARCHIVED DAY - READ ONLY","JOUR ARCHIVÉ - LECTURE SEULE"));
+        break;
+    case ReviewKind::Blank: break;
+    case ReviewKind::Title:
+        std::snprintf(out,size,"%s",tr("DAILY REVIEW","REVUE JOURNALIÈRE"));
+        break;
+    case ReviewKind::Weight:
+        weightText(day.actual,weight,sizeof weight);
+        std::snprintf(out,size,tr("Actual weight: %s Kg","Poids effectif : %s Kg"),weight);
+        break;
+    case ReviewKind::Kanban:
+        std::snprintf(out,size,"%s","KANBAN");
+        break;
+    case ReviewKind::Card:
+        std::snprintf(out,size,"  %s",s.tasks[it.arg].name.data());
+        break;
+    case ReviewKind::NoFocus:
+        std::snprintf(out,size,"%s",tr("No focused card","Aucune carte en focus"));
+        break;
+    case ReviewKind::Meals:
+        std::snprintf(out,size,"%s",tr("MEAL PLANNER","PLANIFICATEUR DE REPAS"));
+        break;
+    case ReviewKind::Count:
+        if(archived)std::snprintf(out,size,fr?"%s : --":"%s: --",mealRowName(MealRow(it.arg),s.language));
+        else std::snprintf(out,size,fr?"%s : %u/%u":"%s: %u/%u",mealRowName(MealRow(it.arg),s.language),
+            mealRowPlayed(s.meals,it.arg),mealRowTotal(it.arg));
+        break;
+    case ReviewKind::NextLabel:
+        std::snprintf(out,size,"%s",tr("Next:","Prochain :"));
+        break;
+    case ReviewKind::Next:
+        if(archived){std::snprintf(out,size,"%s","--");break;}
+        {
+            const int fi=mealFirstUnplayed(s.meals,MealRow::Food),di=mealFirstUnplayed(s.meals,MealRow::Drinks);
+            if(fi<0)std::snprintf(food,sizeof food,"%s","--");
+            else std::snprintf(food,sizeof food,"%s",fr?MealDeck[unsigned(fi)].fr:MealDeck[unsigned(fi)].en);
+            if(di<0)std::snprintf(drink,sizeof drink,"%s","--");
+            else std::snprintf(drink,sizeof drink,"%s",fr?MealDeck[unsigned(di)].fr:MealDeck[unsigned(di)].en);
+            std::snprintf(out,size,"%s (%s)",food,drink);
+        }
+        break;
+    case ReviewKind::Act:
+        std::snprintf(out,size,"%s",tr("ACTIVITIES","ACTIVITÉS"));
+        break;
+    case ReviewKind::Activity:
+        std::snprintf(out,size,"  %s",displayName(s.activities[it.arg],s.language));
+        break;
+    case ReviewKind::Stored:
+        std::snprintf(out,size,"  %s",day.names[it.arg].data());
+        break;
+    case ReviewKind::NoAct:
+        std::snprintf(out,size,"%s",tr("No activity","Aucune activité"));
+        break;
+    }
+}
+
 enum class Screen { TimerSelect, TimerRunning, TimerComplete, Home, ReminderPopup, Reminders, ReminderEdit, Date, Activities, ActivityEdit, Weight, Kanban, TaskEdit, DailyReview, Finish, Reward, Config, Language, Colors,
                     RosaryMode, RosarySet, RosaryDecade, RosaryPrayer, RosaryComplete, MealPlanner, HomeEntries };
 // Home menu entries 0..8, in order (LPS-115-CHG01: Config is opened with TAB).
 constexpr Screen HomeScreens[]={Screen::Date,Screen::Activities,Screen::Weight,Screen::Kanban,Screen::RosaryMode,Screen::DailyReview,Screen::Reminders,Screen::TimerSelect,Screen::Finish};
 static_assert(sizeof HomeScreens/sizeof HomeScreens[0]==HomeEntryCount,"one id per home entry");
+// LPSC116-FEAT02-CHG06: archived-day menu is 1 Activities, 2 Weight, 3 Daily review.
+// It is not filtered by hiddenHome. Entry ids are the same as today's home labels.
+constexpr unsigned ArchiveMenuCount=3;
+constexpr unsigned ArchiveEntries[ArchiveMenuCount]={1,2,5};
+constexpr Screen ArchiveScreens[ArchiveMenuCount]={Screen::Activities,Screen::Weight,Screen::DailyReview};
+unsigned archiveMenuIndex(Screen s){
+    for(unsigned i=0;i<ArchiveMenuCount;++i)if(ArchiveScreens[i]==s)return i;
+    return 0;
+}
 class App {
     Platform& hw;
     State state{};
@@ -1143,7 +1347,7 @@ class App {
         screen=r.screen;selection=r.selection;message.fill(0);confirmingDelete=false;
         if(screen==Screen::Home&&!daysBack)selection=homePositionOf(r.homeEntry);
         if(screen==Screen::RosaryPrayer){const unsigned pages=(displayCells(rosaryText(rosaryView(rosaryStep)))+359)/360;if(pages&&rosaryPage>=pages)rosaryPage=pages-1;}
-        if(screen==Screen::DailyReview){const unsigned maximum=reviewRows()>8?reviewRows()-8:0;if(reviewOffset>maximum)reviewOffset=maximum;}
+        if(screen==Screen::DailyReview){const unsigned maximum=reviewRows()>ReviewPage?reviewRows()-ReviewPage:0;if(reviewOffset>maximum)reviewOffset=maximum;}
     }
     void openConfig(){
         configReturn=here();
@@ -1190,21 +1394,8 @@ class App {
     enum class RosaryPart { Sign, Creed, OpeningOurFather, OpeningHail, Glory, Mystery, Scripture, Meditation, Silence,
                             OurFather, Hail, Fatima, HailHolyQueen, Closing, EndSign };
     struct RosaryView { RosaryPart part=RosaryPart::Sign;unsigned decade=0,count=0; };
-    static unsigned weekday(Date d){
-        // Gregorian calendar, 0=Sunday. Dates in LPS are restricted to 2000-2099.
-        static constexpr unsigned offsets[]={0,3,2,5,0,3,5,1,4,6,2,4};
-        unsigned y=d.year;if(d.month<3)--y;
-        return (y+y/4-y/100+y/400+offsets[d.month-1]+d.day)%7;
-    }
-    static unsigned isoWeek(Date d){
-        // ISO 8601: weeks start on Monday; week 1 contains the year's first Thursday.
-        auto jan1=[](unsigned y){unsigned p=y-1;return (p+1+p/4-p/100+p/400)%7;}; // 0=Sunday
-        auto weeks=[&](unsigned y){unsigned j=jan1(y);return j==4||(leap(uint16_t(y))&&j==3)?53u:52u;};
-        unsigned ordinal=d.day;for(unsigned m=1;m<d.month;++m)ordinal+=daysInMonth(d.year,uint8_t(m));
-        const unsigned iso=(weekday(d)+6)%7+1;const int week=(int(ordinal)-int(iso)+10)/7;
-        if(week<1)return weeks(d.year-1u);
-        return unsigned(week)>weeks(d.year)?1u:unsigned(week);
-    }
+    static unsigned weekday(Date d){return lps::weekday(d);}
+    static unsigned isoWeek(Date d){return lps::isoWeek(d);}
     void longDateText(Date d,char* out,std::size_t n)const{
         static constexpr const char* enDays[]={"Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"};
         static constexpr const char* frDays[]={"Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"};
@@ -1390,26 +1581,29 @@ class App {
         return state.language==Language::French?fr[unsigned(status)]:en[unsigned(status)];
     }
     unsigned reviewRows()const{
-        return 3+count(state.today.flags)+tasksIn(TaskStatus::Todo)+tasksIn(TaskStatus::Doing)
-            +(count(state.today.flags)==0)+(tasksIn(TaskStatus::Todo)==0)+(tasksIn(TaskStatus::Doing)==0);
+        ReviewItem items[ReviewCapacity];
+        return buildDailyReview(items,ReviewCapacity,state,viewedDay(),daysBack!=0);
     }
     void reviewLine(unsigned index,char* out,std::size_t size)const{
-        const unsigned activities=count(state.today.flags);
-        if(index==0){std::snprintf(out,size,tr("ACTIVITIES (%u)","ACTIVITÉS (%u)"),activities);return;}
-        --index;
-        for(unsigned i=0;i<state.activityCount;++i)if(state.today.flags&(ActivityFlags(1u)<<i)){
-            if(index--==0){std::snprintf(out,size,"  %s",displayName(state.activities[i],state.language));return;}
-        }
-        if(!activities){if(index--==0){std::snprintf(out,size,"  %s",tr("None selected","Aucune sélectionnée"));return;}}
-        for(TaskStatus status:{TaskStatus::Todo,TaskStatus::Doing}){
-            const unsigned n=tasksIn(status);
-            if(index--==0){std::snprintf(out,size,"%s (%u)",taskStatusName(status),n);return;}
-            for(unsigned i=0;i<state.taskCount;++i)if(state.tasks[i].status==status){
-                if(index--==0){std::snprintf(out,size,"  %s",state.tasks[i].name.data());return;}
-            }
-            if(!n&&index--==0){std::snprintf(out,size,"  %s",tr("None","Aucune"));return;}
-        }
-        out[0]=0;
+        ReviewItem items[ReviewCapacity];
+        const unsigned n=buildDailyReview(items,ReviewCapacity,state,viewedDay(),daysBack!=0);
+        if(index>=n){out[0]=0;return;}
+        formatDailyReviewLine(state,viewedDay(),daysBack!=0,items[index],out,size);
+    }
+    // Clip to 40 cells, or 39 when a scroll arrow occupies column 39.
+    // Like other PicoCalc screens / the LCD adapter.
+    void reviewPut(int row,const char* text,bool centre,char marker=0){
+        char padded[128],clipped[80],cells[41]{};
+        if(centre){const unsigned w=displayWidth(text);if(w<(marker?39u:40u)){std::snprintf(padded,sizeof padded,"%*s%s",int(((marker?39:40)-w)/2),"",text);text=padded;}}
+        cellSlice(text,0,marker?39u:40u,clipped,sizeof clipped);
+        displayText(clipped,cells,marker?40:sizeof cells);
+        if(marker){unsigned n=unsigned(std::strlen(cells));while(n<39)cells[n++]=' ';cells[39]=marker;cells[40]=0;}
+        hw.text(0,row*16,cells,false);
+    }
+    void reviewFooter(unsigned total){
+        char b[128];
+        formatReviewFooter(state.language,reviewOffset,total,b,sizeof b);
+        line(19,b,true);
     }
     static uint32_t dayIndex(Date d){
         uint32_t n=0;for(unsigned y=2000;y<d.year;++y)n+=leap(uint16_t(y))?366:365;
@@ -1443,6 +1637,7 @@ class App {
         if(index>=state.taskCount)return;
         if(state.tasks[index].status==target){say(tr("Task is already in this column","Tâche déjà dans cette colonne"));return;}
         State& next=stage();Task moved=next.tasks[index];moved.status=target;
+        if(target==TaskStatus::Done)moved.focus=false; // LPSC116-FEAT01-CHG01: DONE drops focus
         for(unsigned i=index;i+1<next.taskCount;++i)next.tasks[i]=next.tasks[i+1];
         next.tasks[next.taskCount-1]=moved;
         if(commit(next)){kanbanColumn=target;selection=tasksIn(target)-1;say(tr("Task moved","Tâche déplacée"));}
@@ -1508,6 +1703,9 @@ public:
     }
     const State& data()const{return state;}
     Screen currentScreen()const{return screen;}
+    unsigned reviewLineCount()const{return reviewRows();}
+    void reviewLineAt(unsigned index,char* out,std::size_t size)const{reviewLine(index,out,size);}
+    unsigned reviewScroll()const{return reviewOffset;}
     const Day& viewedDay()const{
         // next is the slot AFTER the most recently closed day. Never index by
         // day number: physical slots wrap every 31 closures.
@@ -1535,7 +1733,15 @@ public:
             else if(screen==Screen::TaskEdit)target=Screen::Kanban;
             else if(screen==Screen::RosarySet)target=Screen::RosaryMode;
             else if(screen==Screen::RosaryDecade)target=Screen::RosarySet;
-            go(target);render();return;
+            // LPSC116-FEAT02-CHG06: Esc from an archived Activities / Weight /
+            // Daily Review returns to the archive menu with the cursor on that entry.
+            int restore=-1;
+            if(daysBack&&target==Screen::Home
+                &&(screen==Screen::Activities||screen==Screen::Weight||screen==Screen::DailyReview))
+                restore=int(archiveMenuIndex(screen));
+            go(target);
+            if(restore>=0)selection=unsigned(restore);
+            render();return;
         }
         if(k==Tab||k==' '){
             // LPS-115-CHG01: TAB closes Config entirely, from any of its screens;
@@ -1556,16 +1762,15 @@ public:
                 else say(state.count?tr("Oldest saved day","Plus ancien jour conservé"):tr("No archived days","Aucun jour archivé"));
             }
             if(k==Right){daysBack=0;selection=0;page=0;}
-            const unsigned menuCount=daysBack?2:homeVisibleCount();
+            const unsigned menuCount=daysBack?ArchiveMenuCount:homeVisibleCount();
             if(k==Up)selection=(selection+menuCount-1)%menuCount;
             if(k==Down)selection=(selection+1)%menuCount;
             if(!daysBack&&k=='0'){selection=0;k=Enter;}
-            else if(daysBack&&k>='1'&&k<='2'){selection=unsigned(k-'1');k=Enter;}
+            else if(daysBack&&k>='1'&&k<'1'+int(ArchiveMenuCount)){selection=unsigned(k-'1');k=Enter;}
             else if(!daysBack&&k>='1'&&unsigned(k-'0')<menuCount){selection=unsigned(k-'0');k=Enter;}
-            if((k=='0'||(k>='3'&&unsigned(k-'0')<sizeof HomeScreens/sizeof HomeScreens[0]))&&daysBack)readOnly();
+            if(daysBack&&k>='0'&&k<='9'&&(k<'1'||k>='1'+int(ArchiveMenuCount)))readOnly();
             if(k==Enter){
-                constexpr Screen archiveScreens[]={Screen::Activities,Screen::Weight};
-                const Screen target=daysBack?archiveScreens[selection]:HomeScreens[homeEntryAt(selection)];
+                const Screen target=daysBack?ArchiveScreens[selection]:HomeScreens[homeEntryAt(selection)];
                 if(target==Screen::Kanban)kanbanColumn=TaskStatus::Todo;
                 if(target==Screen::Reminders)pruneReminders();
                 go(target);}
@@ -1703,6 +1908,16 @@ public:
             }else if(k>=F1&&k<=F3&&n)moveTaskTo(TaskStatus(unsigned(k-F1)));
             else if(k==F4&&n)reorderTask(false);
             else if(k==F5&&n)reorderTask(true);
+            else if((k=='f'||k=='F')&&n){
+                // LPSC116-FEAT01-CHG01: F toggles focus and saves through commit,
+                // like the other Kanban edits. A DONE card stays unfocused.
+                const unsigned index=taskAt(kanbanColumn,selection);
+                if(index<state.taskCount&&state.tasks[index].status!=TaskStatus::Done){
+                    State& next=stage();
+                    next.tasks[index].focus=!next.tasks[index].focus;
+                    commit(next);
+                }
+            }
         }else if(screen==Screen::TaskEdit){
             if(k==Enter){
                 if(!taskDraft[0])say(tr("Task name cannot be empty","Le nom ne peut pas être vide"));
@@ -1715,11 +1930,13 @@ public:
                 }
             }else edit(taskDraft,k);
         }else if(screen==Screen::DailyReview){
-            const unsigned maximum=reviewRows()>8?reviewRows()-8:0;
+            const unsigned maximum=reviewRows()>ReviewPage?reviewRows()-ReviewPage:0;
             if(k==Down&&reviewOffset<maximum)++reviewOffset;
             else if(k==Up&&reviewOffset)--reviewOffset;
-            else if(k==Right)reviewOffset=(reviewOffset+8<maximum)?reviewOffset+8:maximum;
-            else if(k==Left)reviewOffset=reviewOffset>8?reviewOffset-8:0;
+            else if(k==Right||k==PageDown)reviewOffset=(reviewOffset+ReviewPage<maximum)?reviewOffset+ReviewPage:maximum;
+            else if(k==Left||k==PageUp)reviewOffset=reviewOffset>ReviewPage?reviewOffset-ReviewPage:0;
+            else if(k==Home)reviewOffset=0;
+            else if(k==End)reviewOffset=maximum;
         }else if(screen==Screen::Config){
             if(k==Up)selection=(selection+3)%4;
             if(k==Down)selection=(selection+1)%4;
@@ -1811,17 +2028,25 @@ public:
     void render(){
         hw.setPalette(displayedPalette());hw.clear();char b[128];const Day& day=viewedDay();char date[11]{};
         if(validDate(day.date))dateText(day.date,date,sizeof date);else std::snprintf(date,sizeof date,"%s%lu",tr("D","J"),static_cast<unsigned long>(day.number));
-        std::snprintf(b,sizeof b,"LPS COMPANION v1.15    %s",date);line(0,b,true);
-        if(validDate(day.date)){longDateText(day.date,b,sizeof b);line(1,b);}
-        if(daysBack)line(2,tr("ARCHIVED DAY - READ ONLY","JOUR ARCHIVÉ - LECTURE SEULE"));
+        std::snprintf(b,sizeof b,"LPS COMPANION v1.16    %s",date);line(0,b,true);
+        // LPSC116-FEAT02-CHG04: the Daily Review owns lines 1+ (full date and
+        // the archive banner live in the review list). Other screens keep the
+        // common long date and archived-day banner.
+        if(screen!=Screen::DailyReview){
+            if(validDate(day.date)){longDateText(day.date,b,sizeof b);line(1,b);}
+            if(daysBack)line(2,tr("ARCHIVED DAY - READ ONLY","JOUR ARCHIVÉ - LECTURE SEULE"));
+        }
         if(screen==Screen::Home){
             line(3,daysBack?tr("CLOSED DAY","JOUR TERMINÉ"):tr("TODAY","AUJOURD'HUI"));
             const unsigned marked=daysBack&&day.namedCount?day.namedCount:count(day.flags);
             std::snprintf(b,sizeof b,tr("%u/%u activities","%u/%u activités"),marked,state.activityCount);line(4,b);
             // LPS-115-CHG01: Config left the menu (TAB opens it). LPS-115-CHG04: only
-            // the entries shown, renumbered without gaps; the archive keeps 1 and 2.
-            const unsigned total=daysBack?2:homeVisibleCount();
-            for(unsigned i=0;i<total;++i){const unsigned entry=daysBack?1+i:homeEntryAt(i);std::snprintf(b,sizeof b,"%u  %s",daysBack?entry:i,homeLabel(entry));line(6+int(i),b,i==selection);}
+            // the entries shown, renumbered without gaps. LPSC116-FEAT02-CHG06: archive is 1-3.
+            const unsigned total=daysBack?ArchiveMenuCount:homeVisibleCount();
+            for(unsigned i=0;i<total;++i){
+                const unsigned entry=daysBack?ArchiveEntries[i]:homeEntryAt(i);
+                std::snprintf(b,sizeof b,"%u  %s",daysBack?1u+i:i,homeLabel(entry));line(6+int(i),b,i==selection);
+            }
             line(17,tr("<- Previous day   -> Current day","<- Jour précédent   -> Jour actuel"));
         }else if(screen==Screen::TimerSelect){
             line(3,tr("TIMER","MINUTEUR"));
@@ -1904,12 +2129,12 @@ public:
                 const unsigned end=(first+visible<n)?first+visible:n;
                 for(unsigned position=first;position<end;++position){
                     const unsigned index=taskAt(kanbanColumn,position);
-                    std::snprintf(b,sizeof b,"%2u  %-32s",position+1,state.tasks[index].name.data());
+                    std::snprintf(b,sizeof b,state.tasks[index].focus?"%2u*%-32s":"%2u %-32s",position+1,state.tasks[index].name.data());
                     line(5+int(position-first),b,position==selection);
                 }
             }
             line(14,tr("N New  Enter Edit  Del Delete","N Nouveau Entrée Modifier Suppr Effacer"));
-            line(15,tr("F1 TODO  F2 DOING  F3 DONE","F1 À FAIRE F2 EN COURS F3 FINI"));
+            line(15,tr("F1 TODO  F2 DOING  F3 DONE  F Focus","F1 À FAIRE F2 EN COURS F3 FINI  F Focus"));
             line(16,tr("F4 Up F5 Down  <- -> Columns","F4 Monter F5 Descendre <- -> Colonnes"));
         }else if(screen==Screen::TaskEdit){
             line(3,editedTask<TaskCapacity?tr("EDIT TASK","MODIFIER LA TÂCHE"):tr("NEW TASK","NOUVELLE TÂCHE"));
@@ -1918,12 +2143,18 @@ public:
             line(13,tr("Enter: save task","Entrée : enregistrer la tâche"));
             line(15,tr("Backspace: erase  Esc: cancel","Retour: effacer  Échap: annuler"));
         }else if(screen==Screen::DailyReview){
-            std::snprintf(b,sizeof b,"%s  %s",tr("DAILY REVIEW","REVUE JOURNALIÈRE"),date);line(3,b);
-            char weight[20];weightText(state.today.actual,weight,sizeof weight);
-            std::snprintf(b,sizeof b,tr("Actual weight: %s kg","Poids effectif : %s kg"),weight);line(4,b);
-            const unsigned total=reviewRows();
-            for(unsigned i=0;i<8&&reviewOffset+i<total;++i){reviewLine(reviewOffset+i,b,sizeof b);line(7+int(i),b);}
-            std::snprintf(b,sizeof b,tr("Up/Down scroll  %u-%u/%u  Esc back","Haut/Bas défiler  %u-%u/%u  Échap retour"),reviewOffset+1,(reviewOffset+8<total?reviewOffset+8:total),total);line(16,b);
+            ReviewItem items[ReviewCapacity];
+            const unsigned total=buildDailyReview(items,ReviewCapacity,state,day,daysBack!=0);
+            unsigned last=0;
+            if(total>reviewOffset){last=total-reviewOffset;if(last>ReviewPage)last=ReviewPage;--last;}
+            for(unsigned i=0;i<ReviewPage&&reviewOffset+i<total;++i){
+                formatDailyReviewLine(state,day,daysBack!=0,items[reviewOffset+i],b,sizeof b);
+                char mark=0;
+                if(i==0&&reviewOffset)mark='';
+                if(total&&reviewOffset+ReviewPage<total&&i==last)mark='';
+                reviewPut(1+int(i),b,reviewCentered(items[reviewOffset+i].kind),mark);
+            }
+            reviewFooter(total);
         }else if(screen==Screen::Config){
             line(3,tr("CONFIGURATION","CONFIGURATION"));
             std::snprintf(b,sizeof b,"%s: %s",tr("1  Language","1  Langue"),pendingLanguage==Language::English?"English":"Français");line(6,b,selection==0);
@@ -2016,7 +2247,8 @@ public:
         if(hw.batteryBelow20())hw.alert(0,18*16,tr("[!] Low battery!","[!] Batterie faible !"));
         if(screen==Screen::MealPlanner)line(19,mealPlayPosition(state.meals,mealCursor)?tr("Enter:Put back  Space/Esc:Back","Entrée:Remettre  Espace/Échap:Retour"):tr("Enter:Play  Space/Esc:Back","Entrée:Jouer  Espace/Échap:Retour"),true);
         else if(screen==Screen::Home)line(19,tr("Up/Down  Enter:OK  Tab:Config","Haut/Bas  Entrée:OK  Tab:Config"),true);
-        else if(screen!=Screen::TimerRunning&&screen!=Screen::TimerComplete)line(19,tr("Up/Down  Enter:OK  Esc:Back","Haut/Bas  Entrée:OK  Échap:Retour"),true);
+        else if(screen!=Screen::TimerRunning&&screen!=Screen::TimerComplete&&screen!=Screen::DailyReview)
+            line(19,tr("Up/Down  Enter:OK  Esc:Back","Haut/Bas  Entrée:OK  Échap:Retour"),true);
         hw.present();
     }
 };
@@ -2166,10 +2398,12 @@ int main(){
     historyState.next=1;historyState.count=1;history.put(historyState);
     App browsing(history);browsing.start();browsing.key(Left);
     assert(browsing.viewedDay().number==1);
-    // LPS-112-CHG05: the archived-day menu is 1 Activities, 2 Weight; no notepad.
-    assert(std::strstr(history.rows[6].data(),"1  Activities")&&std::strstr(history.rows[7].data(),"2  Weight tracker"));
+    // LPSC116-FEAT02-CHG06: the archived-day menu is 1 Activities, 2 Weight, 3 Daily review; no notepad.
+    assert(std::strstr(history.rows[6].data(),"1  Activities")&&std::strstr(history.rows[7].data(),"2  Weight tracker")&&std::strstr(history.rows[8].data(),"3  Daily review"));
     for(const auto& row:history.rows)assert(!std::strstr(row.data(),"Notepad"));
-    browsing.key('3');assert(browsing.currentScreen()==Screen::Home);
+    browsing.key('4');assert(browsing.currentScreen()==Screen::Home);
+    browsing.key('3');assert(browsing.currentScreen()==Screen::DailyReview);
+    browsing.key(Escape);assert(browsing.currentScreen()==Screen::Home&&std::strstr(history.rows[8].data(),"3  Daily review"));
     browsing.key('2');
     assert(std::strstr(history.rows[6].data(),"110.500"));
     assert(std::strstr(history.rows[9].data(),"111.200"));

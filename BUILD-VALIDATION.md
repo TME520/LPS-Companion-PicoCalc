@@ -1,3 +1,19 @@
+# Validation v1.16 — 23 November 2026
+
+- LPSC116-CHG07: title bar `LPS COMPANION v1.16`; header comment v1.16 (2026-11-23); README title, status, `Changes in v1.16`, usage (Daily Review, Kanban **F**, archive menu 1–3) and a short PicoCalc vs DOS note; `language_test` and `daily_review_test` assert the new title. `./test.sh` fully green (all fourteen host test suites). `sizeof(State)` remains 30332. Typical full save 9815 bytes, worst-case 19435. No UF2 built: `./build.sh` stops at the tool check (`cmake`, `ninja`, `c++`, `arm-none-eabi-gcc` and `arm-none-eabi-g++` are missing on the box; `git` and `python3` are present). Title previews: `/workspace/lps/previews/lpsc116_chg07_*.png`.
+
+- PicoCalc vs DOS v1.16, documented in the README: **Next:** / **Prochain :** on two lines (user decision, 40 columns); 20-row layout (review page of 16 lines on rows 1–16, messages on 17, footer on 19); French range footer with single spaces so the longest form is 40 columns; Home/End/PgUp/PgDn as Shift+Tab/Del/Up/Down (`0xD2`/`0xD5`/`0xD6`/`0xD7`); DOS CHG07b fast-scroll is not ported.
+
+- LPSC116-FEAT01-CHG01/CHG02: **F** toggles Kanban focus (`*` before the name); DONE clears it. JSON writes `"focus":true` only on focused cards; an unfocused save stays byte-identical to v1.15. Schema version stays 2.
+
+- LPSC116-FEAT02-CHG03: Daily Review opens with the full date and ISO week in the language in use.
+
+- LPSC116-FEAT02-CHG04: new review layout (weight, focused cards, blank line before the meal title, two-line Next, activities).
+
+- LPSC116-FEAT02-CHG05: 16-line window, Up/Down one line with no wrap, Left/Right or PgUp/PgDn one page, Home/End to the ends, drawn arrows at column 39, range footer on line 19, offset kept through Tab/Space.
+
+- LPSC116-FEAT02-CHG06: archived-day menu adds **3 Daily review** / **3 Revue journalière**; that review is read-only (no KANBAN, meal lines `--`); Esc restores the cursor on entry 3; Tab/Space show `Archived day: read-only` / `Jour archivé : lecture seule`.
+
 # Validation v1.15 — 15 November 2026
 
 - LPS-115-CHG06: title bar `LPS COMPANION v1.15`; header comment v1.15 (2026-11-15); README title, status and `Changes in v1.15`; language_test asserts the new title. All fourteen host test suites pass; compiles warning-free for 32-bit ARM (`-Wshorten-64-to-32`). No UF2 built. Previews regenerated (`/workspace/lps/previews/115_*.png`).

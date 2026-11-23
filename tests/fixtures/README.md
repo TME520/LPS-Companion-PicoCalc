@@ -10,3 +10,11 @@ are retained. Day 2 has flags 512, actual weight 111.500 kg, and note
 
 `migration_test.cpp` wraps these original bytes in A/B `.BIN` envelopes and
 exercises the real firmware adapter's migration to JSON `.JSN` saves (v1.13).
+
+`picocalc_v115_custom.jsn` is a v1.15 PicoCalc save (the Book8088-slopware
+`picocalc_custom.jsn` fixture): three Kanban cards, no focus. LPSC116-FEAT01-CHG02
+rewrites it byte-for-byte.
+
+`dos_v116_focus.jsn` is the same state written by the MS-DOS v1.16 host writer
+(`jsave_write`) with `"focus":true` on the first card. A PicoCalc rewrite with
+the same generation must match it octet for octet.
