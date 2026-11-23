@@ -104,6 +104,15 @@ class PicoCalc final:public lps::Platform,public lps::Canvas {
         case 0xfb:c='u';accent=3;break;case 0xe7:c='c';accent=4;break;
         case 0xc9:c='E';accent=1;upper=true;break;case 0xc8:c='E';accent=2;upper=true;break;
         }
+        // LPSC116-FEAT02-CHG05: CP437-like scroll arrows. The upstream 8x12
+        // font starts at ASCII 32, so 0x18/0x19 would otherwise become spaces.
+        if(c==0x18||c==0x19){
+            static constexpr unsigned char up[12]={0x00,0x18,0x18,0x3C,0x3C,0x7E,0x18,0x18,0x18,0x18,0x00,0x00};
+            static constexpr unsigned char down[12]={0x00,0x18,0x18,0x18,0x18,0x7E,0x3C,0x3C,0x18,0x18,0x00,0x00};
+            const unsigned char* g=c==0x18?up:down;
+            for(int y=0;y<12;++y){const auto glyph=g[y];out[(y+2)*stride]=heavy?static_cast<unsigned char>(glyph|(glyph>>1)):glyph;}
+            return;
+        }
         if(c<32||c>126)c=32;
         for(int y=0;y<12;++y){const auto glyph=MainFont[4+(c-32)*12+y];
             out[(y+2)*stride]=heavy?static_cast<unsigned char>(glyph|(glyph>>1)):glyph;}
@@ -345,10 +354,16 @@ public:
     }
 };
 int keymap(int c){
-    // ClockworkPi Code/picocalc_kbd_tester/keyboard_define.h
+    // Official PicoCalc codes: clockworkpi/PicoCalc Code/picocalc_keyboard/keyboard.h
+    // (KEY_HOME 0xD2, KEY_END 0xD5, KEY_PAGE_UP 0xD6, KEY_PAGE_DOWN 0xD7) and
+    // the STM32 matrix in keyboard.ino: {KEY_TAB,KEY_HOME}, {KEY_DEL,KEY_END},
+    // {KEY_UP,KEY_PAGE_UP}, {KEY_DOWN,KEY_PAGE_DOWN} — Shift selects .symb.
+    // Unshifted Tab/Del/Up/Down stay 0x09 / 0xD4 / 0xB5 / 0xB6.
     switch(c){case 0xb5:return lps::Up;case 0xb6:return lps::Down;case 0xb4:return lps::Left;case 0xb7:return lps::Right;
     case 0xb1:case 27:return lps::Escape;case 10:case 13:return lps::Enter;case 8:case 127:return lps::Backspace;
-    case 0xd4:return lps::DeleteKey;case 0x81:return lps::F1;case 0x82:return lps::F2;case 0x83:return lps::F3;case 0x84:return lps::F4;case 0x85:return lps::F5;
+    case 0xd4:return lps::DeleteKey;case 0xd2:return lps::Home;case 0xd5:return lps::End;
+    case 0xd6:return lps::PageUp;case 0xd7:return lps::PageDown;
+    case 0x81:return lps::F1;case 0x82:return lps::F2;case 0x83:return lps::F3;case 0x84:return lps::F4;case 0x85:return lps::F5;
     default:return (c>=32&&c<=126)||c==9?c:-1;}
 }
 }

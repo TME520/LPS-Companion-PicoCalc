@@ -21,6 +21,7 @@ public:
     bool exportWeightCsv(const Day&)override{return true;}
     bool has(int row,const char* value)const{char cells[100];displayText(value,cells,sizeof cells);return std::strstr(rows[row].data(),cells)!=nullptr;}
     bool has(const char* value)const{char cells[100];displayText(value,cells,sizeof cells);for(const auto& r:rows)if(std::strstr(r.data(),cells))return true;return false;}
+    bool mark(int row,char glyph)const{const char* r=rows[row].data();return std::strlen(r)>=40&&r[39]==glyph;}
 };
 static void expectFull(Date d,Language language,const char* want){
     char t[64];fullDateText(d,language,t,sizeof t);
@@ -213,7 +214,36 @@ int main(){
         assert(bare.size()==15);
     }
 
-    // On-screen: first page, title bar, v1.15 scrolling, Home keeps longDateText.
+    // Footer wording fits in 40 cells, including the longest plausible range.
+    {
+        char b[128];
+        formatReviewFooter(Language::English,0,19,b,sizeof b);
+        assert(!std::strcmp(b,"Up/Down: scroll  1-16/19  Esc back"));
+        assert(displayWidth(b)==34);
+        formatReviewFooter(Language::English,3,19,b,sizeof b);
+        assert(!std::strcmp(b,"Up/Down: scroll  4-19/19  Esc back"));
+        formatReviewFooter(Language::English,0,15,b,sizeof b);
+        assert(!std::strcmp(b,"1-15/15  Esc back"));
+        formatReviewFooter(Language::English,0,0,b,sizeof b);
+        assert(!std::strcmp(b,"0-0/0  Esc back"));
+        formatReviewFooter(Language::French,0,17,b,sizeof b);
+        assert(!std::strcmp(b,"Haut/Bas : défiler 1-16/17 Échap retour"));
+        assert(displayWidth(b)==39);
+        formatReviewFooter(Language::French,64,80,b,sizeof b);
+        assert(!std::strcmp(b,"Haut/Bas : défiler 65-80/80 Échap retour"));
+        assert(displayWidth(b)==40);
+        formatReviewFooter(Language::French,0,15,b,sizeof b);
+        assert(!std::strcmp(b,"1-15/15  Échap retour"));
+        for(unsigned total=0;total<=80;++total){
+            const unsigned max=total>ReviewPage?total-ReviewPage:0;
+            for(unsigned off:{0u,max/2,max}){
+                formatReviewFooter(Language::English,off,total,b,sizeof b);assert(displayWidth(b)<=40);
+                formatReviewFooter(Language::French,off,total,b,sizeof b);assert(displayWidth(b)<=40);
+            }
+        }
+    }
+
+    // On-screen: 16-line window, range footer on row 19, arrows, Home/End/Pg, overlays.
     {
         ReviewDisplay d;State s;s.today.date={2026,9,23};s.today.actual=117700;s.today.flags=(1u<<0)|(1u<<2);
         s.taskCount=3;s.tasks[0].status=TaskStatus::Todo;std::snprintf(s.tasks[0].name.data(),33,"Buy supplies");s.tasks[0].focus=true;
@@ -222,29 +252,46 @@ int main(){
         d.stored=lps_test::encodeJson(s);App a(d);a.start();
         assert(d.has("Wednesday 23 September 2026 (week 39)"));
         a.key('5');assert(a.currentScreen()==Screen::DailyReview);
-        assert(a.reviewLineCount()==19);
+        assert(a.reviewLineCount()==19&&a.reviewScroll()==0);
         assert(d.has(0,"v1.15    2026-09-23"));
         assert(d.has(1,"Wednesday 23 September 2026 - Week 39"));
         assert(!d.has("(week 39)"));
         assert(d.has("DAILY REVIEW")&&d.has("Actual weight: 117.700 Kg"));
         assert(d.has("KANBAN")&&d.has("  Buy supplies")&&d.has("  Write notes"));
-        assert(!d.has("Hidden done task")&&!d.has("TODO")&&!d.has("DOING"));
-        // 8-line v1.15 window starts at row 1; meals sit below the first page.
-        assert(!d.has("MEAL PLANNER")&&!d.has("Next:"));
-        assert(d.has(16,"Up/Down scroll  1-8/19  Esc back"));
-        a.key(Right);assert(a.reviewScroll()==8);
-        assert(d.has("MEAL PLANNER")&&d.has("Drinks: 0/6")&&d.has("Food: 0/8")&&d.has("Blank: 0/2"));
-        assert(d.has("Next:")&&d.has("Light Cheese Wrap (Coffee (Latte))"));
-        assert(!d.has("ACTIVITIES")&&d.has(16,"Up/Down scroll  9-16/19  Esc back"));
-        a.key(Down);assert(a.reviewScroll()==9&&d.has("ACTIVITIES")&&!d.has("  Walk"));
-        a.key(Down);a.key(Down);assert(a.reviewScroll()==11);
-        assert(d.has("  Walk")&&d.has("  Bible")&&d.has(16,"Up/Down scroll  12-19/19  Esc back"));
-        a.key(Down);assert(a.reviewScroll()==11); // no wrap past the end
-        a.key(Left);assert(a.reviewScroll()==3);
-        a.key(Up);assert(a.reviewScroll()==2);
+        assert(d.has("MEAL PLANNER")&&d.has("Next:")&&d.has("Light Cheese Wrap (Coffee (Latte))"));
+        assert(!d.has("ACTIVITIES")&&!d.has("  Walk")&&!d.has("Hidden done task")&&!d.has("TODO"));
+        assert(!d.has("Enter:OK")); // range footer replaces the generic help
+        assert(d.has(19,"Up/Down: scroll  1-16/19  Esc back"));
+        assert(!d.mark(1,'\x18')&&d.mark(16,'\x19'));
+        a.key(Down);assert(a.reviewScroll()==1);
+        assert(d.has("ACTIVITIES")&&!d.has("  Walk"));
+        assert(d.has(19,"Up/Down: scroll  2-17/19  Esc back"));
+        assert(d.mark(1,'\x18')&&d.mark(16,'\x19')); // both arrows in the middle
+        a.key(Tab);assert(a.currentScreen()==Screen::Config);
+        a.key(Tab);assert(a.currentScreen()==Screen::DailyReview&&a.reviewScroll()==1);
+        assert(d.has(19,"Up/Down: scroll  2-17/19  Esc back")&&d.mark(1,'\x18')&&d.mark(16,'\x19'));
+        a.key(' ');assert(a.currentScreen()==Screen::MealPlanner);
+        a.key(Escape);assert(a.currentScreen()==Screen::DailyReview&&a.reviewScroll()==1);
+        a.key(End);assert(a.reviewScroll()==3);
+        assert(d.has("  Walk")&&d.has("  Bible")&&d.has("ACTIVITIES"));
+        assert(d.has(19,"Up/Down: scroll  4-19/19  Esc back"));
+        assert(d.mark(1,'\x18')&&!d.mark(16,'\x19'));
+        a.key(Down);assert(a.reviewScroll()==3); // no wrap
+        a.key(Home);assert(a.reviewScroll()==0&&d.has(19,"Up/Down: scroll  1-16/19  Esc back"));
+        a.key(Up);assert(a.reviewScroll()==0);
+        a.key(PageDown);assert(a.reviewScroll()==3);
+        a.key(PageUp);assert(a.reviewScroll()==0);
+        a.key(Right);assert(a.reviewScroll()==3);
+        a.key(Left);assert(a.reviewScroll()==0);
         a.key(Escape);assert(a.currentScreen()==Screen::Home);
         assert(d.has("Wednesday 23 September 2026 (week 39)"));
         assert(!d.has("- Week 39"));
+        assert(d.has(19,"Up/Down  Enter:OK  Tab:Config")); // generic help back on Home
+        // Home/End/PgUp/PgDn are scoped to the review: they do not move the menu or open Config.
+        const unsigned sel=0;
+        a.key(Home);a.key(End);a.key(PageUp);a.key(PageDown);
+        assert(a.currentScreen()==Screen::Home&&d.has("Wednesday 23 September 2026 (week 39)"));
+        (void)sel;
     }
     {
         ReviewDisplay d;State s;s.language=Language::French;s.today.date={2026,9,23};s.today.actual=-1;
@@ -253,20 +300,32 @@ int main(){
         d.stored=lps_test::encodeJson(s);App fr(d);fr.start();
         assert(d.has("Mercredi 23 Septembre 2026 (semaine 39)"));
         fr.key('5');
-        assert(d.has("REVUE JOURNALIÈRE")&&d.has("Poids effectif : -- Kg")&&d.has("Aucune carte en focus")==false);
+        assert(d.has("REVUE JOURNALIÈRE")&&d.has("Poids effectif : -- Kg"));
         assert(d.has("Mercredi 23 septembre 2026 - Semaine 39"));
         assert(!d.has("(semaine 39)"));
         assert(d.has("  Tache 00")&&!d.has("PLANIFICATEUR DE REPAS"));
         assert(fr.reviewLineCount()==32);
-        for(unsigned i=0;i<40;++i)fr.key(Down);
-        assert(fr.reviewScroll()==fr.reviewLineCount()-ReviewPage);
+        assert(d.has(19,"Haut/Bas : défiler 1-16/32 Échap retour"));
+        assert(!d.mark(1,'\x18')&&d.mark(16,'\x19'));
+        fr.key(End);assert(fr.reviewScroll()==16);
         assert(d.has("Aucune activité")&&d.has("Prochain :")&&d.has("Wrap fromage léger (Café (Latte))"));
-        assert(!d.has("PLANIFICATEUR DE REPAS")); // title sits just above this 8-line window
-        assert(!d.has("FINI")&&!d.has("TODO")&&!d.has("Aucune sélectionnée"));
-        fr.key(Up);assert(d.has("PLANIFICATEUR DE REPAS")&&d.has("Prochain :")&&!d.has("Tache 15"));
+        assert(d.has("PLANIFICATEUR DE REPAS")&&d.has("  Tache 15"));
+        assert(d.has(19,"Haut/Bas : défiler 17-32/32 Échap retour"));
+        assert(d.mark(1,'\x18')&&!d.mark(16,'\x19'));
+        assert(!d.has("FINI")&&!d.has("TODO")&&!d.has("Aucune sélectionnée")&&!d.has("Enter:OK"));
+        fr.key(PageUp);assert(fr.reviewScroll()==0);
+        fr.key(PageDown);assert(fr.reviewScroll()==16);
+        fr.key(Home);assert(fr.reviewScroll()==0);
         fr.key(Escape);assert(fr.currentScreen()==Screen::Home);
         assert(d.has("Mercredi 23 Septembre 2026 (semaine 39)"));
         assert(!d.has("- Semaine 39"));
     }
-    std::printf("PASS: daily review layout, focus, meals, two-line Next, archive builders, French, v1.15 scrolling. sizeof(State)=%zu\n",sizeof(State));
+    // Short footer when the list fits in 16 lines (archived empty day = 15).
+    {
+        char b[128];formatReviewFooter(Language::French,0,15,b,sizeof b);
+        assert(!std::strcmp(b,"1-15/15  Échap retour")&&displayWidth(b)<=40);
+        formatReviewFooter(Language::English,0,16,b,sizeof b);
+        assert(!std::strcmp(b,"1-16/16  Esc back"));
+    }
+    std::printf("PASS: daily review layout, 16-line scroll, markers, range footer, Home/End/Pg, overlays, French. sizeof(State)=%zu\n",sizeof(State));
 }

@@ -30,6 +30,10 @@ void checkDay(const lps::Day& d,unsigned n){
 int main(){
     using namespace lps;
     assert(keymap(0x81)==F1&&keymap(0x82)==F2&&keymap(0x83)==F3&&keymap(0x84)==F4&&keymap(0x85)==F5&&keymap(0xd4)==DeleteKey);
+    // LPSC116-FEAT02-CHG05: Shift+Tab/Del/Up/Down are distinct from Tab/Del/Up/Down.
+    assert(keymap(0xd2)==Home&&keymap(0xd5)==End&&keymap(0xd6)==PageUp&&keymap(0xd7)==PageDown);
+    assert(keymap(9)==Tab&&keymap(0xd2)!=Tab&&keymap(0xd5)!=DeleteKey&&keymap(0xb5)==Up&&keymap(0xd6)!=Up&&keymap(0xb6)==Down&&keymap(0xd7)!=Down);
+
     std::remove("SAVE_A.JSN");std::remove("SAVE_B.JSN");
     PicoCalc disk;disk.init();App initial(disk);initial.start();
     initial.key(Left);assert(initial.viewedDay().number==1);

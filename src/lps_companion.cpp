@@ -82,7 +82,7 @@ unsigned displayWidth(const char* utf8){
 }
 constexpr int Width=320, Height=320, Columns=40, Rows=20;
 constexpr std::size_t NoteLength=96, HistoryLength=31, TaskNameLength=32, TaskCapacity=24, ReminderCapacity=3, ReminderTextLength=32, BlobCapacity=6144;
-enum Key { Tab=9, Enter=13, Backspace=8, Escape=27, Up=1000, Down, Left, Right, DeleteKey, F1, F2, F3, F4, F5 };
+enum Key { Tab=9, Enter=13, Backspace=8, Escape=27, Up=1000, Down, Left, Right, DeleteKey, F1, F2, F3, F4, F5, Home, End, PageUp, PageDown };
 enum class LoadResult { Missing, Ok, NoStorage, Error };
 struct Day;
 struct State;
@@ -1114,12 +1114,21 @@ void drawMealCard(Canvas& c,const MealCardView& v){
     for(int j=0;j<16;++j){const int notch=5-(j<8?7-j:j-8)*5/7;if(notch>0){c.fill(rx,ry+j,notch,1,body);c.fill(rx+rw-notch,ry+j,notch,1,body);}}
     centredLabel(c,ry,portion,ink,ribbon);
 }
-// LPSC116-FEAT02-CHG04: Daily Review is a list of lines, drawn from
-// reviewOffset. CHG05 will widen the window and add markers; v1.15 scrolling
-// (one line / page of ReviewPage, no wrap) stays for now. The "Prochain :"
-// label sits alone, then "Food (Drink)" on the next line (user decision
-// 23 Nov 2026). CHG07c: a blank line before the meal-planner title.
-constexpr unsigned ReviewCapacity=80, ReviewPage=8;
+// LPSC116-FEAT02-CHG04/CHG05: Daily Review is a list of lines, drawn from
+// reviewOffset in a 16-line window (rows 1-16). Up/Down move one line, no wrap;
+// Left/Right and PgUp/PgDn move one page; Home/End jump to the ends.
+// The "Prochain :" label sits alone, then "Food (Drink)" on the next line
+// (user decision 23 Nov 2026). CHG07c: a blank line before the meal-planner title.
+constexpr unsigned ReviewCapacity=80, ReviewPage=16;
+void formatReviewFooter(Language language,unsigned offset,unsigned total,char* out,std::size_t size){
+    const bool fr=language==Language::French;
+    if(total>ReviewPage)
+        std::snprintf(out,size,fr?"Haut/Bas : défiler %u-%u/%u Échap retour":"Up/Down: scroll  %u-%u/%u  Esc back",
+            offset+1,(offset+ReviewPage<total?offset+ReviewPage:total),total);
+    else
+        std::snprintf(out,size,fr?"%u-%u/%u  Échap retour":"%u-%u/%u  Esc back",
+            total?offset+1:0,total,total);
+}
 enum class ReviewKind : uint8_t {
     Date, Archive, Blank, Title, Weight, Kanban, Card, NoFocus,
     Meals, Count, NextLabel, Next, Act, Activity, Stored, NoAct
@@ -1572,11 +1581,20 @@ class App {
         if(index>=n){out[0]=0;return;}
         formatDailyReviewLine(state,viewedDay(),daysBack!=0,items[index],out,size);
     }
-    // Clip to 40 cells, like other PicoCalc screens / the LCD adapter.
-    void reviewPut(int row,const char* text,bool centre){
-        char padded[128],clipped[80];
-        if(centre){const unsigned w=displayWidth(text);if(w<40){std::snprintf(padded,sizeof padded,"%*s%s",int((40-w)/2),"",text);text=padded;}}
-        cellSlice(text,0,40,clipped,sizeof clipped);line(row,clipped);
+    // Clip to 40 cells, or 39 when a scroll arrow occupies column 39.
+    // Like other PicoCalc screens / the LCD adapter.
+    void reviewPut(int row,const char* text,bool centre,char marker=0){
+        char padded[128],clipped[80],cells[41]{};
+        if(centre){const unsigned w=displayWidth(text);if(w<(marker?39u:40u)){std::snprintf(padded,sizeof padded,"%*s%s",int(((marker?39:40)-w)/2),"",text);text=padded;}}
+        cellSlice(text,0,marker?39u:40u,clipped,sizeof clipped);
+        displayText(clipped,cells,marker?40:sizeof cells);
+        if(marker){unsigned n=unsigned(std::strlen(cells));while(n<39)cells[n++]=' ';cells[39]=marker;cells[40]=0;}
+        hw.text(0,row*16,cells,false);
+    }
+    void reviewFooter(unsigned total){
+        char b[128];
+        formatReviewFooter(state.language,reviewOffset,total,b,sizeof b);
+        line(19,b,true);
     }
     static uint32_t dayIndex(Date d){
         uint32_t n=0;for(unsigned y=2000;y<d.year;++y)n+=leap(uint16_t(y))?366:365;
@@ -1899,8 +1917,10 @@ public:
             const unsigned maximum=reviewRows()>ReviewPage?reviewRows()-ReviewPage:0;
             if(k==Down&&reviewOffset<maximum)++reviewOffset;
             else if(k==Up&&reviewOffset)--reviewOffset;
-            else if(k==Right)reviewOffset=(reviewOffset+ReviewPage<maximum)?reviewOffset+ReviewPage:maximum;
-            else if(k==Left)reviewOffset=reviewOffset>ReviewPage?reviewOffset-ReviewPage:0;
+            else if(k==Right||k==PageDown)reviewOffset=(reviewOffset+ReviewPage<maximum)?reviewOffset+ReviewPage:maximum;
+            else if(k==Left||k==PageUp)reviewOffset=reviewOffset>ReviewPage?reviewOffset-ReviewPage:0;
+            else if(k==Home)reviewOffset=0;
+            else if(k==End)reviewOffset=maximum;
         }else if(screen==Screen::Config){
             if(k==Up)selection=(selection+3)%4;
             if(k==Down)selection=(selection+1)%4;
@@ -2106,11 +2126,16 @@ public:
         }else if(screen==Screen::DailyReview){
             ReviewItem items[ReviewCapacity];
             const unsigned total=buildDailyReview(items,ReviewCapacity,state,day,daysBack!=0);
+            unsigned last=0;
+            if(total>reviewOffset){last=total-reviewOffset;if(last>ReviewPage)last=ReviewPage;--last;}
             for(unsigned i=0;i<ReviewPage&&reviewOffset+i<total;++i){
                 formatDailyReviewLine(state,day,daysBack!=0,items[reviewOffset+i],b,sizeof b);
-                reviewPut(1+int(i),b,reviewCentered(items[reviewOffset+i].kind));
+                char mark=0;
+                if(i==0&&reviewOffset)mark='';
+                if(total&&reviewOffset+ReviewPage<total&&i==last)mark='';
+                reviewPut(1+int(i),b,reviewCentered(items[reviewOffset+i].kind),mark);
             }
-            std::snprintf(b,sizeof b,tr("Up/Down scroll  %u-%u/%u  Esc back","Haut/Bas défiler  %u-%u/%u  Échap retour"),reviewOffset+1,(reviewOffset+ReviewPage<total?reviewOffset+ReviewPage:total),total);line(16,b);
+            reviewFooter(total);
         }else if(screen==Screen::Config){
             line(3,tr("CONFIGURATION","CONFIGURATION"));
             std::snprintf(b,sizeof b,"%s: %s",tr("1  Language","1  Langue"),pendingLanguage==Language::English?"English":"Français");line(6,b,selection==0);
@@ -2203,7 +2228,8 @@ public:
         if(hw.batteryBelow20())hw.alert(0,18*16,tr("[!] Low battery!","[!] Batterie faible !"));
         if(screen==Screen::MealPlanner)line(19,mealPlayPosition(state.meals,mealCursor)?tr("Enter:Put back  Space/Esc:Back","Entrée:Remettre  Espace/Échap:Retour"):tr("Enter:Play  Space/Esc:Back","Entrée:Jouer  Espace/Échap:Retour"),true);
         else if(screen==Screen::Home)line(19,tr("Up/Down  Enter:OK  Tab:Config","Haut/Bas  Entrée:OK  Tab:Config"),true);
-        else if(screen!=Screen::TimerRunning&&screen!=Screen::TimerComplete)line(19,tr("Up/Down  Enter:OK  Esc:Back","Haut/Bas  Entrée:OK  Échap:Retour"),true);
+        else if(screen!=Screen::TimerRunning&&screen!=Screen::TimerComplete&&screen!=Screen::DailyReview)
+            line(19,tr("Up/Down  Enter:OK  Esc:Back","Haut/Bas  Entrée:OK  Échap:Retour"),true);
         hw.present();
     }
 };

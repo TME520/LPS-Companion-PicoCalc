@@ -16,7 +16,7 @@ public:
         assert(x==0&&y>=0&&y%16==0&&y+16<=320);
         assert(std::strlen(text)<=40); // Fail on untranslated byte widths or clipped hints.
         for(const unsigned char* p=reinterpret_cast<const unsigned char*>(text);*p;++p){
-            const bool ok=(*p>=32&&*p<=126)||*p==0xe9||*p==0xe8||*p==0xea||*p==0xe0||*p==0xe2||*p==0xee||*p==0xf4||*p==0xf9||*p==0xfb||*p==0xe7||*p==0xc0||*p==0xc8||*p==0xc9;
+            const bool ok=(*p>=32&&*p<=126)||*p==0x18||*p==0x19||*p==0xe9||*p==0xe8||*p==0xea||*p==0xe0||*p==0xe2||*p==0xee||*p==0xf4||*p==0xf9||*p==0xfb||*p==0xe7||*p==0xc0||*p==0xc8||*p==0xc9; // 0x18/0x19: review scroll arrows (CHG05)
             if(!ok)std::fprintf(stderr,"Unsupported byte %02x in: %s\n",*p,text);
             assert(ok);
         }
