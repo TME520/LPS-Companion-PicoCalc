@@ -487,7 +487,9 @@ bool decode(const uint8_t* bytes,std::size_t size,State& out) {
 //    "crc32":"xxxxxxxx"}
 //   DAY      {"date":"YYYY-MM-DD"|null,"number":N,"activities":["Marche",...],
 //             "expected":grams|null,"actual":grams|null,"note":"..."}
-//   TASK     {"status":"todo"|"doing"|"done","name":"..."}
+//   TASK     {"status":"todo"|"doing"|"done","name":"..."} and, when focused,
+//            "focus":true after name (LPSC116-FEAT01-CHG02). Absent or false:
+//            not focused. A focus on a DONE card is dropped on load.
 //   REMINDER {"from":"YYYY-MM-DD","days":N,"text":"..."}
 // LPS-114-CHG01 adds "meals":{"played":[3,0,...]} at the end of "state": the
 // played deck indices in order of play. It is optional (absent = full deck),
@@ -612,7 +614,10 @@ bool writeSave(const State& s,uint32_t generation,SaveSink& sink,uint32_t& check
     for(unsigned i=0;i<s.taskCount;++i){
         if(i)w.raw(",");
         w.raw("\n{");w.key("status");w.text(StatusNames[unsigned(s.tasks[i].status)]);
-        w.raw(",");w.key("name");w.text(s.tasks[i].name.data());w.raw("}");
+        w.raw(",");w.key("name");w.text(s.tasks[i].name.data());
+        /* LPSC116-FEAT01-CHG02: "focus":true only on a focused, non-DONE card. */
+        if(s.tasks[i].focus&&s.tasks[i].status!=TaskStatus::Done){w.raw(",");w.key("focus");w.raw("true");}
+        w.raw("}");
     }
     w.raw("],\n");w.key("reminders");w.raw("[");
     for(unsigned i=0;i<s.reminderCount;++i){
@@ -818,6 +823,14 @@ bool readChoice(JsonReader& r,const char* const* names,unsigned count,unsigned& 
     for(unsigned i=0;i<count;++i)if(!std::strcmp(r.text.data(),names[i])){out=i;return true;}
     return false;
 }
+/* LPSC116-FEAT01-CHG02: true/false only; any other value damages the save,
+ * as a bad "status" string does. */
+bool readBool(JsonReader& r,bool& out){
+    const Token t=r.next();
+    if(t==Token::True){out=true;return true;}
+    if(t==Token::False){out=false;return true;}
+    return false;
+}
 bool readDay(JsonReader& r,Token first,Day& d){
     if(first!=Token::ObjectBegin)return false;
     d=Day{};d.date={};
@@ -898,9 +911,11 @@ bool readState(JsonReader& r,State& s){
                     unsigned status=0;
                     if(!std::strcmp(field,"status")){if(!readChoice(r,StatusNames,3,status))return false;task.status=TaskStatus(status);return true;}
                     if(!std::strcmp(field,"name"))return named=readText(r,task.name,true);
+                    if(!std::strcmp(field,"focus"))return readBool(r,task.focus);
                     return r.skip(r.next());
                 });
                 if(!ok||!named)return false;
+                if(task.status==TaskStatus::Done)task.focus=false; /* DONE is never focused */
                 ++s.taskCount;return true;
             });
         }

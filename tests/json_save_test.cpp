@@ -155,5 +155,90 @@ int main(){
     }
     // 9. An I/O error part-way is reported as such, not as damage.
     {FailingSource source;source.data=json;State back;SaveInfo info;assert(readSave(source,back,info)==SaveCheck::IOError);}
-    std::puts("PASS: JSON round trip, oldest-first history, truncation and bit-flip rejection, crc32 mismatch, unknown keys, activity names, escaping/UTF-8, field limits, schema versions and I/O errors.");
+    // 10. LPSC116-FEAT01-CHG02: "focus":true after name, DOS interop, no "focus":false.
+    {
+        auto slurp=[](const char* path){
+            std::FILE* f=std::fopen(path,"rb");assert(f);
+            std::fseek(f,0,SEEK_END);const long n=std::ftell(f);assert(n>0);std::rewind(f);
+            std::string s(std::size_t(n),'\0');
+            assert(std::fread(s.data(),1,std::size_t(n),f)==std::size_t(n));std::fclose(f);return s;
+        };
+        auto writeGen=[](const State& s,uint32_t generation){
+            std::array<char,lps_test::MemoryCapacity> bytes{};std::size_t n=0;
+            lps_test::MemorySink sink(bytes,n);uint32_t crc=0;
+            assert(writeSave(s,generation,sink,crc));
+            return std::string(bytes.data(),n);
+        };
+        auto parseInfo=[](const std::string& t,State& out,SaveInfo& info){
+            lps_test::MemorySource source(t.data(),t.size());
+            return readSave(source,out,info);
+        };
+        // A v1.15 save with no focus rewrites to the same bytes (generation kept).
+        const std::string v115=slurp("tests/fixtures/picocalc_v115_custom.jsn");
+        assert(v115.find("focus")==std::string::npos);
+        State s115;SaveInfo i115;
+        assert(parseInfo(v115,s115,i115)==SaveCheck::Valid);
+        assert(s115.taskCount==3&&!s115.tasks[0].focus&&!s115.tasks[1].focus&&!s115.tasks[2].focus);
+        const std::string v115out=writeGen(s115,i115.generation);
+        assert(v115out==v115);
+        assert(json.find("\"version\":2")!=std::string::npos); // schema unchanged
+        // A real DOS v1.16 save with one focused card loads and rewrites identically.
+        const std::string dos=slurp("tests/fixtures/dos_v116_focus.jsn");
+        assert(dos.find("{\"status\":\"doing\",\"name\":\"Réparer le vélo\",\"focus\":true}")!=std::string::npos);
+        assert(dos.find("\"focus\":false")==std::string::npos);
+        State sdos;SaveInfo idos;
+        assert(parseInfo(dos,sdos,idos)==SaveCheck::Valid);
+        assert(sdos.taskCount==3&&sdos.tasks[0].focus&&sdos.tasks[0].status==TaskStatus::Doing);
+        assert(!sdos.tasks[1].focus&&!sdos.tasks[2].focus&&sdos.tasks[2].status==TaskStatus::Done);
+        const std::string dosout=writeGen(sdos,idos.generation);
+        assert(dosout==dos);
+        // "focus":false is accepted and omitted on write-back; a focus on a DONE
+        // card is dropped; a malformed value damages the save, as a bad status does.
+        State loaded;loaded.taskCount=3;
+        loaded.tasks[0].status=TaskStatus::Todo;std::strcpy(loaded.tasks[0].name.data(),"Keep");
+        loaded.tasks[1].status=TaskStatus::Doing;std::strcpy(loaded.tasks[1].name.data(),"Work");
+        loaded.tasks[2].status=TaskStatus::Done;std::strcpy(loaded.tasks[2].name.data(),"Done");
+        const std::string base=writeGen(loaded,1);
+        auto inject=[&](const std::string& src,const char* after,const char* extra){
+            std::string t=src;const auto at=t.find(after);assert(at!=std::string::npos);
+            t.insert(at+std::strlen(after),extra);return signedJson(t);
+        };
+        const std::string mixed=inject(inject(inject(base,"\"name\":\"Keep\"",",\"focus\":false"),
+            "\"name\":\"Work\"",",\"focus\":true"),"\"name\":\"Done\"",",\"focus\":true");
+        State dec;assert(parse(mixed,dec)==SaveCheck::Valid);
+        assert(dec.taskCount==3&&!dec.tasks[0].focus&&!std::strcmp(dec.tasks[0].name.data(),"Keep"));
+        assert(dec.tasks[1].focus&&!std::strcmp(dec.tasks[1].name.data(),"Work"));
+        assert(dec.tasks[2].status==TaskStatus::Done&&!dec.tasks[2].focus&&!std::strcmp(dec.tasks[2].name.data(),"Done"));
+        const std::string back=writeGen(dec,1);
+        assert(back.find("{\"status\":\"doing\",\"name\":\"Work\",\"focus\":true}")!=std::string::npos);
+        assert(back.find("{\"status\":\"todo\",\"name\":\"Keep\"}")!=std::string::npos);
+        assert(back.find("\"name\":\"Keep\",\"focus\"")==std::string::npos);
+        assert(back.find("{\"status\":\"done\",\"name\":\"Done\"}")!=std::string::npos);
+        assert(back.find("\"name\":\"Done\",\"focus\"")==std::string::npos);
+        assert(back.find("\"focus\":false")==std::string::npos);
+        for(const char* bad:{"1","\"true\"","null"}){
+            const std::string damaged=inject(base,"\"name\":\"Keep\"",(std::string(",\"focus\":")+bad).c_str());
+            State tmp;if(parse(damaged,tmp)!=SaveCheck::Damaged){std::fprintf(stderr,"focus value %s accepted\n",bad);assert(0);}
+        }
+        // Binary wire layout is unchanged; focus is not stored and decodes as 0.
+        State wired;wired.taskCount=2;
+        wired.tasks[0].status=TaskStatus::Doing;std::strcpy(wired.tasks[0].name.data(),"Fix the bike");wired.tasks[0].focus=true;
+        wired.tasks[1].status=TaskStatus::Todo;std::strcpy(wired.tasks[1].name.data(),"Write docs");
+        Blob wire=lps_test::encodeLegacyV6(wired);
+        assert(wire.size==WireSize);
+        State decoded;assert(decode(wire.bytes.data(),wire.size,decoded)&&decoded.taskCount==wired.taskCount);
+        assert(!std::strcmp(decoded.tasks[0].name.data(),wired.tasks[0].name.data())&&decoded.tasks[0].status==wired.tasks[0].status&&!decoded.tasks[0].focus);
+        assert(!std::strcmp(decoded.tasks[1].name.data(),"Write docs")&&!decoded.tasks[1].focus);
+        // A fully populated state with focus on non-DONE cards round-trips; DONE stays unfocused.
+        State focused=lps_test::fullState();
+        for(unsigned i=0;i<focused.taskCount;++i)focused.tasks[i].focus=(focused.tasks[i].status!=TaskStatus::Done)&&(i%2==0);
+        JsonStore stored=lps_test::encodeJson(focused);State again;
+        assert(parse(stored.text(),again)==SaveCheck::Valid&&lps_test::sameState(focused,again));
+        const std::string focusedJson=stored.text();
+        assert(focusedJson.find("\"name\":\"Task 00 {json} [x] x\",\"focus\":true")!=std::string::npos);
+        assert(focusedJson.find("\"name\":\"Task 02 {json} [x] x\"}")!=std::string::npos);
+        assert(focusedJson.find("\"name\":\"Task 02 {json} [x] x\",\"focus\"")==std::string::npos);
+        assert(json.find("\"focus\"")==std::string::npos); // unfocused fullState matches the v1.15 shape
+    }
+    std::puts("PASS: JSON round trip, oldest-first history, truncation and bit-flip rejection, crc32 mismatch, unknown keys, activity names, escaping/UTF-8, field limits, schema versions, I/O errors and Kanban focus.");
 }
