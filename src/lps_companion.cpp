@@ -187,6 +187,46 @@ bool parseDate(const char* text,Date& d){
     d.year=uint16_t((text[0]-'0')*1000+(text[1]-'0')*100+(text[2]-'0')*10+text[3]-'0');
     d.month=uint8_t((text[5]-'0')*10+text[6]-'0');d.day=uint8_t((text[8]-'0')*10+text[9]-'0');return validDate(d);
 }
+unsigned weekday(Date d){
+    // Gregorian calendar, 0=Sunday. Dates in LPS are restricted to 2000-2099.
+    static constexpr unsigned offsets[]={0,3,2,5,0,3,5,1,4,6,2,4};
+    unsigned y=d.year;if(d.month<3)--y;
+    return (y+y/4-y/100+y/400+offsets[d.month-1]+d.day)%7;
+}
+unsigned isoWeek(Date d){
+    // ISO 8601: weeks start on Monday; week 1 contains the year's first Thursday.
+    auto jan1=[](unsigned y){unsigned p=y-1;return (p+1+p/4-p/100+p/400)%7;}; // 0=Sunday
+    auto weeks=[&](unsigned y){unsigned j=jan1(y);return j==4||(leap(uint16_t(y))&&j==3)?53u:52u;};
+    unsigned ordinal=d.day;for(unsigned m=1;m<d.month;++m)ordinal+=daysInMonth(d.year,uint8_t(m));
+    const unsigned iso=(weekday(d)+6)%7+1;const int week=(int(ordinal)-int(iso)+10)/7;
+    if(week<1)return weeks(d.year-1u);
+    return unsigned(week)>weeks(d.year)?1u:unsigned(week);
+}
+// LPSC116-FEAT02-CHG03: Daily Review line 1.
+// EN: "Monday 16 November 2026 - Week 47"
+// FR: "Lundi 16 novembre 2026 - Semaine 47" (capitalised weekday, lowercase month).
+// Day and week have no leading zero; the ISO year is omitted even when the
+// week belongs to the previous or next calendar year.
+// Longest FR: "Mercredi 30 septembre 2026 - Semaine 40" = 39 cells, which
+// fits the PicoCalc's 40 columns with one cell to spare.
+void fullDateText(Date d,Language language,char* out,std::size_t n){
+    static constexpr const char* enDays[]={"Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"};
+    static constexpr const char* frDays[]={"Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"};
+    static constexpr const char* enMonths[]={"January","February","March","April","May","June","July","August","September","October","November","December"};
+    static constexpr const char* frMonths[]={"Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"};
+    const bool fr=language==Language::French;const unsigned w=weekday(d);
+    const char* month=fr?frMonths[d.month-1]:enMonths[d.month-1];
+    char lowered[16];
+    if(fr){
+        unsigned i=0;
+        while(month[i]&&i<sizeof(lowered)-1){lowered[i]=month[i];++i;}
+        lowered[i]=0;
+        if(lowered[0]>='A'&&lowered[0]<='Z')lowered[0]=char(lowered[0]+('a'-'A'));
+        month=lowered;
+    }
+    std::snprintf(out,n,fr?"%s %u %s %u - Semaine %u":"%s %u %s %u - Week %u",
+        fr?frDays[w]:enDays[w],unsigned(d.day),month,unsigned(d.year),isoWeek(d));
+}
 struct Day {
     Date date=DefaultDate; // Old-format decoder explicitly clears this.
     uint32_t number=1;
@@ -1206,21 +1246,8 @@ class App {
     enum class RosaryPart { Sign, Creed, OpeningOurFather, OpeningHail, Glory, Mystery, Scripture, Meditation, Silence,
                             OurFather, Hail, Fatima, HailHolyQueen, Closing, EndSign };
     struct RosaryView { RosaryPart part=RosaryPart::Sign;unsigned decade=0,count=0; };
-    static unsigned weekday(Date d){
-        // Gregorian calendar, 0=Sunday. Dates in LPS are restricted to 2000-2099.
-        static constexpr unsigned offsets[]={0,3,2,5,0,3,5,1,4,6,2,4};
-        unsigned y=d.year;if(d.month<3)--y;
-        return (y+y/4-y/100+y/400+offsets[d.month-1]+d.day)%7;
-    }
-    static unsigned isoWeek(Date d){
-        // ISO 8601: weeks start on Monday; week 1 contains the year's first Thursday.
-        auto jan1=[](unsigned y){unsigned p=y-1;return (p+1+p/4-p/100+p/400)%7;}; // 0=Sunday
-        auto weeks=[&](unsigned y){unsigned j=jan1(y);return j==4||(leap(uint16_t(y))&&j==3)?53u:52u;};
-        unsigned ordinal=d.day;for(unsigned m=1;m<d.month;++m)ordinal+=daysInMonth(d.year,uint8_t(m));
-        const unsigned iso=(weekday(d)+6)%7+1;const int week=(int(ordinal)-int(iso)+10)/7;
-        if(week<1)return weeks(d.year-1u);
-        return unsigned(week)>weeks(d.year)?1u:unsigned(week);
-    }
+    static unsigned weekday(Date d){return lps::weekday(d);}
+    static unsigned isoWeek(Date d){return lps::isoWeek(d);}
     void longDateText(Date d,char* out,std::size_t n)const{
         static constexpr const char* enDays[]={"Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"};
         static constexpr const char* frDays[]={"Dimanche","Lundi","Mardi","Mercredi","Jeudi","Vendredi","Samedi"};
@@ -1839,7 +1866,14 @@ public:
         hw.setPalette(displayedPalette());hw.clear();char b[128];const Day& day=viewedDay();char date[11]{};
         if(validDate(day.date))dateText(day.date,date,sizeof date);else std::snprintf(date,sizeof date,"%s%lu",tr("D","J"),static_cast<unsigned long>(day.number));
         std::snprintf(b,sizeof b,"LPS COMPANION v1.15    %s",date);line(0,b,true);
-        if(validDate(day.date)){longDateText(day.date,b,sizeof b);line(1,b);}
+        if(validDate(day.date)){
+            // LPSC116-FEAT02-CHG03: Daily Review uses the full date with " - Week n"
+            // / " - Semaine n" and a lowercase French month, including when the
+            // viewed day is an archived day (same helper, viewed date).
+            if(screen==Screen::DailyReview)fullDateText(day.date,state.language,b,sizeof b);
+            else longDateText(day.date,b,sizeof b);
+            line(1,b);
+        }
         if(daysBack)line(2,tr("ARCHIVED DAY - READ ONLY","JOUR ARCHIVÉ - LECTURE SEULE"));
         if(screen==Screen::Home){
             line(3,daysBack?tr("CLOSED DAY","JOUR TERMINÉ"):tr("TODAY","AUJOURD'HUI"));
