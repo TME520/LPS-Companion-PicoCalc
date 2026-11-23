@@ -118,7 +118,11 @@ int main(){
       app.key(Escape);assert(dd.has(4,fr?"2/22 activités":"2/22 activities"));
       // Reboot from the JSON save keeps the new activities; the review lists them.
       App again(dd);again.start();assert(again.data().today.flags==app.data().today.flags);
-      again.key('5');{auto any=[&](const char* t){for(int r=0;r<20;++r)if(dd.has(r,t))return true;return false;};assert(any(fr?"  Amis":"  Friends")&&any(fr?"  Méditation":"  Meditation")&&any(fr?"ACTIVITÉS (2)":"ACTIVITIES (2)"));}again.key(Escape);
+      // LPSC116-FEAT02-CHG04: activities sit at the bottom of the new list (no count in the title).
+      again.key('5');again.key(Right);again.key(Down);again.key(Down);
+      {auto any=[&](const char* t){for(int r=0;r<20;++r)if(dd.has(r,t))return true;return false;};
+       assert(any(fr?"  Amis":"  Friends")&&any(fr?"  Méditation":"  Meditation")&&any(fr?"ACTIVITÉS":"ACTIVITIES")&&!any(fr?"ACTIVITÉS (2)":"ACTIVITIES (2)"));}
+      again.key(Escape);
       // Close the day: Finish counts 2; the archived day shows Méditation ticked on page 3.
       again.key('8');assert(dd.has(6,fr?"Activités : 2":"Activities: 2"));again.key(Enter);again.key(Enter);
       assert(again.data().today.flags==0&&again.data().history[0].flags==app.data().today.flags);

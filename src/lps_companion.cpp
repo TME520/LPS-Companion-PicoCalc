@@ -288,6 +288,15 @@ void toggleMealCard(MealDeckState& d,unsigned card){
         d.order[--d.playedCount]=0;
     }else if(d.playedCount<MealCardCount)d.order[d.playedCount++]=uint8_t(card);
 }
+unsigned mealRowTotal(unsigned row){return unsigned(MealRowFirst[row+1]-MealRowFirst[row]);}
+unsigned mealRowPlayed(const MealDeckState& d,unsigned row){
+    unsigned n=0;for(unsigned i=0;i<d.playedCount;++i)if(d.order[i]<MealCardCount&&unsigned(MealDeck[d.order[i]].row)==row)++n;return n;
+}
+int mealFirstUnplayed(const MealDeckState& d,MealRow row){
+    const unsigned first=MealRowFirst[unsigned(row)],last=MealRowFirst[unsigned(row)+1];
+    for(unsigned i=first;i<last;++i)if(!mealPlayPosition(d,i))return int(i);
+    return -1;
+}
 struct State {
     Language language=Language::English;
     Palette palette=Palette::Green;
@@ -1105,6 +1114,127 @@ void drawMealCard(Canvas& c,const MealCardView& v){
     for(int j=0;j<16;++j){const int notch=5-(j<8?7-j:j-8)*5/7;if(notch>0){c.fill(rx,ry+j,notch,1,body);c.fill(rx+rw-notch,ry+j,notch,1,body);}}
     centredLabel(c,ry,portion,ink,ribbon);
 }
+// LPSC116-FEAT02-CHG04: Daily Review is a list of lines, drawn from
+// reviewOffset. CHG05 will widen the window and add markers; v1.15 scrolling
+// (one line / page of ReviewPage, no wrap) stays for now. The "Prochain :"
+// label sits alone, then "Food (Drink)" on the next line (user decision
+// 23 Nov 2026). CHG07c: a blank line before the meal-planner title.
+constexpr unsigned ReviewCapacity=80, ReviewPage=8;
+enum class ReviewKind : uint8_t {
+    Date, Archive, Blank, Title, Weight, Kanban, Card, NoFocus,
+    Meals, Count, NextLabel, Next, Act, Activity, Stored, NoAct
+};
+struct ReviewItem { ReviewKind kind; uint8_t arg; };
+bool reviewCentered(ReviewKind k){
+    return k==ReviewKind::Date||k==ReviewKind::Archive||k==ReviewKind::Title
+        ||k==ReviewKind::Kanban||k==ReviewKind::Meals||k==ReviewKind::Act;
+}
+unsigned buildDailyReview(ReviewItem* out,unsigned cap,const State& s,const Day& day,bool archived){
+    unsigned n=0;
+    auto add=[&](ReviewKind k,uint8_t arg=0){if(n<cap){out[n].kind=k;out[n].arg=arg;++n;}};
+    add(ReviewKind::Date);
+    if(archived)add(ReviewKind::Archive);
+    add(ReviewKind::Blank);
+    add(ReviewKind::Title);
+    add(ReviewKind::Weight);
+    add(ReviewKind::Blank);
+    if(!archived){
+        add(ReviewKind::Kanban);
+        unsigned focused=0;
+        for(unsigned i=0;i<s.taskCount;++i)if(s.tasks[i].focus&&s.tasks[i].status!=TaskStatus::Done){
+            add(ReviewKind::Card,uint8_t(i));++focused;
+        }
+        if(!focused)add(ReviewKind::NoFocus);
+        add(ReviewKind::Blank); // LPS116-CHG07c: blank before MEAL PLANNER
+    }
+    add(ReviewKind::Meals);
+    add(ReviewKind::Count,uint8_t(MealRow::Drinks));
+    add(ReviewKind::Count,uint8_t(MealRow::Food));
+    add(ReviewKind::Count,uint8_t(MealRow::Blank));
+    add(ReviewKind::NextLabel);
+    add(ReviewKind::Next);
+    add(ReviewKind::Blank);
+    add(ReviewKind::Act);
+    unsigned got=0;
+    if(archived&&day.namedCount){
+        for(unsigned i=0;i<day.namedCount;++i){
+            const unsigned k=indexByStoredName(s,day.names[i].data());
+            if(k<s.activityCount)add(ReviewKind::Activity,uint8_t(k));
+            else add(ReviewKind::Stored,uint8_t(i));
+            ++got;
+        }
+    }else{
+        for(unsigned i=0;i<s.activityCount;++i)if(day.flags&(ActivityFlags(1u)<<i)){add(ReviewKind::Activity,uint8_t(i));++got;}
+    }
+    if(!got)add(ReviewKind::NoAct);
+    return n;
+}
+void formatDailyReviewLine(const State& s,const Day& day,bool archived,const ReviewItem& it,char* out,std::size_t size){
+    const bool fr=s.language==Language::French;
+    auto tr=[&](const char* en,const char* french){return fr?french:en;};
+    out[0]=0;
+    char weight[16],food[48],drink[48];
+    switch(it.kind){
+    case ReviewKind::Date:
+        if(validDate(day.date))fullDateText(day.date,s.language,out,size);
+        break;
+    case ReviewKind::Archive:
+        std::snprintf(out,size,"%s",tr("ARCHIVED DAY - READ ONLY","JOUR ARCHIVÉ - LECTURE SEULE"));
+        break;
+    case ReviewKind::Blank: break;
+    case ReviewKind::Title:
+        std::snprintf(out,size,"%s",tr("DAILY REVIEW","REVUE JOURNALIÈRE"));
+        break;
+    case ReviewKind::Weight:
+        weightText(day.actual,weight,sizeof weight);
+        std::snprintf(out,size,tr("Actual weight: %s Kg","Poids effectif : %s Kg"),weight);
+        break;
+    case ReviewKind::Kanban:
+        std::snprintf(out,size,"%s","KANBAN");
+        break;
+    case ReviewKind::Card:
+        std::snprintf(out,size,"  %s",s.tasks[it.arg].name.data());
+        break;
+    case ReviewKind::NoFocus:
+        std::snprintf(out,size,"%s",tr("No focused card","Aucune carte en focus"));
+        break;
+    case ReviewKind::Meals:
+        std::snprintf(out,size,"%s",tr("MEAL PLANNER","PLANIFICATEUR DE REPAS"));
+        break;
+    case ReviewKind::Count:
+        if(archived)std::snprintf(out,size,fr?"%s : --":"%s: --",mealRowName(MealRow(it.arg),s.language));
+        else std::snprintf(out,size,fr?"%s : %u/%u":"%s: %u/%u",mealRowName(MealRow(it.arg),s.language),
+            mealRowPlayed(s.meals,it.arg),mealRowTotal(it.arg));
+        break;
+    case ReviewKind::NextLabel:
+        std::snprintf(out,size,"%s",tr("Next:","Prochain :"));
+        break;
+    case ReviewKind::Next:
+        if(archived){std::snprintf(out,size,"%s","--");break;}
+        {
+            const int fi=mealFirstUnplayed(s.meals,MealRow::Food),di=mealFirstUnplayed(s.meals,MealRow::Drinks);
+            if(fi<0)std::snprintf(food,sizeof food,"%s","--");
+            else std::snprintf(food,sizeof food,"%s",fr?MealDeck[unsigned(fi)].fr:MealDeck[unsigned(fi)].en);
+            if(di<0)std::snprintf(drink,sizeof drink,"%s","--");
+            else std::snprintf(drink,sizeof drink,"%s",fr?MealDeck[unsigned(di)].fr:MealDeck[unsigned(di)].en);
+            std::snprintf(out,size,"%s (%s)",food,drink);
+        }
+        break;
+    case ReviewKind::Act:
+        std::snprintf(out,size,"%s",tr("ACTIVITIES","ACTIVITÉS"));
+        break;
+    case ReviewKind::Activity:
+        std::snprintf(out,size,"  %s",displayName(s.activities[it.arg],s.language));
+        break;
+    case ReviewKind::Stored:
+        std::snprintf(out,size,"  %s",day.names[it.arg].data());
+        break;
+    case ReviewKind::NoAct:
+        std::snprintf(out,size,"%s",tr("No activity","Aucune activité"));
+        break;
+    }
+}
+
 enum class Screen { TimerSelect, TimerRunning, TimerComplete, Home, ReminderPopup, Reminders, ReminderEdit, Date, Activities, ActivityEdit, Weight, Kanban, TaskEdit, DailyReview, Finish, Reward, Config, Language, Colors,
                     RosaryMode, RosarySet, RosaryDecade, RosaryPrayer, RosaryComplete, MealPlanner, HomeEntries };
 // Home menu entries 0..8, in order (LPS-115-CHG01: Config is opened with TAB).
@@ -1199,7 +1329,7 @@ class App {
         screen=r.screen;selection=r.selection;message.fill(0);confirmingDelete=false;
         if(screen==Screen::Home&&!daysBack)selection=homePositionOf(r.homeEntry);
         if(screen==Screen::RosaryPrayer){const unsigned pages=(displayCells(rosaryText(rosaryView(rosaryStep)))+359)/360;if(pages&&rosaryPage>=pages)rosaryPage=pages-1;}
-        if(screen==Screen::DailyReview){const unsigned maximum=reviewRows()>8?reviewRows()-8:0;if(reviewOffset>maximum)reviewOffset=maximum;}
+        if(screen==Screen::DailyReview){const unsigned maximum=reviewRows()>ReviewPage?reviewRows()-ReviewPage:0;if(reviewOffset>maximum)reviewOffset=maximum;}
     }
     void openConfig(){
         configReturn=here();
@@ -1433,26 +1563,20 @@ class App {
         return state.language==Language::French?fr[unsigned(status)]:en[unsigned(status)];
     }
     unsigned reviewRows()const{
-        return 3+count(state.today.flags)+tasksIn(TaskStatus::Todo)+tasksIn(TaskStatus::Doing)
-            +(count(state.today.flags)==0)+(tasksIn(TaskStatus::Todo)==0)+(tasksIn(TaskStatus::Doing)==0);
+        ReviewItem items[ReviewCapacity];
+        return buildDailyReview(items,ReviewCapacity,state,viewedDay(),daysBack!=0);
     }
     void reviewLine(unsigned index,char* out,std::size_t size)const{
-        const unsigned activities=count(state.today.flags);
-        if(index==0){std::snprintf(out,size,tr("ACTIVITIES (%u)","ACTIVITÉS (%u)"),activities);return;}
-        --index;
-        for(unsigned i=0;i<state.activityCount;++i)if(state.today.flags&(ActivityFlags(1u)<<i)){
-            if(index--==0){std::snprintf(out,size,"  %s",displayName(state.activities[i],state.language));return;}
-        }
-        if(!activities){if(index--==0){std::snprintf(out,size,"  %s",tr("None selected","Aucune sélectionnée"));return;}}
-        for(TaskStatus status:{TaskStatus::Todo,TaskStatus::Doing}){
-            const unsigned n=tasksIn(status);
-            if(index--==0){std::snprintf(out,size,"%s (%u)",taskStatusName(status),n);return;}
-            for(unsigned i=0;i<state.taskCount;++i)if(state.tasks[i].status==status){
-                if(index--==0){std::snprintf(out,size,"  %s",state.tasks[i].name.data());return;}
-            }
-            if(!n&&index--==0){std::snprintf(out,size,"  %s",tr("None","Aucune"));return;}
-        }
-        out[0]=0;
+        ReviewItem items[ReviewCapacity];
+        const unsigned n=buildDailyReview(items,ReviewCapacity,state,viewedDay(),daysBack!=0);
+        if(index>=n){out[0]=0;return;}
+        formatDailyReviewLine(state,viewedDay(),daysBack!=0,items[index],out,size);
+    }
+    // Clip to 40 cells, like other PicoCalc screens / the LCD adapter.
+    void reviewPut(int row,const char* text,bool centre){
+        char padded[128],clipped[80];
+        if(centre){const unsigned w=displayWidth(text);if(w<40){std::snprintf(padded,sizeof padded,"%*s%s",int((40-w)/2),"",text);text=padded;}}
+        cellSlice(text,0,40,clipped,sizeof clipped);line(row,clipped);
     }
     static uint32_t dayIndex(Date d){
         uint32_t n=0;for(unsigned y=2000;y<d.year;++y)n+=leap(uint16_t(y))?366:365;
@@ -1552,6 +1676,9 @@ public:
     }
     const State& data()const{return state;}
     Screen currentScreen()const{return screen;}
+    unsigned reviewLineCount()const{return reviewRows();}
+    void reviewLineAt(unsigned index,char* out,std::size_t size)const{reviewLine(index,out,size);}
+    unsigned reviewScroll()const{return reviewOffset;}
     const Day& viewedDay()const{
         // next is the slot AFTER the most recently closed day. Never index by
         // day number: physical slots wrap every 31 closures.
@@ -1769,11 +1896,11 @@ public:
                 }
             }else edit(taskDraft,k);
         }else if(screen==Screen::DailyReview){
-            const unsigned maximum=reviewRows()>8?reviewRows()-8:0;
+            const unsigned maximum=reviewRows()>ReviewPage?reviewRows()-ReviewPage:0;
             if(k==Down&&reviewOffset<maximum)++reviewOffset;
             else if(k==Up&&reviewOffset)--reviewOffset;
-            else if(k==Right)reviewOffset=(reviewOffset+8<maximum)?reviewOffset+8:maximum;
-            else if(k==Left)reviewOffset=reviewOffset>8?reviewOffset-8:0;
+            else if(k==Right)reviewOffset=(reviewOffset+ReviewPage<maximum)?reviewOffset+ReviewPage:maximum;
+            else if(k==Left)reviewOffset=reviewOffset>ReviewPage?reviewOffset-ReviewPage:0;
         }else if(screen==Screen::Config){
             if(k==Up)selection=(selection+3)%4;
             if(k==Down)selection=(selection+1)%4;
@@ -1866,15 +1993,13 @@ public:
         hw.setPalette(displayedPalette());hw.clear();char b[128];const Day& day=viewedDay();char date[11]{};
         if(validDate(day.date))dateText(day.date,date,sizeof date);else std::snprintf(date,sizeof date,"%s%lu",tr("D","J"),static_cast<unsigned long>(day.number));
         std::snprintf(b,sizeof b,"LPS COMPANION v1.15    %s",date);line(0,b,true);
-        if(validDate(day.date)){
-            // LPSC116-FEAT02-CHG03: Daily Review uses the full date with " - Week n"
-            // / " - Semaine n" and a lowercase French month, including when the
-            // viewed day is an archived day (same helper, viewed date).
-            if(screen==Screen::DailyReview)fullDateText(day.date,state.language,b,sizeof b);
-            else longDateText(day.date,b,sizeof b);
-            line(1,b);
+        // LPSC116-FEAT02-CHG04: the Daily Review owns lines 1+ (full date and
+        // the archive banner live in the review list). Other screens keep the
+        // common long date and archived-day banner.
+        if(screen!=Screen::DailyReview){
+            if(validDate(day.date)){longDateText(day.date,b,sizeof b);line(1,b);}
+            if(daysBack)line(2,tr("ARCHIVED DAY - READ ONLY","JOUR ARCHIVÉ - LECTURE SEULE"));
         }
-        if(daysBack)line(2,tr("ARCHIVED DAY - READ ONLY","JOUR ARCHIVÉ - LECTURE SEULE"));
         if(screen==Screen::Home){
             line(3,daysBack?tr("CLOSED DAY","JOUR TERMINÉ"):tr("TODAY","AUJOURD'HUI"));
             const unsigned marked=daysBack&&day.namedCount?day.namedCount:count(day.flags);
@@ -1979,12 +2104,13 @@ public:
             line(13,tr("Enter: save task","Entrée : enregistrer la tâche"));
             line(15,tr("Backspace: erase  Esc: cancel","Retour: effacer  Échap: annuler"));
         }else if(screen==Screen::DailyReview){
-            std::snprintf(b,sizeof b,"%s  %s",tr("DAILY REVIEW","REVUE JOURNALIÈRE"),date);line(3,b);
-            char weight[20];weightText(state.today.actual,weight,sizeof weight);
-            std::snprintf(b,sizeof b,tr("Actual weight: %s kg","Poids effectif : %s kg"),weight);line(4,b);
-            const unsigned total=reviewRows();
-            for(unsigned i=0;i<8&&reviewOffset+i<total;++i){reviewLine(reviewOffset+i,b,sizeof b);line(7+int(i),b);}
-            std::snprintf(b,sizeof b,tr("Up/Down scroll  %u-%u/%u  Esc back","Haut/Bas défiler  %u-%u/%u  Échap retour"),reviewOffset+1,(reviewOffset+8<total?reviewOffset+8:total),total);line(16,b);
+            ReviewItem items[ReviewCapacity];
+            const unsigned total=buildDailyReview(items,ReviewCapacity,state,day,daysBack!=0);
+            for(unsigned i=0;i<ReviewPage&&reviewOffset+i<total;++i){
+                formatDailyReviewLine(state,day,daysBack!=0,items[reviewOffset+i],b,sizeof b);
+                reviewPut(1+int(i),b,reviewCentered(items[reviewOffset+i].kind));
+            }
+            std::snprintf(b,sizeof b,tr("Up/Down scroll  %u-%u/%u  Esc back","Haut/Bas défiler  %u-%u/%u  Échap retour"),reviewOffset+1,(reviewOffset+ReviewPage<total?reviewOffset+ReviewPage:total),total);line(16,b);
         }else if(screen==Screen::Config){
             line(3,tr("CONFIGURATION","CONFIGURATION"));
             std::snprintf(b,sizeof b,"%s: %s",tr("1  Language","1  Langue"),pendingLanguage==Language::English?"English":"Français");line(6,b,selection==0);
