@@ -254,7 +254,7 @@ int main(){
         assert(d.has("Wednesday 23 September 2026 (week 39)"));
         a.key('5');assert(a.currentScreen()==Screen::DailyReview);
         assert(a.reviewLineCount()==19&&a.reviewScroll()==0);
-        assert(d.has(0,"v1.15    2026-09-23"));
+        assert(d.has(0,"v1.16    2026-09-23"));
         assert(d.has(1,"Wednesday 23 September 2026 - Week 39"));
         assert(!d.has("(week 39)"));
         assert(d.has("DAILY REVIEW")&&d.has("Actual weight: 117.700 Kg"));

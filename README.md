@@ -1,4 +1,4 @@
-# LPS-Companion v1.15
+# LPS-Companion v1.16
 
 **A pocket-sized daily activity tracker for the PicoCalc.**
 
@@ -11,7 +11,25 @@ LPS-Companion helps you record daily activities and compare your expected and ac
 
 It runs offline on the original **RP2040 PicoCalc**, with a **320 × 320 display** and physical keyboard. Your entries are saved to the SD card.
 
-**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.15 opens Config with Tab and the Meal Planner with Space from any screen, and lets you choose which home menu entries are shown (saved with your settings); it needs device testing. See `BUILD-VALIDATION.md` for host checks and physical-test limits.
+**Status:** v1.2 was confirmed working on the user's PicoCalc. v1.16 adds Kanban focus and a rewritten Daily Review (full date, new layout, scrolling, archived-day review); it needs device testing. See `BUILD-VALIDATION.md` for host checks, PicoCalc vs DOS notes, and physical-test limits.
+
+## Changes in v1.16
+
+- **Title** (LPSC116-CHG07): the title bar reads `LPS COMPANION v1.16`.
+- **Kanban focus** (LPSC116-FEAT01-CHG01/CHG02): **F** toggles focus on the selected card. A focused card shows a `*` before its name. Moving a card to DONE clears focus; **F** on a DONE card does nothing. In the JSON save a focused card is written as `"focus":true` after the name; an unfocused card stays in the v1.15 form, so a save with no focus is byte-identical to v1.15. Focus is not stored in archived days, not in the old `.BIN` wire, and not in the ICS or CSV exports. The schema version stays 2.
+- **Daily Review layout** (LPSC116-FEAT02-CHG03/CHG04): the first line is the full date with the ISO week in the language in use, for example **Monday 16 November 2026 - Week 47** / **Lundi 16 novembre 2026 - Semaine 47** (weekday capitalised, French month in lowercase, no leading zero). Then **DAILY REVIEW** / **REVUE JOURNALIÈRE**, the day's actual weight as **Actual weight: 81.200 Kg** / **Poids effectif : 81.200 Kg** (or **-- Kg** if none), **KANBAN** and each focused card on its own line (**No focused card** / **Aucune carte en focus** if none), a blank line, then **MEAL PLANNER** / **PLANIFICATEUR DE REPAS** with **Drinks: 3/6**, **Food: 4/8**, **Blank: 1/2** (French puts a space before the colon) and **Next:** / **Prochain :** alone on one line, then the first unplayed Food card and the first unplayed Drink in parentheses on the next line, or **--** / **(--)** when a row is exhausted — then **ACTIVITIES** / **ACTIVITÉS** and one ticked activity per line (**No activity** / **Aucune activité** if none).
+- **Scrolling** (LPSC116-FEAT02-CHG05): a page of 16 lines on rows 1–16. **Up/Down** move one line and do not wrap; **Left/Right** (as in v1.15) and **PgUp** / **PgDn** (Shift+Up / Shift+Down, official PicoCalc codes `0xD6` / `0xD7`) move a page; **Home** / **End** (Shift+Tab / Shift+Del, `0xD2` / `0xD5`) jump to the ends. Drawn up/down arrow glyphs at column 39 mark that more text sits above or below (the 8×12 font has no CP437 arrows). On the review only, the range footer replaces the generic help on line 19: **Up/Down: scroll  1-16/19  Esc back** / **Haut/Bas : défiler 1-16/17 Échap retour** (French uses single spaces around the range so the longest form fits in 40 columns); a short form when the list fits on one page. Opening the review starts at the top; Tab and Space overlays come back to the same place, with the offset clamped if the list has shrunk.
+- **Archived-day review** (LPSC116-FEAT02-CHG06): the archived-day menu is **1 Activities, 2 Weight tracker, 3 Daily review** / **1 Activités, 2 Suivi du poids, 3 Revue journalière**. That review shows the archived day's full date, the archive banner, that day's weight, no KANBAN section, meal lines **--** (including **Next:** then **--** on the next line), and the frozen activity names. Esc returns to the archive menu with the cursor on entry 3. Tab and Space stay on the review and show **Archived day: read-only** / **Jour archivé : lecture seule**. A per-day meal snapshot is postponed, so the meal lines of an archived day are always **--**, even if cards were played before the day was closed.
+
+### PicoCalc and the MS-DOS v1.16 port
+
+The two programs share JSON, ICS and CSV files. These PicoCalc choices differ from [DOS v1.16](https://github.com/TME520/Book8088-slopware):
+
+- **Next line:** **Next:** / **Prochain :** sits alone, then the food (drink) pair or `--` on the next line. DOS keeps a single line (`Next: Light Cheese Wrap (Tea)` / `Prochain : --`).
+- **20-row screen:** the review page is 16 lines on rows 1–16; status and messages sit on row 17 and the range footer on row 19. DOS uses 21 content rows, the footer on row 22 and the message on row 23. The archive menu is on rows 6–8 here, 7–9 on DOS.
+- **French footer:** single spaces around the range so the longest form (`Haut/Bas : défiler 65-80/80 Échap retour`) is 40 columns. The DOS wording with double spaces would overflow.
+- **Shift shortcuts:** Home, End, PgUp and PgDn are Shift+Tab, Shift+Del, Shift+Up and Shift+Down (`0xD2`, `0xD5`, `0xD6`, `0xD7`). Unshifted Tab, Del, Up and Down keep their usual meaning. DOS has dedicated keys.
+- **No fast-scroll:** DOS v1.16 CHG07b is not ported. Up/Down always move one line.
 
 ## Changes in v1.15
 
@@ -252,7 +270,7 @@ Press **Tab** on today's home screen to open Config, where you select the langua
 | `2` | Weight tracker | Suivi du poids | Enter expected and actual weight. |
 | `3` | Kanban | Kanban | Manage persistent user-defined tasks. |
 | `4` | Christian Rosary | Rosaire chrétien | Start a guided Rosary session. |
-| `5` | Daily review | Revue journalière | Show today’s date, selected activities, actual weight, and TODO/DOING tasks. |
+| `5` | Daily review | Revue journalière | Full date, actual weight, focused Kanban cards, meal counts and ticked activities. |
 | `6` | Reminders | Rappels | Create, edit, and delete up to three reminders. |
 | `7` | Timer | Minuteur | Start a 5, 30 or 60-minute countdown. |
 | `8` | Close the day | Terminer le jour | Save and close today, then advance. |
@@ -260,7 +278,7 @@ Press **Tab** on today's home screen to open Config, where you select the langua
 
 Entries can be hidden in Config → 3 Activities (v1.15); the menu then shows the remaining ones numbered 0..n without gaps. Use **Up/Down** to select an item, **Enter** to open it, and **Esc** to return to the main menu.
 
-In read-only history, only items 1–3 are available. Press Right on the home screen to return to today before opening Date or Config.
+In read-only history, only items **1 Activities, 2 Weight tracker, 3 Daily review** are available. Press Right on the home screen to return to today before opening Date or Config.
 
 ### Reminders / Rappels (v1.10)
 
@@ -270,7 +288,11 @@ Every startup shows **one screen containing all active reminders, one per line**
 
 ### Daily review / Revue journalière
 
-Choose **6** to see today’s date and actual weight, followed by the selected activities and all global Kanban TODO / DOING tasks. Finished tasks are excluded. Use Up/Down to scroll one line, Left/Right to move eight lines, and Esc to return. Unrecorded weight and empty lists are shown explicitly. The review does not change saved data.
+Choose **5** to open today’s Daily Review: the full date with the ISO week, **DAILY REVIEW** / **REVUE JOURNALIÈRE**, the day’s actual weight, the focused Kanban cards (or **No focused card** / **Aucune carte en focus**), the Meal Planner counts and the **Next:** / **Prochain :** pair on the following line, then the ticked activities. Unrecorded weight and empty lists are shown explicitly.
+
+A page shows 16 lines (rows 1–16). **Up/Down** move one line and do not wrap; **Left/Right** and **PgUp** / **PgDn** (Shift+Up / Shift+Down) move a page; **Home** / **End** (Shift+Tab / Shift+Del) jump to the ends. Arrows at column 39 mark that more text sits above or below. The range footer on line 19 replaces the generic help while this screen is open. Esc returns to the home menu. Tab and Space still open Config and the Meal Planner on today, and come back to the same scroll position.
+
+On an archived day, choose **3** for a read-only review of that day (no KANBAN section, meal lines `--`). Esc returns to the archive menu with the cursor on entry 3. Tab and Space stay on the review and show **Archived day: read-only** / **Jour archivé : lecture seule**. The review does not change saved data.
 
 ### Christian Rosary
 
@@ -374,6 +396,7 @@ Kanban always opens on **TODO / À FAIRE**. The screen shows the active column, 
 | `F3` | Move the selected task to DONE / FINI. |
 | `F4` | Move the selected task up, wrapping from top to bottom. |
 | `F5` | Move the selected task down, wrapping from bottom to top. |
+| `F` | Toggle focus on the selected card (a `*` before the name). Moving a card to DONE clears focus; **F** on a DONE card does nothing. |
 | Esc | Return to the main menu, or cancel name editing. |
 
 New names and every Kanban operation are saved immediately. If a save fails, the previous board remains intact.
@@ -443,7 +466,7 @@ Since v1.13 each file is a single JSON object (schema `version` 2 since CHG07; v
 "crc32":"825db3bc"}
 ```
 
-`generation` increases with every save; the higher valid one wins. `crc32` is the standard CRC-32 (the same as Python's `zlib.crc32`) of every byte before `"crc32"`, and must be the last member. History is stored oldest first. Weights are integer grams, or `null` when not recorded. The top-level `activities` array is the editable list (id plus French and English names). Each day still stores only the names that were ticked that day, so renaming or deleting an activity later does not rewrite past days. Since v1.14 `state` may end with `"meals":{"played":[…]}` and since v1.15 with `"homeHidden":[…]` (hidden home menu entries by id); both are optional. Unknown keys are ignored, so later versions can add fields.
+`generation` increases with every save; the higher valid one wins. `crc32` is the standard CRC-32 (the same as Python's `zlib.crc32`) of every byte before `"crc32"`, and must be the last member. History is stored oldest first. Weights are integer grams, or `null` when not recorded. The top-level `activities` array is the editable list (id plus French and English names). Each day still stores only the names that were ticked that day, so renaming or deleting an activity later does not rewrite past days. Since v1.14 `state` may end with `"meals":{"played":[…]}` and since v1.15 with `"homeHidden":[…]` (hidden home menu entries by id); both are optional. Since v1.16 a focused Kanban card is written `"focus":true` after the name; cards without focus keep the v1.15 shape, so a save with no focus is byte-identical to v1.15. Unknown keys are ignored, so later versions can add fields.
 
 Day navigation uses the history from that loaded snapshot in RAM. It indexes backwards from the history ring's next-write position, so the correct day is selected even after the 31 slots wrap. It does not reload the card at every arrow press, switch between A and B to change days, or write while browsing. Back up the **whole `LPS` directory** to preserve your data.
 

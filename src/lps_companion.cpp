@@ -1,5 +1,5 @@
 /*
- LPS Companion - v1.15, 2026-11-15.
+ LPS Companion - v1.16, 2026-11-23.
  Screen: 320x320, 8x16 bitmap font, 40 columns x 20 rows.
 
  Desktop build (Fedora/Linux):
@@ -13,7 +13,7 @@
  In this package src/main.cpp supplies the LCD, keyboard and SD implementation.
  Run bash build.sh from the project root to create build/lps_companion.uf2.
  Target: original RP2040 PicoCalc, standalone BOOTSEL firmware.
- v1.2 confirmed on the user's PicoCalc; v1.15 needs device testing.
+ v1.2 confirmed on the user's PicoCalc; v1.16 needs device testing.
  The portable application remains independent of the Pico SDK; desktop and
  built-in tests below remain available for checking the UI/state machine.
 
@@ -2028,7 +2028,7 @@ public:
     void render(){
         hw.setPalette(displayedPalette());hw.clear();char b[128];const Day& day=viewedDay();char date[11]{};
         if(validDate(day.date))dateText(day.date,date,sizeof date);else std::snprintf(date,sizeof date,"%s%lu",tr("D","J"),static_cast<unsigned long>(day.number));
-        std::snprintf(b,sizeof b,"LPS COMPANION v1.15    %s",date);line(0,b,true);
+        std::snprintf(b,sizeof b,"LPS COMPANION v1.16    %s",date);line(0,b,true);
         // LPSC116-FEAT02-CHG04: the Daily Review owns lines 1+ (full date and
         // the archive banner live in the review list). Other screens keep the
         // common long date and archived-day banner.
