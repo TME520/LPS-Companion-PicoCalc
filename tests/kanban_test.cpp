@@ -51,5 +51,32 @@ int main(){
     App reboot(display);reboot.start();assert(reboot.data().taskCount==2);
     assert(reboot.data().tasks[1].status==TaskStatus::Done&&std::strcmp(reboot.data().tasks[1].name.data(),"Alpha")==0);
     State legacy;Blob old=lps_test::encodeLegacyV6(legacy);State decoded;assert(decode(old.bytes.data(),old.size,decoded)&&decoded.taskCount==0);
-    std::puts("PASS: Kanban create/edit/delete, circular navigation/reordering, state moves, rollback and persistence.");
+
+    // LPSC116-FEAT01-CHG01: F toggles focus, * marker, cleared on DONE, saved immediately.
+    BoardDisplay focusBoard;App focus(focusBoard);focus.start();focus.key('3');
+    const unsigned idleWrites=focusBoard.writes;
+    focus.key('f');focus.key('F');
+    assert(focusBoard.writes==idleWrites);
+    add(focus,"Alpha");add(focus,"Beta");add(focus,"Gamma");
+    assert(!focus.data().tasks[2].focus&&focusBoard.has(7," 3 Gamma")&&!focusBoard.has(7,"*"));
+    assert(focusBoard.has(15,"F Focus"));
+    const unsigned focusWrites=focusBoard.writes;
+    focus.key('f');
+    assert(focus.data().tasks[2].focus&&focus.data().tasks[0].focus==false&&focus.data().tasks[1].focus==false);
+    assert(focusBoard.has(7," 3*Gamma")&&focusBoard.writes==focusWrites+1);
+    focus.key('F');
+    assert(!focus.data().tasks[2].focus&&focusBoard.has(7," 3 Gamma")&&!focusBoard.has(7,"*"));
+    focus.key('f');
+    assert(focus.data().tasks[2].focus);
+    focus.key(F2);
+    assert(focus.data().tasks[2].status==TaskStatus::Doing&&focus.data().tasks[2].focus&&focusBoard.has(5," 1*Gamma"));
+    focus.key(F3);
+    assert(focus.data().tasks[2].status==TaskStatus::Done&&!focus.data().tasks[2].focus);
+    assert(focusBoard.has(5," 1 Gamma")&&!focusBoard.has(5,"*"));
+    const unsigned doneWrites=focusBoard.writes;
+    focus.key('f');focus.key('F');
+    assert(!focus.data().tasks[2].focus&&focusBoard.writes==doneWrites);
+    focus.key(F1);
+    assert(focus.data().tasks[2].status==TaskStatus::Todo&&!focus.data().tasks[2].focus&&focusBoard.has(7," 3 Gamma"));
+    std::puts("PASS: Kanban create/edit/delete, circular navigation/reordering, state moves, rollback, persistence and focus.");
 }

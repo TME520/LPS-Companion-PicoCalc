@@ -201,6 +201,7 @@ struct Day {
 enum class TaskStatus : uint8_t { Todo, Doing, Done };
 struct Task {
     TaskStatus status=TaskStatus::Todo;
+    bool focus=false; // LPSC116-FEAT01-CHG01: memory only; JSON is CHG02
     std::array<char,TaskNameLength+1> name{};
 };
 struct Reminder { Date from{};uint16_t duration=1;std::array<char,ReminderTextLength+1> text{}; };
@@ -1443,6 +1444,7 @@ class App {
         if(index>=state.taskCount)return;
         if(state.tasks[index].status==target){say(tr("Task is already in this column","Tâche déjà dans cette colonne"));return;}
         State& next=stage();Task moved=next.tasks[index];moved.status=target;
+        if(target==TaskStatus::Done)moved.focus=false; // LPSC116-FEAT01-CHG01: DONE drops focus
         for(unsigned i=index;i+1<next.taskCount;++i)next.tasks[i]=next.tasks[i+1];
         next.tasks[next.taskCount-1]=moved;
         if(commit(next)){kanbanColumn=target;selection=tasksIn(target)-1;say(tr("Task moved","Tâche déplacée"));}
@@ -1703,6 +1705,16 @@ public:
             }else if(k>=F1&&k<=F3&&n)moveTaskTo(TaskStatus(unsigned(k-F1)));
             else if(k==F4&&n)reorderTask(false);
             else if(k==F5&&n)reorderTask(true);
+            else if((k=='f'||k=='F')&&n){
+                // LPSC116-FEAT01-CHG01: F toggles focus and saves through commit,
+                // like the other Kanban edits. A DONE card stays unfocused.
+                const unsigned index=taskAt(kanbanColumn,selection);
+                if(index<state.taskCount&&state.tasks[index].status!=TaskStatus::Done){
+                    State& next=stage();
+                    next.tasks[index].focus=!next.tasks[index].focus;
+                    commit(next);
+                }
+            }
         }else if(screen==Screen::TaskEdit){
             if(k==Enter){
                 if(!taskDraft[0])say(tr("Task name cannot be empty","Le nom ne peut pas être vide"));
@@ -1904,12 +1916,12 @@ public:
                 const unsigned end=(first+visible<n)?first+visible:n;
                 for(unsigned position=first;position<end;++position){
                     const unsigned index=taskAt(kanbanColumn,position);
-                    std::snprintf(b,sizeof b,"%2u  %-32s",position+1,state.tasks[index].name.data());
+                    std::snprintf(b,sizeof b,state.tasks[index].focus?"%2u*%-32s":"%2u %-32s",position+1,state.tasks[index].name.data());
                     line(5+int(position-first),b,position==selection);
                 }
             }
             line(14,tr("N New  Enter Edit  Del Delete","N Nouveau Entrée Modifier Suppr Effacer"));
-            line(15,tr("F1 TODO  F2 DOING  F3 DONE","F1 À FAIRE F2 EN COURS F3 FINI"));
+            line(15,tr("F1 TODO  F2 DOING  F3 DONE  F Focus","F1 À FAIRE F2 EN COURS F3 FINI  F Focus"));
             line(16,tr("F4 Up F5 Down  <- -> Columns","F4 Monter F5 Descendre <- -> Colonnes"));
         }else if(screen==Screen::TaskEdit){
             line(3,editedTask<TaskCapacity?tr("EDIT TASK","MODIFIER LA TÂCHE"):tr("NEW TASK","NOUVELLE TÂCHE"));
